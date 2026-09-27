@@ -1,0 +1,17 @@
+# REGLAS DEL PROYECTO PORTAL CIARM
+
+## 1. Identidad Visual e Interfaz
+- Replicación exacta del portal CIARM (estilos, paleta de colores, tipografías e imágenes).
+- CSS modular usando variables en :root definidas en assets/css/ciarm-theme.css.
+- Layout responsive sin dependencias pesadas.
+
+## 2. Stack Tecnológico
+- Frontend: HTML5 Semántico, CSS3 Vanilla, JavaScript ES6+ (Módulos).
+- Integración Backend: Google Workspace APIs (OAuth2, Drive, Calendar, Apps Script).
+- Motor de Ejecución: Antigravity / Gemini.
+
+## 3. Estructura de Módulos
+- /assets/css/ -> Hojas de estilo y tokens.
+- /assets/js/ -> Extractores de UI y utilidades.
+- /src/auth/ -> Módulo de login institucional Google.
+- /src/components/ -> Widgets y réplicas de módulos de GPT Sites.

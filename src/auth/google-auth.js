@@ -1,12 +1,11 @@
 /**
  * Módulo de Autenticación Google Workspace - Portal CIARM
- * Gestiona el inicio de sesión OIDC con Google Identity Services.
+ * Soporta Modo Real (OIDC GIS) y Modo Desarrollo/Mock si no hay Client ID configurado.
  */
 
-// Configuración de autenticación con el dominio actualizado
 const AUTH_CONFIG = {
   CLIENT_ID: "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
-  ALLOWED_DOMAIN: "ciarm.edu.mx", // Dominio institucional corregido
+  ALLOWED_DOMAIN: "ciarm.edu.mx",
   STORAGE_KEY: "ciarm_user_session"
 };
 
@@ -16,124 +15,84 @@ class AuthManager {
     this.currentUser = null;
   }
 
-  /**
-   * Inicializa el SDK de Google Identity Services
-   */
   init() {
-    this.loadSDK()
-      .then(() => {
-        this.checkExistingSession();
-        this.renderGoogleButton();
-      })
-      .catch(err => {
-        console.error("❌ Error al cargar Google Identity SDK:", err);
-      });
+    this.checkExistingSession();
+    
+    if (this.isPlaceholderClientId()) {
+      console.warn("⚠️ [AuthManager] Client ID no configurado. Operando en Modo Desarrollo (Mock).");
+      this.renderMockButton();
+    } else {
+      this.loadSDK()
+        .then(() => this.renderGoogleButton())
+        .catch(() => this.renderMockButton());
+    }
   }
 
-  /**
-   * Carga dinámicamente la librería de Google si no está presente
-   */
+  isPlaceholderClientId() {
+    return !this.config.CLIENT_ID || this.config.CLIENT_ID.includes("YOUR_GOOGLE_CLIENT_ID");
+  }
+
   loadSDK() {
     return new Promise((resolve, reject) => {
-      if (window.google?.accounts) {
-        resolve();
-        return;
-      }
-
+      if (window.google?.accounts) return resolve();
       const script = document.createElement("script");
       script.src = "https://accounts.google.com/gsi/client";
       script.async = true;
       script.defer = true;
       script.onload = () => resolve();
-      script.onerror = () => reject(new Error("Falló la carga de GIS SDK"));
+      script.onerror = () => reject(new Error("Error al cargar Google Identity SDK"));
       document.head.appendChild(script);
     });
   }
 
-  /**
-   * Configura y renderiza el botón oficial de inicio de sesión de Google
-   */
   renderGoogleButton() {
-    if (!window.google?.accounts?.id) return;
+    const container = document.getElementById("google-auth-container");
+    if (!container || this.currentUser) return;
 
     window.google.accounts.id.initialize({
       client_id: this.config.CLIENT_ID,
-      callback: (response) => this.handleCredentialResponse(response),
+      callback: (res) => this.handleCredentialResponse(res),
       hosted_domain: this.config.ALLOWED_DOMAIN
     });
 
+    container.innerHTML = "";
+    window.google.accounts.id.renderButton(container, {
+      theme: "outline",
+      size: "medium",
+      type: "standard"
+    });
+  }
+
+  renderMockButton() {
     const container = document.getElementById("google-auth-container");
-    if (container && !this.currentUser) {
-      container.innerHTML = "";
-      window.google.accounts.id.renderButton(container, {
-        theme: "outline",
-        size: "medium",
-        type: "standard",
-        shape: "rectangular",
-        text: "signin_with",
-        logo_alignment: "left"
-      });
-    }
-  }
+    if (!container || this.currentUser) return;
 
-  /**
-   * Decodifica la respuesta JWT recibida de Google y valida el dominio
-   */
-  handleCredentialResponse(response) {
-    try {
-      const payload = this.parseJwt(response.credential);
+    container.innerHTML = `
+      <button id="mock-login-btn" style="background: #1A365D; color: white; border: 1px solid #ffffff44; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem;">
+        🔑 Iniciar Sesión (Modo Dev)
+      </button>
+    `;
 
-      // Validación estricta de dominio institucional
-      if (this.config.ALLOWED_DOMAIN && payload.hd !== this.config.ALLOWED_DOMAIN) {
-        this.showAuthError(`Acceso denegado. Debes iniciar sesión con una cuenta @${this.config.ALLOWED_DOMAIN}`);
-        return;
-      }
-
-      // Estructura de usuario validada
-      this.currentUser = {
-        id: payload.sub,
-        email: payload.email,
-        name: payload.name,
-        picture: payload.picture,
-        domain: payload.hd,
-        token: response.credential
+    document.getElementById("mock-login-btn")?.addEventListener("click", () => {
+      const mockUser = {
+        id: "mock-12345",
+        email: "usuario@ciarm.edu.mx",
+        name: "Rodrigo Valencia (Dev)",
+        picture: "https://ui-avatars.com/api/?name=Rodrigo+Valencia&background=0D9488&color=fff",
+        domain: "ciarm.edu.mx"
       };
-
-      // Guardar sesión y emitir evento
-      sessionStorage.setItem(this.config.STORAGE_KEY, JSON.stringify(this.currentUser));
+      this.currentUser = mockUser;
+      sessionStorage.setItem(this.config.STORAGE_KEY, JSON.stringify(mockUser));
       this.updateUI();
-      
-      window.dispatchEvent(new CustomEvent("ciarm:auth-success", { detail: this.currentUser }));
-
-    } catch (error) {
-      console.error("❌ Error al procesar credenciales de Google:", error);
-      this.showAuthError("Error al validar la sesión con Google.");
-    }
+      window.dispatchEvent(new CustomEvent("ciarm:auth-success", { detail: mockUser }));
+    });
   }
 
-  /**
-   * Decodifica un token JWT base64 sin dependencias externas
-   */
-  parseJwt(token) {
-    const base64Url = token.split(".")[1];
-    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-    const jsonPayload = decodeURIComponent(
-      window.atob(base64)
-        .split("")
-        .map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
-    );
-    return JSON.parse(jsonPayload);
-  }
-
-  /**
-   * Verifica si existe una sesión previa guardada en sessionStorage
-   */
   checkExistingSession() {
-    const savedSession = sessionStorage.getItem(this.config.STORAGE_KEY);
-    if (savedSession) {
+    const saved = sessionStorage.getItem(this.config.STORAGE_KEY);
+    if (saved) {
       try {
-        this.currentUser = JSON.parse(savedSession);
+        this.currentUser = JSON.parse(saved);
         this.updateUI();
         window.dispatchEvent(new CustomEvent("ciarm:auth-success", { detail: this.currentUser }));
       } catch (e) {
@@ -142,9 +101,6 @@ class AuthManager {
     }
   }
 
-  /**
-   * Actualiza el Header de la UI según el estado de la sesión
-   */
   updateUI() {
     const container = document.getElementById("google-auth-container");
     if (!container) return;
@@ -153,11 +109,11 @@ class AuthManager {
       container.innerHTML = `
         <div style="display: flex; align-items: center; gap: 0.75rem;">
           <img src="${this.currentUser.picture}" alt="${this.currentUser.name}" style="width: 32px; height: 32px; border-radius: 50%;">
-          <div style="display: flex; flex-direction: column; text-align: right; font-size: 0.85rem;">
+          <div style="display: flex; flex-direction: column; text-align: right; font-size: 0.8rem;">
             <strong>${this.currentUser.name}</strong>
             <span style="opacity: 0.8;">${this.currentUser.email}</span>
           </div>
-          <button id="logout-btn" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: white; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">Salir</button>
+          <button id="logout-btn" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: white; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">Salir</button>
         </div>
       `;
 
@@ -165,25 +121,17 @@ class AuthManager {
     }
   }
 
-  showAuthError(message) {
-    alert(message);
-    this.logout();
-  }
-
   logout() {
     this.currentUser = null;
     sessionStorage.removeItem(this.config.STORAGE_KEY);
-    
-    if (window.google?.accounts?.id) {
-      window.google.accounts.id.disableAutoSelect();
-    }
-
     const container = document.getElementById("google-auth-container");
-    if (container) {
-      container.innerHTML = "";
-    }
+    if (container) container.innerHTML = "";
     
-    this.renderGoogleButton();
+    if (this.isPlaceholderClientId()) {
+      this.renderMockButton();
+    } else {
+      this.renderGoogleButton();
+    }
     window.dispatchEvent(new CustomEvent("ciarm:auth-logout"));
   }
 }

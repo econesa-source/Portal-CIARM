@@ -14,36 +14,23 @@
       </div>
     </div>
     <div id="google-auth-container">
-      <!-- Botón de Login Institucional Google Workspace -->
-      <span>Cargando autenticación...</span>
+      <!-- El botón de login de Google se renderiza aquí -->
     </div>
   </header>
 
   <div class="ciarm-container">
-    <aside class="ciarm-sidebar">
-      <nav id="sidebar-nav">
-        <p><strong>Navegación</strong></p>
-        <ul style="list-style: none; margin-top: 1rem;">
-          <li style="margin-bottom: 0.5rem;"><a href="#" style="text-decoration: none; color: var(--ciarm-primary);">📌 Inicio / Avisos</a></li>
-          <li style="margin-bottom: 0.5rem;"><a href="#" style="text-decoration: none; color: var(--ciarm-primary);">📁 Gestor Documental (Drive)</a></li>
-          <li style="margin-bottom: 0.5rem;"><a href="#" style="text-decoration: none; color: var(--ciarm-primary);">📅 Calendario Escolar</a></li>
-        </ul>
-      </nav>
+    <aside class="ciarm-sidebar" id="sidebar-container">
+      <!-- Inyección del componente SidebarComponent -->
     </aside>
 
     <main class="ciarm-main-content">
-      <section class="card-widget">
-        <h3>Bienvenido al Portal CIARM</h3>
-        <p>Selecciona una opción del menú lateral para acceder a las herramientas de Google Workspace.</p>
-      </section>
-
-      <section id="dynamic-widgets" class="card-widget">
-        <h4>Módulos de Información</h4>
-        <p>Módulos réplica de GPT Sites en proceso de renderizado...</p>
+      <section id="news-widget-container">
+        <!-- Inyección del componente NewsWidgetComponent -->
       </section>
     </main>
   </div>
 
-  <script src="src/auth/google-auth.js" type="module"></script>
+  <script type="module" src="src/auth/google-auth.js"></script>
+  <script type="module" src="src/main.js"></script>
 </body>
 </html>

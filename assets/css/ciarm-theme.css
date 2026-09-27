@@ -1,0 +1,71 @@
+/* Hoja de Estilos e Identidad Visual - Portal CIARM */
+:root {
+  /* Tokens de Colores - Se sobrescribirán al importar tokens.json */
+  --ciarm-primary: #1A365D;
+  --ciarm-secondary: #0D9488;
+  --ciarm-bg-light: #F7FAFC;
+  --ciarm-text-main: #2D3748;
+  --ciarm-border: #E2E8F0;
+  --ciarm-font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--ciarm-font-family);
+  background-color: var(--ciarm-bg-light);
+  color: var(--ciarm-text-main);
+  line-height: 1.6;
+}
+
+/* Header Institucional */
+.ciarm-header {
+  background-color: var(--ciarm-primary);
+  color: #FFFFFF;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.ciarm-brand {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.ciarm-brand img {
+  height: 40px;
+}
+
+/* Layout del Dashboard */
+.ciarm-container {
+  display: flex;
+  min-height: calc(100vh - 70px);
+}
+
+.ciarm-sidebar {
+  width: 260px;
+  background-color: #FFFFFF;
+  border-right: 1px solid var(--ciarm-border);
+  padding: 1.5rem 1rem;
+}
+
+.ciarm-main-content {
+  flex: 1;
+  padding: 2rem;
+}
+
+.card-widget {
+  background: #FFFFFF;
+  border: 1px solid var(--ciarm-border);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}

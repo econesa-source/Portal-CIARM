@@ -3,35 +3,72 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Portal Intranet - Colegio CIARM</title>
+  <title>Portal CIARM - Colegio Internacional Alemán Riviera Maya</title>
   <link rel="icon" type="image/svg+xml" href="assets/images/favicon.svg">
   <link rel="stylesheet" href="assets/css/ciarm-theme.css">
 </head>
 <body>
+  <!-- Header Institucional Real -->
   <header class="ciarm-header">
-    <div class="ciarm-brand">
-      <div id="header-logo">
-        <h2>CIARM Intranet</h2>
+    <div class="brand-section">
+      <div class="brand-logo-box">
+        <!-- Logo SVG Escudo Colegio Alemán -->
+        <svg width="36" height="40" viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M50 0L100 20V60C100 90 50 120 50 120C50 120 0 90 0 60V20L50 0Z" fill="#1F2937"/>
+          <path d="M50 10L90 26V58C90 82 50 108 50 108C50 108 10 82 10 58V26L50 10Z" stroke="#C5A059" stroke-width="4"/>
+          <text x="50%" y="60%" font-size="38" font-weight="bold" fill="#FFFFFF" text-anchor="middle" font-family="sans-serif">W</text>
+        </svg>
+        <div class="brand-title-group">
+          <h1>COLEGIO INTERNACIONAL ALEMÁN</h1>
+          <h2>RIVIERA MAYA</h2>
+        </div>
       </div>
     </div>
-    <div id="google-auth-container">
-      <!-- Inyección del botón de login (Modo Dev o Google GIS) -->
+
+    <div class="header-center-title">
+      Información y herramientas
+    </div>
+
+    <div class="header-user-section">
+      <div class="user-info-text">
+        <div class="user-name" id="user-display-name">Ezequiel Conesa</div>
+        <div class="user-role">Cuenta Institucional</div>
+      </div>
+      <div class="user-avatar-circle">
+        <span id="user-avatar-initials">EC</span>
+        <span class="avatar-badge">5</span>
+      </div>
+      <button class="btn-logout" id="btn-header-logout">Cerrar sesión</button>
     </div>
   </header>
 
-  <div class="ciarm-container">
-    <aside class="ciarm-sidebar" id="sidebar-container">
-      <!-- Inyección del componente SidebarComponent -->
+  <!-- Workspace de Contenido con Marco Dorado -->
+  <div class="ciarm-workspace">
+    <aside class="ciarm-sidebar-wrapper">
+      <ul class="sidebar-menu">
+        <li class="sidebar-item active" id="menu-inicio">
+          <a href="#" class="sidebar-link">
+            <span>⌂</span> Inicio
+          </a>
+        </li>
+        <li class="sidebar-item" id="menu-obligaciones">
+          <a href="#" class="sidebar-link">
+            <span>✓</span> Mis obligaciones
+          </a>
+        </li>
+        <li class="sidebar-item" id="menu-normativa">
+          <a href="#" class="sidebar-link">
+            <span>≡</span> Normativa
+          </a>
+        </li>
+      </ul>
     </aside>
 
-    <main class="ciarm-main-content">
-      <section id="news-widget-container">
-        <!-- Inyección del componente NewsWidgetComponent -->
-      </section>
+    <main style="flex: 1; padding-top: 1rem;" id="main-content-area">
+      <!-- Inyección del DashboardRealComponent -->
     </main>
   </div>
 
-  <script type="module" src="src/auth/google-auth.js"></script>
   <script type="module" src="src/main.js"></script>
 </body>
 </html>

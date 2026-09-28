@@ -301,3 +301,220 @@ body {
   flex-shrink: 0;
   margin-left: 0.75rem;
 }
+
+/* Estilos de la vista Solicitudes Internas */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #4B5563;
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 1.25rem;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.back-link:hover {
+  color: var(--ciarm-navy);
+}
+
+.form-page-title {
+  font-size: 2.25rem;
+  font-family: Georgia, serif;
+  font-weight: 600;
+  color: var(--ciarm-navy);
+  margin-top: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.form-page-subtitle {
+  font-size: 0.95rem;
+  color: var(--ciarm-text-muted);
+  margin-bottom: 1.75rem;
+}
+
+/* Banner Informativo de Orientación */
+.orientation-banner {
+  background-color: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  margin-bottom: 1.25rem;
+}
+
+.orientation-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--ciarm-gold);
+  letter-spacing: 0.08em;
+  margin-bottom: 0.25rem;
+}
+
+.orientation-main-text {
+  font-size: 1.25rem;
+  font-family: Georgia, serif;
+  color: var(--ciarm-navy);
+  font-weight: 600;
+}
+
+.orientation-items-group {
+  display: flex;
+  gap: 2.5rem;
+  flex: 1;
+}
+
+.orientation-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.orientation-icon {
+  width: 24px;
+  height: 24px;
+  stroke: var(--ciarm-navy);
+  fill: none;
+  stroke-width: 1.5;
+}
+
+.orientation-item-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ciarm-navy);
+}
+
+.orientation-item-desc {
+  font-size: 0.75rem;
+  color: #64748B;
+}
+
+/* Tarjeta de Datos del Usuario Solicitante */
+.user-audit-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.user-audit-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: var(--ciarm-gold);
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+.user-audit-info {
+  font-size: 0.825rem;
+  color: #334155;
+}
+
+/* Formulario con Borde Superior Dorado */
+.form-card-container {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-top: 3px solid var(--ciarm-gold);
+  border-radius: 4px;
+  padding: 2rem;
+}
+
+.form-grid-2col {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.form-group-full {
+  margin-bottom: 1.5rem;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ciarm-navy);
+  margin-bottom: 0.25rem;
+}
+
+.form-label-sub {
+  display: block;
+  font-size: 0.75rem;
+  color: #94A3B8;
+  margin-bottom: 0.5rem;
+}
+
+.form-control-select, .form-control-textarea, .form-control-file {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #CBD5E1;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  color: #1E293B;
+  background-color: #FFFFFF;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.form-control-select:focus, .form-control-textarea:focus {
+  border-color: var(--ciarm-navy);
+}
+
+.form-control-textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.form-file-box {
+  border: 1px solid #CBD5E1;
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  color: #64748B;
+  background-color: #FAFAFA;
+}
+
+.form-actions-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-top: 2rem;
+}
+
+.btn-submit-solicitud {
+  background-color: #94A3B8;
+  color: #FFFFFF;
+  border: none;
+  padding: 0.75rem 2rem;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: not-allowed;
+  transition: background-color 0.2s;
+}
+
+.btn-submit-solicitud.active {
+  background-color: var(--ciarm-navy);
+  cursor: pointer;
+}
+
+.form-disclaimer {
+  font-size: 0.75rem;
+  color: #94A3B8;
+  margin-top: 0.5rem;
+}

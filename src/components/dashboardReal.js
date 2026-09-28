@@ -26,10 +26,10 @@ export class DashboardRealComponent {
         </div>
       </section>
 
-      <!-- Grilla 3x2 (6 Módulos) con Borde Superior Dorado -->
+      <!-- Grilla 3x2 (6 Módulos) con Click Listeners -->
       <section class="modules-grid">
         <!-- 1. Solicitudes internas -->
-        <article class="module-card">
+        <article class="module-card" id="card-solicitudes-internas" style="cursor: pointer;">
           <div>
             <div class="module-tag">SERVICIOS INTERNOS</div>
             <h3 class="module-title">Solicitudes internas</h3>
@@ -102,5 +102,13 @@ export class DashboardRealComponent {
         </article>
       </section>
     `;
+
+    this.attachEvents();
+  }
+
+  attachEvents() {
+    document.getElementById("card-solicitudes-internas")?.addEventListener("click", () => {
+      window.dispatchEvent(new CustomEvent("ciarm:navigation-change", { detail: { id: "view-solicitudes" } }));
+    });
   }
 }

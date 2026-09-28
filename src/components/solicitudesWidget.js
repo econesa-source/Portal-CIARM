@@ -1,5 +1,5 @@
 /**
- * Componente Solicitudes Internas - Portal CIARM
+ * Componente Formulario de Solicitudes Internas (REQ-F-FORM) - Portal CIARM
  */
 
 export class SolicitudesWidgetComponent {
@@ -8,6 +8,7 @@ export class SolicitudesWidgetComponent {
     this.userData = {
       name: userData.name || "Ezequiel Conesa",
       email: userData.email || "e.conesa@ciarm.edu.mx",
+      area: userData.area || "Dirección / Docencia",
       initials: userData.initials || "EC"
     };
   }
@@ -16,19 +17,19 @@ export class SolicitudesWidgetComponent {
     if (!this.container) return;
 
     this.container.innerHTML = `
-      <!-- Enlace de Retorno -->
-      <a class="back-link" id="btn-back-home">
-        ← Volver al inicio
-      </a>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+        <a class="back-link" id="btn-back-home" style="margin-bottom: 0;">← Volver al inicio</a>
+        <button id="btn-view-mis-solicitudes" style="background: var(--ciarm-navy); color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 0.85rem;">
+          📋 Ver mis Solicitudes
+        </button>
+      </div>
 
-      <!-- Header del Módulo -->
       <div style="margin-bottom: 1.5rem;">
         <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--ciarm-gold); letter-spacing: 0.08em;">SERVICIOS INTERNOS</div>
         <h1 class="form-page-title">Solicitudes internas</h1>
         <p class="form-page-subtitle">Realiza solicitudes de Operaciones, Mantenimiento y otros servicios internos.</p>
       </div>
 
-      <!-- Banner Orientación -->
       <div class="orientation-banner">
         <div>
           <div class="orientation-title">ORIENTACIÓN</div>
@@ -58,82 +59,61 @@ export class SolicitudesWidgetComponent {
         </div>
       </div>
 
-      <!-- Auditoría Usuario -->
       <div class="user-audit-card">
         <div class="user-audit-avatar">${this.userData.initials}</div>
         <div class="user-audit-info">
           <div><strong>Solicitud realizada por:</strong> ${this.userData.name}</div>
-          <div><strong>Correo institucional:</strong> ${this.userData.email}</div>
+          <div><strong>Correo institucional:</strong> ${this.userData.email} | <strong>Área:</strong> ${this.userData.area}</div>
         </div>
       </div>
 
-      <!-- Formulario de Registro -->
       <form class="form-card-container" id="solicitud-form">
         <div class="form-grid-2col">
           <div>
-            <label class="form-label">Área</label>
-            <span class="form-label-sub">Área a la que pertenece el solicitante.</span>
-            <select class="form-control-select" id="field-area" required>
-              <option value="" disabled selected>Selecciona una opción</option>
-              <option value="Dirección">Dirección</option>
-              <option value="Académica">Académica</option>
-              <option value="Administración">Administración</option>
-              <option value="Operaciones">Operaciones</option>
-            </select>
+            <label class="form-label">Área / Departamento Solicitante</label>
+            <input type="text" class="form-control-select" value="${this.userData.area}" readonly style="background-color: #F1F5F9; color: #64748B;">
           </div>
 
           <div>
-            <label class="form-label">Tipo de solicitud</label>
-            <span class="form-label-sub" style="visibility: hidden;">Placeholder</span>
-            <select class="form-control-select" id="field-tipo" required>
+            <label class="form-label">Tipo de Solicitud</label>
+            <select class="form-control-select" id="field-tipo-solicitud" required>
               <option value="" disabled selected>Selecciona una opción</option>
-              <option value="Mantenimiento">Mantenimiento y Reparaciones</option>
-              <option value="Apoyo Logístico">Apoyo Logístico / Espacios</option>
-              <option value="Insumos">Insumos o Materiales</option>
+              <option value="SOPORTE_TI">Soporte Tecnológico / TI</option>
+              <option value="MANTENIMIENTO">Mantenimiento Físico</option>
+              <option value="RECURSOS_HUMANOS">Recursos Humanos / Capital Humano</option>
+              <option value="INTENDENCIA_LOGISTICA">Limpieza e Intendencia / Logística</option>
             </select>
           </div>
         </div>
 
         <div class="form-group-full">
-          <label class="form-label">Describe tu solicitud</label>
-          <textarea class="form-control-textarea" id="field-descripcion" placeholder="Describe tu solicitud" required></textarea>
+          <label class="form-label">Descripción del Requerimiento</label>
+          <textarea class="form-control-textarea" id="field-descripcion" placeholder="Ingresa el detalle del requerimiento (mínimo 10 caracteres)..." required minlength="10"></textarea>
         </div>
 
         <div class="form-grid-2col">
           <div>
-            <label class="form-label">Urgencia</label>
-            <select class="form-control-select" id="field-urgencia" required>
-              <option value="" disabled selected>Selecciona una opción</option>
-              <option value="Baja">Baja</option>
-              <option value="Media">Media</option>
-              <option value="Alta">Alta</option>
-            </select>
+            <label class="form-label">¿Es Urgente?</label>
+            <div style="display: flex; gap: 1.5rem; margin-top: 0.5rem;">
+              <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; font-size: 0.9rem;">
+                <input type="radio" name="urgencia" value="SI"> Sí
+              </label>
+              <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; font-size: 0.9rem;">
+                <input type="radio" name="urgencia" value="NO" checked> No
+              </label>
+            </div>
           </div>
 
-          <div>
-            <label class="form-label">¿Cuándo necesitas que esté resuelto?</label>
-            <select class="form-control-select" id="field-fecha" required>
-              <option value="" disabled selected>Selecciona una opción</option>
-              <option value="Hoy">Hoy mismo</option>
-              <option value="En 24-48 horas">En 24 - 48 horas</option>
-              <option value="Esta semana">Durante esta semana</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="form-group-full">
-          <label class="form-label">Adjuntar archivo</label>
-          <span class="form-label-sub">Opcional</span>
-          <div class="form-file-box">
-            <input type="file" id="field-file" style="display: block; font-size: 0.85rem;">
+          <div id="container-fecha-requerida" style="display: none;">
+            <label class="form-label">Fecha Requerida de Entrega</label>
+            <input type="date" class="form-control-select" id="field-fecha-requerida">
           </div>
         </div>
 
         <div class="form-actions-bar">
-          <button type="button" class="btn-submit-solicitud" id="btn-submit-solicitud">
+          <button type="submit" class="btn-submit-solicitud active" id="btn-submit-solicitud">
             Enviar solicitud
           </button>
-          <span class="form-disclaimer">El envío de solicitudes estará disponible próximamente.</span>
         </div>
       </form>
     `;
@@ -142,9 +122,37 @@ export class SolicitudesWidgetComponent {
   }
 
   attachEvents() {
-    // Evento para volver al Inicio
+    const selectTipo = document.getElementById("field-tipo-solicitud");
+    const containerFecha = document.getElementById("container-fecha-requerida");
+    const inputFecha = document.getElementById("field-fecha-requerida");
+
+    if (inputFecha) {
+      inputFecha.min = new Date().toISOString().split("T")[0];
+    }
+
+    selectTipo?.addEventListener("change", (e) => {
+      if (e.target.value === "INTENDENCIA_LOGISTICA") {
+        containerFecha.style.display = "block";
+        inputFecha.required = true;
+      } else {
+        containerFecha.style.display = "none";
+        inputFecha.required = false;
+        inputFecha.value = "";
+      }
+    });
+
+    document.getElementById("btn-view-mis-solicitudes")?.addEventListener("click", () => {
+      window.dispatchEvent(new CustomEvent("ciarm:navigation-change", { detail: { id: "view-mis-solicitudes" } }));
+    });
+
     document.getElementById("btn-back-home")?.addEventListener("click", () => {
       window.dispatchEvent(new CustomEvent("ciarm:navigation-change", { detail: { id: "menu-inicio" } }));
+    });
+
+    document.getElementById("solicitud-form")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      alert(`✅ Solicitud enviada con éxito.`);
+      window.dispatchEvent(new CustomEvent("ciarm:navigation-change", { detail: { id: "view-mis-solicitudes" } }));
     });
   }
 }

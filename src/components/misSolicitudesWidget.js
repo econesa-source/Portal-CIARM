@@ -1,5 +1,6 @@
 /**
  * Componente Panel de Gestión y Mis Solicitudes (REQ-F-LIST & REQ-F-EVAL) - Portal CIARM
+ * Corrección de escala completa de 1 a 5 estrellas en evaluación de satisfacción.
  */
 
 const MOCK_TICKETS = [
@@ -79,6 +80,7 @@ export class MisSolicitudesWidgetComponent {
         </table>
       </div>
 
+      <!-- Modal REQ-F-EVAL con Opciones Completas de 1 a 5 Estrellas -->
       <div id="eval-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 1000;">
         <div style="background: white; border-radius: 8px; padding: 2rem; max-width: 500px; width: 90%; border-top: 4px solid var(--ciarm-gold);">
           <h3 style="color: var(--ciarm-navy); margin-bottom: 0.5rem;">⭐ Evaluación de Satisfacción</h3>
@@ -86,15 +88,40 @@ export class MisSolicitudesWidgetComponent {
           
           <div style="margin-bottom: 1rem;">
             <label style="display: block; font-size: 0.8rem; font-weight: bold; margin-bottom: 0.25rem;">Calificación de Calidad (1 a 5 ⭐)</label>
-            <select id="eval-calidad" class="form-control-select"><option value="5">⭐⭐⭐⭐⭐ (Excelente)</option><option value="4">⭐⭐⭐⭐ (Bueno)</option></select>
+            <select id="eval-calidad" class="form-control-select">
+              <option value="5">⭐⭐⭐⭐⭐ (5 - Excelente)</option>
+              <option value="4">⭐⭐⭐⭐ (4 - Bueno)</option>
+              <option value="3">⭐⭐⭐ (3 - Regular)</option>
+              <option value="2">⭐⭐ (2 - Deficiente)</option>
+              <option value="1">⭐ (1 - Muy Deficiente)</option>
+            </select>
           </div>
+
           <div style="margin-bottom: 1rem;">
             <label style="display: block; font-size: 0.8rem; font-weight: bold; margin-bottom: 0.25rem;">Calificación de Tiempo (1 a 5 ⭐)</label>
-            <select id="eval-tiempo" class="form-control-select"><option value="5">⭐⭐⭐⭐⭐ (A Tiempo)</option></select>
+            <select id="eval-tiempo" class="form-control-select">
+              <option value="5">⭐⭐⭐⭐⭐ (5 - A Tiempo / Excelente)</option>
+              <option value="4">⭐⭐⭐⭐ (4 - Tiempo Aceptable)</option>
+              <option value="3">⭐⭐⭐ (3 - Con Demora)</option>
+              <option value="2">⭐⭐ (2 - Fuera de Plazo)</option>
+              <option value="1">⭐ (1 - Inaceptable)</option>
+            </select>
           </div>
+
           <div style="margin-bottom: 1rem;">
             <label style="display: block; font-size: 0.8rem; font-weight: bold; margin-bottom: 0.25rem;">Calificación de Amabilidad (1 a 5 ⭐)</label>
-            <select id="eval-amabilidad" class="form-control-select"><option value="5">⭐⭐⭐⭐⭐ (Excelente)</option></select>
+            <select id="eval-amabilidad" class="form-control-select">
+              <option value="5">⭐⭐⭐⭐⭐ (5 - Muy Amable / Excelente)</option>
+              <option value="4">⭐⭐⭐⭐ (4 - Amable)</option>
+              <option value="3">⭐⭐⭐ (3 - Neutro)</option>
+              <option value="2">⭐⭐ (2 - Poco Amable)</option>
+              <option value="1">⭐ (1 - Inadecuado)</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom: 1rem;">
+            <label style="display: block; font-size: 0.8rem; font-weight: bold; margin-bottom: 0.25rem;">Comentarios adicionales (Opcional)</label>
+            <textarea id="eval-comentarios" class="form-control-textarea" style="min-height: 60px;" placeholder="Escribe observaciones sobre la atención recibida..."></textarea>
           </div>
 
           <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1.5rem;">
@@ -151,7 +178,11 @@ export class MisSolicitudesWidgetComponent {
     });
 
     document.getElementById("btn-submit-eval")?.addEventListener("click", () => {
-      alert("⭐ ¡Gracias por tu evaluación! Se ha registrado el ticket como RECIBÍ CONFORME.");
+      const calidad = document.getElementById("eval-calidad").value;
+      const tiempo = document.getElementById("eval-tiempo").value;
+      const amabilidad = document.getElementById("eval-amabilidad").value;
+
+      alert(`⭐ ¡Gracias por tu evaluación!\nCalidad: ${calidad}★ | Tiempo: ${tiempo}★ | Amabilidad: ${amabilidad}★\nSe ha registrado el ticket como RECIBÍ CONFORME.`);
       if (modal) modal.style.display = "none";
       window.dispatchEvent(new CustomEvent("ciarm:navigation-change", { detail: { id: "menu-inicio" } }));
     });

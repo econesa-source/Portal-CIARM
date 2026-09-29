@@ -7,12 +7,21 @@ import { MisSolicitudesWidgetComponent } from './components/misSolicitudesWidget
 
 document.addEventListener('DOMContentLoaded', () => {
   const containerId = 'main-content-area';
+  const container = document.getElementById(containerId);
+
+  if (!container) {
+    console.error(`❌ [Main] No se encontró el contenedor con ID: ${containerId}`);
+    return;
+  }
+
   const dashboard = new DashboardRealComponent(containerId);
   const solicitudes = new SolicitudesWidgetComponent(containerId);
   const misSolicitudes = new MisSolicitudesWidgetComponent(containerId);
 
+  // Carga inicial obligatoria del Dashboard (Asistente CIARM y 6 Módulos)
   dashboard.render();
 
+  // Escuchar eventos globales de navegación
   window.addEventListener('ciarm:navigation-change', (e) => {
     const targetId = e.detail.id;
 
@@ -38,6 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Conectar clics de la barra lateral
   document.getElementById("menu-inicio")?.addEventListener("click", () => {
     window.dispatchEvent(new CustomEvent("ciarm:navigation-change", { detail: { id: "menu-inicio" } }));
   });

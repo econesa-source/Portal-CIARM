@@ -1,5 +1,6 @@
 /**
  * Componente Formulario de Solicitudes Internas (REQ-F-FORM) - Portal CIARM
+ * Soporte Multi-archivo con validación de máximo 5 archivos y 10MB por archivo.
  */
 
 export class SolicitudesWidgetComponent {
@@ -11,6 +12,7 @@ export class SolicitudesWidgetComponent {
       area: userData.area || "Dirección / Docencia",
       initials: userData.initials || "EC"
     };
+    this.selectedFiles = [];
   }
 
   render() {
@@ -110,6 +112,15 @@ export class SolicitudesWidgetComponent {
           </div>
         </div>
 
+        <div class="form-group-full" style="margin-top: 1rem;">
+          <label class="form-label">Adjuntar archivos (Máximo 5 archivos, hasta 10 MB cada uno)</label>
+          <span class="form-label-sub">Opcional</span>
+          <div class="form-file-box">
+            <input type="file" id="field-files-multi" multiple accept="*/*" style="display: block; font-size: 0.85rem;">
+            <div id="files-list-preview" style="margin-top: 0.5rem; font-size: 0.8rem; color: #475569;"></div>
+          </div>
+        </div>
+
         <div class="form-actions-bar">
           <button type="submit" class="btn-submit-solicitud active" id="btn-submit-solicitud">
             Enviar solicitud
@@ -125,6 +136,8 @@ export class SolicitudesWidgetComponent {
     const selectTipo = document.getElementById("field-tipo-solicitud");
     const containerFecha = document.getElementById("container-fecha-requerida");
     const inputFecha = document.getElementById("field-fecha-requerida");
+    const inputFiles = document.getElementById("field-files-multi");
+    const previewList = document.getElementById("files-list-preview");
 
     if (inputFecha) {
       inputFecha.min = new Date().toISOString().split("T")[0];
@@ -141,6 +154,33 @@ export class SolicitudesWidgetComponent {
       }
     });
 
+    inputFiles?.addEventListener("change", (e) => {
+      const files = Array.from(e.target.files);
+      const MAX_FILES = 5;
+      const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+      if (files.length > MAX_FILES) {
+        alert(`⚠️ Solo se permite adjuntar un máximo de ${MAX_FILES} archivos por solicitud.`);
+        inputFiles.value = "";
+        previewList.innerHTML = "";
+        this.selectedFiles = [];
+        return;
+      }
+
+      const invalidFile = files.find(f => f.size > MAX_SIZE_BYTES);
+      if (invalidFile) {
+        alert(`⚠️ El archivo "${invalidFile.name}" supera el límite máximo permitido de 10 MB (${(invalidFile.size / (1024*1024)).toFixed(2)} MB).`);
+        inputFiles.value = "";
+        previewList.innerHTML = "";
+        this.selectedFiles = [];
+        return;
+      }
+
+      this.selectedFiles = files;
+      previewList.innerHTML = `<strong>Archivos seleccionados (${files.length}):</strong><br>` + 
+        files.map(f => `📄 ${f.name} (${(f.size / (1024*1024)).toFixed(2)} MB)`).join("<br>");
+    });
+
     document.getElementById("btn-view-mis-solicitudes")?.addEventListener("click", () => {
       window.dispatchEvent(new CustomEvent("ciarm:navigation-change", { detail: { id: "view-mis-solicitudes" } }));
     });
@@ -149,10 +189,50 @@ export class SolicitudesWidgetComponent {
       window.dispatchEvent(new CustomEvent("ciarm:navigation-change", { detail: { id: "menu-inicio" } }));
     });
 
-    document.getElementById("solicitud-form")?.addEventListener("submit", (e) => {
+    document.getElementById("solicitud-form")?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      alert(`✅ Solicitud enviada con éxito.`);
-      window.dispatchEvent(new CustomEvent("ciarm:navigation-change", { detail: { id: "view-mis-solicitudes" } }));
+      const btnSubmit = document.getElementById("btn-submit-solicitud");
+      btnSubmit.innerText = "⏳ Procesando adjuntos y enviando...";
+      btnSubmit.disabled = true;
+
+      try {
+        const base64Files = await this.readFilesAsBase64(this.selectedFiles);
+        const payload = {
+          correo_solicitante: this.userData.email,
+          nombre_solicitante: this.userData.name,
+          area_solicitante: this.userData.area,
+          tipo_solicitud: selectTipo.value,
+          descripcion: document.getElementById("field-descripcion").value,
+          urgencia: document.querySelector('input[name="urgencia"]:checked').value,
+          fecha_requerida: inputFecha.value,
+          adjuntos: base64Files
+        };
+
+        alert(`✅ Solicitud enviada con éxito con ${base64Files.length} archivo(s) adjunto(s).`);
+        window.dispatchEvent(new CustomEvent("ciarm:navigation-change", { detail: { id: "view-mis-solicitudes" } }));
+      } catch (err) {
+        alert("❌ Error al procesar los archivos adjuntos.");
+        btnSubmit.innerText = "Enviar solicitud";
+        btnSubmit.disabled = false;
+      }
     });
+  }
+
+  readFilesAsBase64(files) {
+    return Promise.all(files.map(file => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64String = reader.result.split(',')[1];
+          resolve({
+            name: file.name,
+            mimeType: file.type || "application/octet-stream",
+            base64Data: base64String
+          });
+        };
+        reader.onerror = error => reject(error);
+        reader.readAsDataURL(file);
+      });
+    }));
   }
 }

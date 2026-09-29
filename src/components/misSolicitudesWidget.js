@@ -11,7 +11,8 @@ const MOCK_TICKETS = [
     urgencia: "SI",
     estado_actual: "RESUELTO",
     correo_ejecutor: "intendencia@ciarm.edu.mx",
-    fecha_programada: "2026-09-28"
+    fecha_programada: "2026-09-28",
+    adjuntos_urls: "https://drive.google.com/file/d/1,https://drive.google.com/file/d/2"
   },
   {
     id_ticket: "TICK-2026-0008",
@@ -21,7 +22,8 @@ const MOCK_TICKETS = [
     urgencia: "NO",
     estado_actual: "EN_PROCESO",
     correo_ejecutor: "soporte.ti@ciarm.edu.mx",
-    fecha_programada: "2026-09-29"
+    fecha_programada: "2026-09-29",
+    adjuntos_urls: ""
   }
 ];
 
@@ -52,6 +54,7 @@ export class MisSolicitudesWidgetComponent {
               <th style="padding: 0.75rem;">Fecha</th>
               <th style="padding: 0.75rem;">Tipo</th>
               <th style="padding: 0.75rem;">Descripción</th>
+              <th style="padding: 0.75rem;">Adjuntos</th>
               <th style="padding: 0.75rem;">Estado</th>
               <th style="padding: 0.75rem; text-align: right;">Acción</th>
             </tr>
@@ -62,7 +65,8 @@ export class MisSolicitudesWidgetComponent {
                 <td style="padding: 0.75rem; font-weight: bold; color: var(--ciarm-navy);">${t.id_ticket}</td>
                 <td style="padding: 0.75rem; color: #64748B;">${t.fecha_creacion}</td>
                 <td style="padding: 0.75rem;">${t.tipo_solicitud}</td>
-                <td style="padding: 0.75rem; max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${t.descripcion}</td>
+                <td style="padding: 0.75rem; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${t.descripcion}</td>
+                <td style="padding: 0.75rem;">${this.renderAdjuntosBadges(t.adjuntos_urls)}</td>
                 <td style="padding: 0.75rem;">${this.getBadgeHTML(t.estado_actual)}</td>
                 <td style="padding: 0.75rem; text-align: right;">
                   <button class="btn-action-ticket" data-id="${t.id_ticket}" style="background: transparent; border: 1px solid var(--ciarm-navy); color: var(--ciarm-navy); padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">
@@ -102,6 +106,16 @@ export class MisSolicitudesWidgetComponent {
     `;
 
     this.attachEvents();
+  }
+
+  renderAdjuntosBadges(urlsString) {
+    if (!urlsString) return `<span style="color: #94A3B8; font-style: italic;">Sin adjuntos</span>`;
+    const urls = urlsString.split(",");
+    return urls.map((url, idx) => `
+      <a href="${url}" target="_blank" style="display: inline-block; background: #F1F5F9; color: var(--ciarm-navy); text-decoration: none; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-right: 0.2rem; margin-bottom: 0.2rem; border: 1px solid #CBD5E1;">
+        📎 Adjunto ${idx + 1}
+      </a>
+    `).join('');
   }
 
   getBadgeHTML(estado) {

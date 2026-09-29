@@ -1,11 +1,12 @@
 /**
  * Backend Serverless Módulo de Solicitudes Internas - Portal CIARM
- * Google Apps Script WebApp API REST Engine
+ * Google Apps Script WebApp API REST Engine con soporte para Archivos Adjuntos
  */
 
 const CONFIG = {
   SPREADSHEET_ID_DM03: "REEMPLAZAR_CON_ID_SHEET_SCGRC_DM_03",
   SPREADSHEET_ID_HT05: "REEMPLAZAR_CON_ID_SHEET_HT05_TICKETS",
+  ATTACHMENTS_FOLDER_ID: "REEMPLAZAR_CON_ID_CARPETA_DRIVE_ADJUNTOS",
   SHEET_NAMES: {
     PERMISOS: "Permisos_de_usuario",
     TICKETS: "HT05_Tickets",
@@ -97,6 +98,30 @@ function getUserContext(email) {
   return { autorizado: false, reason: "Correo no encontrado en el catálogo maestro DM03" };
 }
 
+function saveAttachmentsToDrive(idTicket, attachments) {
+  if (!attachments || !Array.isArray(attachments) || attachments.length === 0) {
+    return "";
+  }
+
+  try {
+    let parentFolder = DriveApp.getFolderById(CONFIG.ATTACHMENTS_FOLDER_ID);
+    let ticketFolder = parentFolder.createFolder(`${idTicket}_Adjuntos`);
+    let fileUrls = [];
+
+    attachments.forEach(file => {
+      let data = Utilities.base64Decode(file.base64Data);
+      let blob = Utilities.newBlob(data, file.mimeType, file.name);
+      let driveFile = ticketFolder.createFile(blob);
+      fileUrls.push(driveFile.getUrl());
+    });
+
+    return fileUrls.join(",");
+  } catch (error) {
+    console.error("❌ Error al guardar adjuntos en Drive:", error);
+    return "";
+  }
+}
+
 function createTicket(payload) {
   const ssHT05 = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID_HT05);
   const sheetTickets = ssHT05.getSheetByName(CONFIG.SHEET_NAMES.TICKETS);
@@ -107,6 +132,8 @@ function createTicket(payload) {
   const nextFolioNum = String(lastRow).padStart(4, '0');
   const idTicket = `TICK-${year}-${nextFolioNum}`;
   const now = new Date();
+
+  const adjuntosUrls = saveAttachmentsToDrive(idTicket, payload.adjuntos);
 
   const newRow = [
     idTicket,
@@ -120,7 +147,8 @@ function createTicket(payload) {
     "NUEVO",
     "",
     "",
-    ""
+    "",
+    adjuntosUrls
   ];
 
   sheetTickets.appendRow(newRow);
@@ -133,11 +161,12 @@ function createTicket(payload) {
       <h3>Estimado(a) ${payload.nombre_solicitante || 'Colaborador'},</h3>
       <p>Su solicitud ha sido registrada correctamente con el folio <strong>${idTicket}</strong>.</p>
       <p><strong>Tipo:</strong> ${payload.tipo_solicitud}<br><strong>Detalle:</strong> ${payload.descripcion}</p>
+      <p><strong>Adjuntos cargados:</strong> ${payload.adjuntos ? payload.adjuntos.length : 0} archivo(s).</p>
       <hr><small>Colegio Internacional Alemán Riviera Maya</small>
     `
   });
 
-  return { id_ticket: idTicket, estado: "NUEVO" };
+  return { id_ticket: idTicket, estado: "NUEVO", adjuntos_urls: adjuntosUrls };
 }
 
 function getTickets(userContext) {
@@ -166,7 +195,8 @@ function getTickets(userContext) {
       estado_actual: row[8],
       correo_ejecutor: row[9],
       fecha_programada_entrega: row[10],
-      observaciones: row[11]
+      observaciones: row[11],
+      adjuntos_urls: row[12] || ""
     };
 
     if (rol === "PORTAL_ADMIN" || rol === "PORTAL_DIRECTOR") {

@@ -1,6 +1,5 @@
 /**
  * Componente Panel de Gestión y Mis Solicitudes (REQ-F-LIST & REQ-F-EVAL) - Portal CIARM
- * Corrección de escala completa de 1 a 5 estrellas en evaluación de satisfacción.
  */
 
 const MOCK_TICKETS = [

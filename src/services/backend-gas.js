@@ -1,10 +1,10 @@
 /**
  * Backend Serverless Módulo de Solicitudes Internas - Portal CIARM
- * Adaptado a la estructura exacta de 'BD - Sistema de Tickets' (Pestaña 'TICKETS')
+ * Motor con Lectura Dinámica Tolerante a Fallos sobre DM_03 y BD - Sistema de Tickets
  */
 
 const CONFIG = {
-  // Catálogo SCGRC (DM03)
+  // Catálogo Maestro de Colaboradores SCGRC (DM03)
   SPREADSHEET_ID_DM03: "1h14cqmHseHSN3FzrEtK_AwVimzDGkz9qx8LcGBCQuDY",
   
   // Libro 'BD - Sistema de Tickets'
@@ -14,8 +14,8 @@ const CONFIG = {
   
   SHEET_NAMES: {
     PERMISOS: "Permisos_de_usuario",
-    TICKETS: "TICKETS",                // Pestaña real en tu Google Sheet
-    TRAZABILIDAD: "REGISTRO SOLICITUDES", // Pestaña de histórico
+    TICKETS: "TICKETS",
+    TRAZABILIDAD: "REGISTRO SOLICITUDES",
     EVALUACION: "CATALOGOS"
   }
 };
@@ -63,44 +63,65 @@ function doPost(e) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+/**
+ * Inspección Inteligente y Tolerante a Fallos de DM_03
+ */
 function getUserContext(email) {
   if (!email) return { autorizado: false, reason: "Correo no proporcionado" };
 
   const ssDM03 = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID_DM03);
-  const sheetPermisos = ssDM03.getSheetByName(CONFIG.SHEET_NAMES.PERMISOS);
-  const data = sheetPermisos.getDataRange().getValues();
-  const headers = data[0];
+  let sheetPermisos = ssDM03.getSheetByName(CONFIG.SHEET_NAMES.PERMISOS);
 
-  const colEmail = headers.indexOf("Correo_Ciarm");
-  const colStatus = headers.indexOf("Status");
-  const colPortal = headers.indexOf("Portal");
-  const colNombre = headers.indexOf("Nombre");
-  const colArea = headers.indexOf("Area");
+  // Fallback: Si el nombre de la pestaña cambió, tomar la primera hoja activa
+  if (!sheetPermisos) {
+    sheetPermisos = ssDM03.getSheets()[0];
+  }
+
+  const data = sheetPermisos.getDataRange().getValues();
+  if (data.length <= 1) {
+    return { autorizado: false, reason: "Hoja DM03 sin datos o vacía" };
+  }
+
+  const headers = data[0].map(h => h.toString().toLowerCase().trim());
+
+  // Mapeo dinámico de índices de columna independientemente de su posición
+  const colEmail = headers.findIndex(h => h.includes("correo") || h.includes("email"));
+  const colStatus = headers.findIndex(h => h.includes("status") || h.includes("estatus") || h.includes("estado"));
+  const colPortal = headers.findIndex(h => h.includes("portal") || h.includes("rol"));
+  const colNombre = headers.findIndex(h => h.includes("nombre") || h.includes("colaborador"));
+  const colArea = headers.findIndex(h => h.includes("area") || h.includes("seccion") || h.includes("departamento"));
+
+  if (colEmail === -1) {
+    return { autorizado: false, reason: "No se encontró la columna de correo en DM03" };
+  }
 
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    if (row[colEmail] && row[colEmail].toString().toLowerCase() === email.toLowerCase()) {
-      const status = row[colStatus] ? row[colStatus].toString().trim() : "";
-      const portal = row[colPortal] ? row[colPortal].toString().trim() : "";
+    const userEmail = row[colEmail] ? row[colEmail].toString().trim().toLowerCase() : "";
 
-      if (status !== "Activo") {
-        return { autorizado: false, reason: "Colaborador no está en estatus Activo" };
+    if (userEmail === email.toLowerCase()) {
+      const status = colStatus !== -1 && row[colStatus] ? row[colStatus].toString().trim() : "Activo";
+      const portal = colPortal !== -1 && row[colPortal] ? row[colPortal].toString().trim() : "PORTAL_USUARIO";
+
+      if (status.toLowerCase() !== "activo") {
+        return { autorizado: false, reason: "El colaborador no tiene estatus Activo en DM03" };
       }
+
       if (!portal) {
-        return { autorizado: false, reason: "Colaborador no tiene Rol de Portal asignado" };
+        return { autorizado: false, reason: "El colaborador no tiene un Rol de Portal asignado" };
       }
 
       return {
         autorizado: true,
-        email: row[colEmail],
-        nombre: row[colNombre] || "Colaborador CIARM",
-        area: row[colArea] || "General",
+        email: userEmail,
+        nombre: colNombre !== -1 && row[colNombre] ? row[colNombre].toString().trim() : "Colaborador CIARM",
+        area: colArea !== -1 && row[colArea] ? row[colArea].toString().trim() : "General",
         rol: portal
       };
     }
   }
 
-  return { autorizado: false, reason: "Correo no encontrado en el catálogo maestro DM03" };
+  return { autorizado: false, reason: `El correo ${email} no existe en la base de datos DM03` };
 }
 
 function saveAttachmentsToDrive(idTicket, attachments) {
@@ -141,7 +162,6 @@ function createTicket(payload) {
 
   const adjuntosUrls = saveAttachmentsToDrive(idTicket, payload.adjuntos);
 
-  // Arreglo mapeado exactamente a las 24 columnas A-X de la pestaña TICKETS
   const newRow = [
     idTicket,                    // Col A: ID TICKET
     fechaStr,                    // Col B: FECHA SOLICITUD
@@ -164,8 +184,8 @@ function createTicket(payload) {
     "",                          // Col S: PUNTOS
     "",                          // Col T: OBSERVACIONES
     now,                         // Col U: ÚLTIMA ACTUALIZACIÓN
-    payload.urgencia === "SI" ? "🔴 Urgente" : "🟢 Normal", // Col V: PRIORIDAD SOLICITADA
-    "",                          // Col W: PLAZO SOLICITADO
+    payload.urgencia === "SI" ? "🔴 Urgente" : "🟢 Normal", // Col V
+    "",                          // Col W
     adjuntosUrls                 // Col X: ARCHIVOS ADJUNTOS
   ];
 
@@ -203,16 +223,16 @@ function getTickets(userContext) {
     if (!row[0]) continue;
 
     const item = {
-      id_ticket: row[0],         // Col A
-      fecha_creacion: row[1],    // Col B
-      area_solicitante: row[3],  // Col D
-      correo_solicitante: row[5],// Col F
-      tipo_solicitud: row[6],    // Col G
-      descripcion: row[7],       // Col H
-      correo_ejecutor: row[9],   // Col J
-      estado_actual: row[12],    // Col M
-      observaciones: row[19],    // Col T
-      adjuntos_urls: row[23] || "" // Col X
+      id_ticket: row[0],
+      fecha_creacion: row[1],
+      area_solicitante: row[3],
+      correo_solicitante: row[5],
+      tipo_solicitud: row[6],
+      descripcion: row[7],
+      correo_ejecutor: row[9],
+      estado_actual: row[12],
+      observaciones: row[19],
+      adjuntos_urls: row[23] || ""
     };
 
     if (rol === "PORTAL_ADMIN" || rol === "PORTAL_DIRECTOR") {
@@ -234,10 +254,10 @@ function updateTicketStatus(payload) {
     if (data[i][0] === payload.id_ticket) {
       const rowIdx = i + 1;
 
-      sheetTickets.getRange(rowIdx, 13).setValue(payload.nuevo_estado); // Col M
-      if (payload.correo_ejecutor) sheetTickets.getRange(rowIdx, 10).setValue(payload.correo_ejecutor); // Col J
-      if (payload.observaciones) sheetTickets.getRange(rowIdx, 20).setValue(payload.observaciones); // Col T
-      sheetTickets.getRange(rowIdx, 21).setValue(new Date()); // Col U
+      sheetTickets.getRange(rowIdx, 13).setValue(payload.nuevo_estado);
+      if (payload.correo_ejecutor) sheetTickets.getRange(rowIdx, 10).setValue(payload.correo_ejecutor);
+      if (payload.observaciones) sheetTickets.getRange(rowIdx, 20).setValue(payload.observaciones);
+      sheetTickets.getRange(rowIdx, 21).setValue(new Date());
 
       MailApp.sendEmail({
         to: data[i][5],

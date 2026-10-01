@@ -1,17 +1,22 @@
 /**
  * Backend Serverless Módulo de Solicitudes Internas - Portal CIARM
- * Google Apps Script WebApp API REST Engine con soporte para Archivos Adjuntos
+ * Adaptado a la estructura exacta de 'BD - Sistema de Tickets' (Pestaña 'TICKETS')
  */
 
 const CONFIG = {
-  SPREADSHEET_ID_DM03: "REEMPLAZAR_CON_ID_SHEET_SCGRC_DM_03",
-  SPREADSHEET_ID_HT05: "REEMPLAZAR_CON_ID_SHEET_HT05_TICKETS",
+  // Catálogo SCGRC (DM03)
+  SPREADSHEET_ID_DM03: "1h14cqmHseHSN3FzrEtK_AwVimzDGkz9qx8LcGBCQuDY",
+  
+  // Libro 'BD - Sistema de Tickets'
+  SPREADSHEET_ID_HT05: "1o33Gw6xWsH64SXmaxaN7EDlSsW0fUExDjPE4cGpnPbs",
+  
   ATTACHMENTS_FOLDER_ID: "REEMPLAZAR_CON_ID_CARPETA_DRIVE_ADJUNTOS",
+  
   SHEET_NAMES: {
     PERMISOS: "Permisos_de_usuario",
-    TICKETS: "HT05_Tickets",
-    TRAZABILIDAD: "BIT_Trazabilidad",
-    EVALUACION: "EV_Satisfaccion"
+    TICKETS: "TICKETS",                // Pestaña real en tu Google Sheet
+    TRAZABILIDAD: "REGISTRO SOLICITUDES", // Pestaña de histórico
+    EVALUACION: "CATALOGOS"
   }
 };
 
@@ -125,34 +130,46 @@ function saveAttachmentsToDrive(idTicket, attachments) {
 function createTicket(payload) {
   const ssHT05 = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID_HT05);
   const sheetTickets = ssHT05.getSheetByName(CONFIG.SHEET_NAMES.TICKETS);
-  const sheetBitacora = ssHT05.getSheetByName(CONFIG.SHEET_NAMES.TRAZABILIDAD);
 
   const year = new Date().getFullYear();
   const lastRow = sheetTickets.getLastRow();
-  const nextFolioNum = String(lastRow).padStart(4, '0');
-  const idTicket = `TICK-${year}-${nextFolioNum}`;
+  const nextFolioNum = String(lastRow).padStart(5, '0');
+  const idTicket = `TKT-${year}-${nextFolioNum}`;
   const now = new Date();
+  const fechaStr = Utilities.formatDate(now, "GMT-5", "dd/MM/yyyy");
+  const horaStr = Utilities.formatDate(now, "GMT-5", "HH:mm:ss");
 
   const adjuntosUrls = saveAttachmentsToDrive(idTicket, payload.adjuntos);
 
+  // Arreglo mapeado exactamente a las 24 columnas A-X de la pestaña TICKETS
   const newRow = [
-    idTicket,
-    now,
-    payload.correo_solicitante,
-    payload.area_solicitante,
-    payload.tipo_solicitud,
-    payload.descripcion,
-    payload.urgencia,
-    payload.fecha_requerida || "",
-    "NUEVO",
-    "",
-    "",
-    "",
-    adjuntosUrls
+    idTicket,                    // Col A: ID TICKET
+    fechaStr,                    // Col B: FECHA SOLICITUD
+    horaStr,                     // Col C: HORA SOLICITUD
+    payload.area_solicitante,    // Col D: ÁREA SOLICITANTE
+    payload.nombre_solicitante,  // Col E: SOLICITANTE
+    payload.correo_solicitante,  // Col F: CORREO SOLICITANTE
+    payload.tipo_solicitud,      // Col G: TIPO DE SOLICITUD
+    payload.descripcion,         // Col H: DESCRIPCIÓN
+    "POR DEFINIR",               // Col I: PRIORIDAD
+    "SIN ASIGNAR",               // Col J: RESPONSABLE
+    "",                          // Col K: FECHA ASIGNACIÓN
+    payload.fecha_requerida || "",// Col L: FECHA COMPROMISO
+    "NUEVO",                     // Col M: ESTADO
+    "",                          // Col N: FECHA INICIO
+    "",                          // Col O: FECHA TERMINACIÓN
+    "",                          // Col P: TIEMPO EJECUCIÓN
+    "",                          // Col Q: TIEMPO TOTAL
+    "POR DEFINIR",               // Col R: SLA
+    "",                          // Col S: PUNTOS
+    "",                          // Col T: OBSERVACIONES
+    now,                         // Col U: ÚLTIMA ACTUALIZACIÓN
+    payload.urgencia === "SI" ? "🔴 Urgente" : "🟢 Normal", // Col V: PRIORIDAD SOLICITADA
+    "",                          // Col W: PLAZO SOLICITADO
+    adjuntosUrls                 // Col X: ARCHIVOS ADJUNTOS
   ];
 
   sheetTickets.appendRow(newRow);
-  sheetBitacora.appendRow([`LOG-${now.getTime()}`, idTicket, "", "NUEVO", now, payload.correo_solicitante]);
 
   MailApp.sendEmail({
     to: payload.correo_solicitante,
@@ -183,20 +200,19 @@ function getTickets(userContext) {
 
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
+    if (!row[0]) continue;
+
     const item = {
-      id_ticket: row[0],
-      fecha_creacion: row[1],
-      correo_solicitante: row[2],
-      area_solicitante: row[3],
-      tipo_solicitud: row[4],
-      descripcion: row[5],
-      urgencia: row[6],
-      fecha_requerida: row[7],
-      estado_actual: row[8],
-      correo_ejecutor: row[9],
-      fecha_programada_entrega: row[10],
-      observaciones: row[11],
-      adjuntos_urls: row[12] || ""
+      id_ticket: row[0],         // Col A
+      fecha_creacion: row[1],    // Col B
+      area_solicitante: row[3],  // Col D
+      correo_solicitante: row[5],// Col F
+      tipo_solicitud: row[6],    // Col G
+      descripcion: row[7],       // Col H
+      correo_ejecutor: row[9],   // Col J
+      estado_actual: row[12],    // Col M
+      observaciones: row[19],    // Col T
+      adjuntos_urls: row[23] || "" // Col X
     };
 
     if (rol === "PORTAL_ADMIN" || rol === "PORTAL_DIRECTOR") {
@@ -212,22 +228,19 @@ function getTickets(userContext) {
 function updateTicketStatus(payload) {
   const ssHT05 = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID_HT05);
   const sheetTickets = ssHT05.getSheetByName(CONFIG.SHEET_NAMES.TICKETS);
-  const sheetBitacora = ssHT05.getSheetByName(CONFIG.SHEET_NAMES.TRAZABILIDAD);
   const data = sheetTickets.getDataRange().getValues();
 
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === payload.id_ticket) {
       const rowIdx = i + 1;
-      const estadoAnterior = data[i][8];
-      const now = new Date();
 
-      sheetTickets.getRange(rowIdx, 9).setValue(payload.nuevo_estado);
-      if (payload.correo_ejecutor) sheetTickets.getRange(rowIdx, 10).setValue(payload.correo_ejecutor);
-
-      sheetBitacora.appendRow([`LOG-${now.getTime()}`, payload.id_ticket, estadoAnterior, payload.nuevo_estado, now, payload.usuario_cambio]);
+      sheetTickets.getRange(rowIdx, 13).setValue(payload.nuevo_estado); // Col M
+      if (payload.correo_ejecutor) sheetTickets.getRange(rowIdx, 10).setValue(payload.correo_ejecutor); // Col J
+      if (payload.observaciones) sheetTickets.getRange(rowIdx, 20).setValue(payload.observaciones); // Col T
+      sheetTickets.getRange(rowIdx, 21).setValue(new Date()); // Col U
 
       MailApp.sendEmail({
-        to: data[i][2],
+        to: data[i][5],
         subject: `[Portal CIARM] Solicitud ${payload.id_ticket} -> ${payload.nuevo_estado}`,
         htmlBody: `<p>Estatus de la solicitud <strong>${payload.id_ticket}</strong> actualizado a: <strong>${payload.nuevo_estado}</strong>.</p>`
       });
@@ -239,24 +252,12 @@ function updateTicketStatus(payload) {
 }
 
 function submitEvaluation(payload) {
-  const ssHT05 = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID_HT05);
-  const sheetEval = ssHT05.getSheetByName(CONFIG.SHEET_NAMES.EVALUACION);
-
-  const idEval = `EV-${new Date().getTime()}`;
-  sheetEval.appendRow([
-    idEval,
-    payload.id_ticket,
-    payload.calificacion_calidad,
-    payload.calificacion_tiempo,
-    payload.calificacion_amabilidad,
-    payload.comentarios || ""
-  ]);
-
   updateTicketStatus({
     id_ticket: payload.id_ticket,
     nuevo_estado: "RECIBI_CONFORME",
-    usuario_cambio: payload.usuario
+    usuario_cambio: payload.usuario,
+    observaciones: `Evaluación registrada por usuario. Calidad: ${payload.calificacion_calidad}*, Tiempo: ${payload.calificacion_tiempo}*, Amabilidad: ${payload.calificacion_amabilidad}*`
   });
 
-  return { success: true, id_evaluacion: idEval };
+  return { success: true };
 }

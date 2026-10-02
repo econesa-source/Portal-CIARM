@@ -1,9 +1,10 @@
 /**
  * Cliente API de Integración Preproductiva - Portal CIARM
- * Conexión resiliente con Google Apps Script WebApp (Tenant ciarm.edu.mx)
+ * URL de la Versión Activa en Google Apps Script WebApp
  */
 const STAGING_CONFIG = {
-  WEB_APP_URL: "https://script.google.com/a/macros/ciarm.edu.mx/s/AKfycbxx_dPOsx1x1y4KDyaJpn9U8UKxnF4WXj5lrBeDUQ41j0loNURBSryyyXqDF-0AJFkJ1w/exec"
+  // URL de la versión activa confirmada por el usuario:
+  WEB_APP_URL: "https://script.google.com/a/macros/ciarm.edu.mx/s/AKfycbxnjpsg4BdZEn-1EL1xXA6BH_emH5Wd7RSuHBPtwpJOQwGgb6a2NKOVCVO-aVpYdO3orw/exec"
 };
 
 /**
@@ -12,7 +13,8 @@ const STAGING_CONFIG = {
  */
 export async function createTicketAPI(payload) {
   try {
-    const res = await fetch(STAGING_CONFIG.WEB_APP_URL, {
+    const cleanUrl = STAGING_CONFIG.WEB_APP_URL.trim();
+    const res = await fetch(cleanUrl, {
       method: "POST",
       mode: "cors",
       redirect: "follow",
@@ -23,12 +25,18 @@ export async function createTicketAPI(payload) {
     });
 
     if (!res.ok) {
-      throw new Error(`Error HTTP: ${res.status}`);
+      throw new Error(`Error HTTP del servidor: ${res.status} ${res.statusText}`);
     }
 
-    return await res.json();
+    const textResponse = await res.text();
+    try {
+      return JSON.parse(textResponse);
+    } catch (parseErr) {
+      console.error("❌ Respuesta no es un JSON válido:", textResponse);
+      return { status: "error", message: "La respuesta del servidor no fue un JSON válido." };
+    }
   } catch (e) {
-    console.error("❌ Error en la conexión con la WebApp de Google Apps Script:", e);
+    console.error("❌ Error de red al conectar con la WebApp de Apps Script:", e);
     return { status: "error", message: e.toString() };
   }
 }
@@ -38,7 +46,8 @@ export async function createTicketAPI(payload) {
  */
 export async function fetchTicketsAPI(email) {
   try {
-    const res = await fetch(`${STAGING_CONFIG.WEB_APP_URL}?action=getTickets&email=${encodeURIComponent(email)}`, {
+    const cleanUrl = STAGING_CONFIG.WEB_APP_URL.trim();
+    const res = await fetch(`${cleanUrl}?action=getTickets&email=${encodeURIComponent(email)}`, {
       method: "GET",
       mode: "cors",
       redirect: "follow"
@@ -56,7 +65,8 @@ export async function fetchTicketsAPI(email) {
  */
 export async function fetchUserContextAPI(email) {
   try {
-    const res = await fetch(`${STAGING_CONFIG.WEB_APP_URL}?action=getUserContext&email=${encodeURIComponent(email)}`, {
+    const cleanUrl = STAGING_CONFIG.WEB_APP_URL.trim();
+    const res = await fetch(`${cleanUrl}?action=getUserContext&email=${encodeURIComponent(email)}`, {
       method: "GET",
       mode: "cors",
       redirect: "follow"

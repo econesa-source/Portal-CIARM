@@ -1,6 +1,6 @@
 /**
  * Componente Formulario de Solicitudes Internas (REQ-F-FORM) - Portal CIARM
- * Normalización de respuesta JSON para Google Apps Script WebApp
+ * Diagnóstico transparente de respuesta e integración con Google Apps Script
  */
 import { createTicketAPI } from '../services/apiClient.js';
 
@@ -100,7 +100,7 @@ export class SolicitudesWidgetComponent {
       const btnSubmit = document.getElementById("btn-submit-form");
       if (btnSubmit) {
         btnSubmit.disabled = true;
-        btnSubmit.innerText = "⏳ Enviando y procesando adjuntos...";
+        btnSubmit.innerText = "⏳ Enviando a Google Workspace...";
       }
 
       try {
@@ -119,20 +119,20 @@ export class SolicitudesWidgetComponent {
         };
 
         const result = await createTicketAPI(payload);
+        console.log("📌 Respuesta recibida del backend:", result);
 
-        // Extraer el folio de forma tolerante a fallos
         const folio = result?.id_ticket || result?.data?.id_ticket || result?.data?.id;
 
         if (result && (result.status === "success" || folio)) {
-          alert(`✅ ¡Solicitud registrada con éxito!\n\nFolio asignado: ${folio || 'TKT-2026'}\nRevisa tu Google Sheet BD - Sistema de Tickets y tu Google Drive.`);
+          alert(`✅ ¡Solicitud registrada con éxito!\n\nFolio asignado: ${folio || 'TKT-2026'}\nSe ha guardado en BD - Sistema de Tickets y Google Drive.`);
           window.dispatchEvent(new CustomEvent("ciarm:navigation-change", { detail: { id: "view-mis-solicitudes" } }));
         } else {
-          alert("⚠️ Ocurrió un inconveniente al procesar la respuesta del servidor.");
-          console.log("Respuesta completa recibida:", result);
+          const errorDetail = result?.message || JSON.stringify(result);
+          alert(`⚠️️ La API de Google devolvió una respuesta de error:\n\n${errorDetail}`);
         }
       } catch (err) {
-        console.error("❌ Error en el proceso de envío:", err);
-        alert("❌ Error al enviar la solicitud. Revisa la conexión con el servidor.");
+        console.error("❌ Error en la llamada al servidor:", err);
+        alert(`❌ Error al conectar con el servidor:\n${err.message || err}`);
       } finally {
         if (btnSubmit) {
           btnSubmit.disabled = false;

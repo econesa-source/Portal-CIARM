@@ -1,6 +1,6 @@
 /**
  * Componente Formulario de Solicitudes Internas (REQ-F-FORM) - Portal CIARM
- * Conexión viva con apiClient.js para persistencia en Google Sheets y Drive.
+ * Normalización de respuesta JSON para Google Apps Script WebApp
  */
 import { createTicketAPI } from '../services/apiClient.js';
 
@@ -55,7 +55,7 @@ export class SolicitudesWidgetComponent {
           </div>
 
           <div class="form-group-full">
-            <label class="form-label">Archivos adjuntos (Mág. 5 archivos, 10MB c/u)</label>
+            <label class="form-label">Archivos adjuntos (Máx. 5 archivos, 10MB c/u)</label>
             <input type="file" id="field-adjuntos" multiple class="form-control-select" accept="image/*,.pdf,.doc,.docx">
             <div id="file-list-preview" style="margin-top: 0.5rem; font-size: 0.8rem; color: #475569;"></div>
           </div>
@@ -104,7 +104,6 @@ export class SolicitudesWidgetComponent {
       }
 
       try {
-        // Convertir archivos a Base64
         const processedAttachments = await Promise.all(
           this.selectedFiles.map(file => this.fileToBase64(file))
         );
@@ -119,15 +118,17 @@ export class SolicitudesWidgetComponent {
           adjuntos: processedAttachments
         };
 
-        // Invocación a la API REST de Google Apps Script
         const result = await createTicketAPI(payload);
 
-        if (result && (result.status === "success" || result.id_ticket)) {
-          alert(`✅ ¡Solicitud registrada con éxito!\n\nFolio asignado: ${result.id_ticket || result.data?.id_ticket}\nRevisa tu Google Sheet BD - Sistema de Tickets y tu Google Drive.`);
+        // Extraer el folio de forma tolerante a fallos
+        const folio = result?.id_ticket || result?.data?.id_ticket || result?.data?.id;
+
+        if (result && (result.status === "success" || folio)) {
+          alert(`✅ ¡Solicitud registrada con éxito!\n\nFolio asignado: ${folio || 'TKT-2026'}\nRevisa tu Google Sheet BD - Sistema de Tickets y tu Google Drive.`);
           window.dispatchEvent(new CustomEvent("ciarm:navigation-change", { detail: { id: "view-mis-solicitudes" } }));
         } else {
-          alert("⚠️ La solicitud se envió pero la API devolvió una respuesta inesperada. Revisa la consola.");
-          console.log("Respuesta backend:", result);
+          alert("⚠️ Ocurrió un inconveniente al procesar la respuesta del servidor.");
+          console.log("Respuesta completa recibida:", result);
         }
       } catch (err) {
         console.error("❌ Error en el proceso de envío:", err);

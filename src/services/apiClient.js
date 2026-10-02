@@ -1,15 +1,11 @@
 /**
  * Cliente API de Integración Preproductiva - Portal CIARM
- * Conexión viva con Google Apps Script WebApp REST API
  */
 const STAGING_CONFIG = {
-  // Reemplaza esta URL con la tuya terminada en /exec
-  WEB_APP_URL: "https://script.google.com/macros/s/TU_URL_REAL_AQUI/exec"
+  // Pega aquí la URL ejecutable que copiaste de script.google.com
+  WEB_APP_URL: "https://script.google.com/a/macros/ciarm.edu.mx/s/AKfycbxx_dPOsx1x1y4KDyaJpn9U8UKxnF4WXj5lrBeDUQ41j0loNURBSryyyXqDF-0AJFkJ1w/exec"
 };
 
-/**
- * Envía la solicitud con sus adjuntos al backend de Apps Script
- */
 export async function createTicketAPI(payload) {
   try {
     const res = await fetch(STAGING_CONFIG.WEB_APP_URL, {
@@ -24,9 +20,6 @@ export async function createTicketAPI(payload) {
   }
 }
 
-/**
- * Consulta la lista de solicitudes activas para un colaborador
- */
 export async function fetchTicketsAPI(email) {
   try {
     const res = await fetch(`${STAGING_CONFIG.WEB_APP_URL}?action=getTickets&email=${encodeURIComponent(email)}`);
@@ -35,19 +28,5 @@ export async function fetchTicketsAPI(email) {
   } catch (e) {
     console.error("❌ Error al consultar tickets desde el backend:", e);
     return [];
-  }
-}
-
-/**
- * Obtiene el contexto y permisos del usuario desde SCGRC DM03
- */
-export async function fetchUserContextAPI(email) {
-  try {
-    const res = await fetch(`${STAGING_CONFIG.WEB_APP_URL}?action=getUserContext&email=${encodeURIComponent(email)}`);
-    const json = await res.json();
-    return json.data || { autorizado: false };
-  } catch (e) {
-    console.error("❌ Error al consultar contexto de usuario desde DM03:", e);
-    return { autorizado: false, reason: "Error de conexión HTTP" };
   }
 }

@@ -1,21 +1,22 @@
 /**
  * Backend Serverless Módulo de Solicitudes Internas - Portal CIARM
- * Motor con Lectura Dinámica Tolerante a Fallos sobre DM_03 y BD - Sistema de Tickets
+ * Motor de Integración con IDs Reales de Google Sheets y Google Drive
  */
 
 const CONFIG = {
-  // Catálogo Maestro de Colaboradores SCGRC (DM03)
+  // 1. SCGRC_DM_03_CATALOGO_DE_COLABORADORES
   SPREADSHEET_ID_DM03: "1h14cqmHseHSN3FzrEtK_AwVimzDGkz9qx8LcGBCQuDY",
   
-  // Libro 'BD - Sistema de Tickets'
+  // 2. BD - Sistema de Tickets
   SPREADSHEET_ID_HT05: "1o33Gw6xWsH64SXmaxaN7EDlSsW0fUExDjPE4cGpnPbs",
   
-  ATTACHMENTS_FOLDER_ID: "REEMPLAZAR_CON_ID_CARPETA_DRIVE_ADJUNTOS",
+  // 3. Carpeta CIARM_Adjuntos_Testing en Google Drive
+  ATTACHMENTS_FOLDER_ID: "103wSYfCuSwVKW_aTbTFr2O7b-JyuT619",
   
   SHEET_NAMES: {
     PERMISOS: "Permisos_de_usuario",
-    TICKETS: "TICKETS",
-    TRAZABILIDAD: "REGISTRO SOLICITUDES",
+    TICKETS: "TICKETS",                // Pestaña principal de 24 columnas (A-X)
+    TRAZABILIDAD: "REGISTRO SOLICITUDES", // Pestaña de histórico
     EVALUACION: "CATALOGOS"
   }
 };
@@ -64,7 +65,7 @@ function doPost(e) {
 }
 
 /**
- * Inspección Inteligente y Tolerante a Fallos de DM_03
+ * Consulta del catálogo maestro DM03 con tolerancia a fallos
  */
 function getUserContext(email) {
   if (!email) return { autorizado: false, reason: "Correo no proporcionado" };
@@ -72,7 +73,6 @@ function getUserContext(email) {
   const ssDM03 = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID_DM03);
   let sheetPermisos = ssDM03.getSheetByName(CONFIG.SHEET_NAMES.PERMISOS);
 
-  // Fallback: Si el nombre de la pestaña cambió, tomar la primera hoja activa
   if (!sheetPermisos) {
     sheetPermisos = ssDM03.getSheets()[0];
   }
@@ -84,7 +84,6 @@ function getUserContext(email) {
 
   const headers = data[0].map(h => h.toString().toLowerCase().trim());
 
-  // Mapeo dinámico de índices de columna independientemente de su posición
   const colEmail = headers.findIndex(h => h.includes("correo") || h.includes("email"));
   const colStatus = headers.findIndex(h => h.includes("status") || h.includes("estatus") || h.includes("estado"));
   const colPortal = headers.findIndex(h => h.includes("portal") || h.includes("rol"));
@@ -124,6 +123,9 @@ function getUserContext(email) {
   return { autorizado: false, reason: `El correo ${email} no existe en la base de datos DM03` };
 }
 
+/**
+ * Guarda la lista de adjuntos en Base64 dentro de la carpeta receptora de Drive
+ */
 function saveAttachmentsToDrive(idTicket, attachments) {
   if (!attachments || !Array.isArray(attachments) || attachments.length === 0) {
     return "";
@@ -148,6 +150,9 @@ function saveAttachmentsToDrive(idTicket, attachments) {
   }
 }
 
+/**
+ * Crea la fila del ticket en la pestaña TICKETS mapeando exactamente las 24 columnas (A-X)
+ */
 function createTicket(payload) {
   const ssHT05 = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID_HT05);
   const sheetTickets = ssHT05.getSheetByName(CONFIG.SHEET_NAMES.TICKETS);
@@ -184,8 +189,8 @@ function createTicket(payload) {
     "",                          // Col S: PUNTOS
     "",                          // Col T: OBSERVACIONES
     now,                         // Col U: ÚLTIMA ACTUALIZACIÓN
-    payload.urgencia === "SI" ? "🔴 Urgente" : "🟢 Normal", // Col V
-    "",                          // Col W
+    payload.urgencia === "SI" ? "🔴 Urgente" : "🟢 Normal", // Col V: PRIORIDAD SOLICITADA
+    "",                          // Col W: PLAZO SOLICITADO
     adjuntosUrls                 // Col X: ARCHIVOS ADJUNTOS
   ];
 
@@ -223,16 +228,16 @@ function getTickets(userContext) {
     if (!row[0]) continue;
 
     const item = {
-      id_ticket: row[0],
-      fecha_creacion: row[1],
-      area_solicitante: row[3],
-      correo_solicitante: row[5],
-      tipo_solicitud: row[6],
-      descripcion: row[7],
-      correo_ejecutor: row[9],
-      estado_actual: row[12],
-      observaciones: row[19],
-      adjuntos_urls: row[23] || ""
+      id_ticket: row[0],         // Col A
+      fecha_creacion: row[1],    // Col B
+      area_solicitante: row[3],  // Col D
+      correo_solicitante: row[5],// Col F
+      tipo_solicitud: row[6],    // Col G
+      descripcion: row[7],       // Col H
+      correo_ejecutor: row[9],   // Col J
+      estado_actual: row[12],    // Col M
+      observaciones: row[19],    // Col T
+      adjuntos_urls: row[23] || "" // Col X
     };
 
     if (rol === "PORTAL_ADMIN" || rol === "PORTAL_DIRECTOR") {
@@ -254,10 +259,10 @@ function updateTicketStatus(payload) {
     if (data[i][0] === payload.id_ticket) {
       const rowIdx = i + 1;
 
-      sheetTickets.getRange(rowIdx, 13).setValue(payload.nuevo_estado);
-      if (payload.correo_ejecutor) sheetTickets.getRange(rowIdx, 10).setValue(payload.correo_ejecutor);
-      if (payload.observaciones) sheetTickets.getRange(rowIdx, 20).setValue(payload.observaciones);
-      sheetTickets.getRange(rowIdx, 21).setValue(new Date());
+      sheetTickets.getRange(rowIdx, 13).setValue(payload.nuevo_estado); // Col M
+      if (payload.correo_ejecutor) sheetTickets.getRange(rowIdx, 10).setValue(payload.correo_ejecutor); // Col J
+      if (payload.observaciones) sheetTickets.getRange(rowIdx, 20).setValue(payload.observaciones); // Col T
+      sheetTickets.getRange(rowIdx, 21).setValue(new Date()); // Col U
 
       MailApp.sendEmail({
         to: data[i][5],

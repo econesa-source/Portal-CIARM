@@ -1,31 +1,31 @@
 /**
- * Cliente API para el Portal CIARM
- * Conecta el frontend con la Web App de Google Apps Script.
+ * Cliente API de Integración Preproductiva - Portal CIARM
  */
+const STAGING_CONFIG = {
+  WEB_APP_URL: "PEGA_AQUI_TU_URL_EXEC_APPS_SCRIPT"
+};
 
-// Reemplazar con la URL desplegada de Google Apps Script
-const GAS_WEB_APP_URL = "https://script.google.com/macros/s/TU_SCRIPT_ID/exec";
-
-export async function fetchDriveDocuments() {
+export async function createTicketAPI(payload) {
   try {
-    const res = await fetch(`${GAS_WEB_APP_URL}?action=getDocuments`);
-    const json = await res.json();
-    if (json.status === "success") return json.data;
-    throw new Error(json.message);
-  } catch (error) {
-    console.error("❌ Error al obtener documentos de Drive:", error);
-    return [];
+    const res = await fetch(STAGING_CONFIG.WEB_APP_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "createTicket", payload })
+    });
+    return await res.json();
+  } catch (e) {
+    console.error("❌ Error al conectar con el backend de Google Apps Script:", e);
+    return { status: "error", message: e.toString() };
   }
 }
 
-export async function fetchCalendarEvents() {
+export async function fetchTicketsAPI(email) {
   try {
-    const res = await fetch(`${GAS_WEB_APP_URL}?action=getEvents`);
+    const res = await fetch(`${STAGING_CONFIG.WEB_APP_URL}?action=getTickets&email=${encodeURIComponent(email)}`);
     const json = await res.json();
-    if (json.status === "success") return json.data;
-    throw new Error(json.message);
-  } catch (error) {
-    console.error("❌ Error al obtener eventos de Calendar:", error);
+    return json.data || [];
+  } catch (e) {
+    console.error("❌ Error al consultar tickets desde el backend:", e);
     return [];
   }
 }

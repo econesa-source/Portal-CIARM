@@ -3,7 +3,6 @@
  * URL de la Versión Activa en Google Apps Script WebApp
  */
 const STAGING_CONFIG = {
-  // URL de la versión activa confirmada por el usuario:
   WEB_APP_URL: "https://script.google.com/a/macros/ciarm.edu.mx/s/AKfycbxnjpsg4BdZEn-1EL1xXA6BH_emH5Wd7RSuHBPtwpJOQwGgb6a2NKOVCVO-aVpYdO3orw/exec"
 };
 
@@ -32,11 +31,11 @@ export async function createTicketAPI(payload) {
     try {
       return JSON.parse(textResponse);
     } catch (parseErr) {
-      console.error("❌ Respuesta no es un JSON válido:", textResponse);
-      return { status: "error", message: "La respuesta del servidor no fue un JSON válido." };
+      console.error("❌ La respuesta no es un JSON válido:", textResponse);
+      return { status: "error", message: "La respuesta del servidor no tuvo formato JSON válido." };
     }
   } catch (e) {
-    console.error("❌ Error de red al conectar con la WebApp de Apps Script:", e);
+    console.error("❌ Error en la conexión con la WebApp de Google Apps Script:", e);
     return { status: "error", message: e.toString() };
   }
 }

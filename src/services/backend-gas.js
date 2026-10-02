@@ -1,6 +1,6 @@
 /**
  * Backend Serverless Módulo de Solicitudes Internas - Portal CIARM
- * Motor de Integración con IDs Reales de Google Sheets y Google Drive
+ * Conectado a 'RESP Archivos Pedidos' (ID: 103wSYfCuSwVKW_aTbTFr2O7b-JyuT619)
  */
 
 const CONFIG = {
@@ -10,7 +10,7 @@ const CONFIG = {
   // 2. BD - Sistema de Tickets
   SPREADSHEET_ID_HT05: "1o33Gw6xWsH64SXmaxaN7EDlSsW0fUExDjPE4cGpnPbs",
   
-  // 3. Carpeta CIARM_Adjuntos_Testing en Google Drive
+  // 3. Carpeta 'RESP Archivos Pedidos' en Google Drive
   ATTACHMENTS_FOLDER_ID: "103wSYfCuSwVKW_aTbTFr2O7b-JyuT619",
   
   SHEET_NAMES: {
@@ -45,6 +45,12 @@ function doGet(e) {
 function doPost(e) {
   let responseData = { status: "error", message: "Petición no válida" };
   try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ status: "error", message: "Sin contenido POST" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     const contents = JSON.parse(e.postData.contents);
     const action = contents.action;
 
@@ -64,9 +70,6 @@ function doPost(e) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-/**
- * Consulta del catálogo maestro DM03 con tolerancia a fallos
- */
 function getUserContext(email) {
   if (!email) return { autorizado: false, reason: "Correo no proporcionado" };
 
@@ -106,10 +109,6 @@ function getUserContext(email) {
         return { autorizado: false, reason: "El colaborador no tiene estatus Activo en DM03" };
       }
 
-      if (!portal) {
-        return { autorizado: false, reason: "El colaborador no tiene un Rol de Portal asignado" };
-      }
-
       return {
         autorizado: true,
         email: userEmail,
@@ -124,7 +123,7 @@ function getUserContext(email) {
 }
 
 /**
- * Guarda la lista de adjuntos en Base64 dentro de la carpeta receptora de Drive
+ * Guarda los adjuntos dentro de la carpeta 'RESP Archivos Pedidos'
  */
 function saveAttachmentsToDrive(idTicket, attachments) {
   if (!attachments || !Array.isArray(attachments) || attachments.length === 0) {
@@ -137,10 +136,12 @@ function saveAttachmentsToDrive(idTicket, attachments) {
     let fileUrls = [];
 
     attachments.forEach(file => {
-      let data = Utilities.base64Decode(file.base64Data);
-      let blob = Utilities.newBlob(data, file.mimeType, file.name);
-      let driveFile = ticketFolder.createFile(blob);
-      fileUrls.push(driveFile.getUrl());
+      if (file && file.base64Data && file.name) {
+        let data = Utilities.base64Decode(file.base64Data);
+        let blob = Utilities.newBlob(data, file.mimeType || "application/octet-stream", file.name);
+        let driveFile = ticketFolder.createFile(blob);
+        fileUrls.push(driveFile.getUrl());
+      }
     });
 
     return fileUrls.join(",");
@@ -151,9 +152,12 @@ function saveAttachmentsToDrive(idTicket, attachments) {
 }
 
 /**
- * Crea la fila del ticket en la pestaña TICKETS mapeando exactamente las 24 columnas (A-X)
+ * Crea la fila del ticket en la pestaña TICKETS mapeando las 24 columnas (A-X)
  */
 function createTicket(payload) {
+  const data = payload || {};
+  const adjuntos = data.adjuntos || [];
+
   const ssHT05 = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID_HT05);
   const sheetTickets = ssHT05.getSheetByName(CONFIG.SHEET_NAMES.TICKETS);
 
@@ -165,124 +169,70 @@ function createTicket(payload) {
   const fechaStr = Utilities.formatDate(now, "GMT-5", "dd/MM/yyyy");
   const horaStr = Utilities.formatDate(now, "GMT-5", "HH:mm:ss");
 
-  const adjuntosUrls = saveAttachmentsToDrive(idTicket, payload.adjuntos);
+  const adjuntosUrls = saveAttachmentsToDrive(idTicket, adjuntos);
 
   const newRow = [
-    idTicket,                    // Col A: ID TICKET
-    fechaStr,                    // Col B: FECHA SOLICITUD
-    horaStr,                     // Col C: HORA SOLICITUD
-    payload.area_solicitante,    // Col D: ÁREA SOLICITANTE
-    payload.nombre_solicitante,  // Col E: SOLICITANTE
-    payload.correo_solicitante,  // Col F: CORREO SOLICITANTE
-    payload.tipo_solicitud,      // Col G: TIPO DE SOLICITUD
-    payload.descripcion,         // Col H: DESCRIPCIÓN
-    "POR DEFINIR",               // Col I: PRIORIDAD
-    "SIN ASIGNAR",               // Col J: RESPONSABLE
-    "",                          // Col K: FECHA ASIGNACIÓN
-    payload.fecha_requerida || "",// Col L: FECHA COMPROMISO
-    "NUEVO",                     // Col M: ESTADO
-    "",                          // Col N: FECHA INICIO
-    "",                          // Col O: FECHA TERMINACIÓN
-    "",                          // Col P: TIEMPO EJECUCIÓN
-    "",                          // Col Q: TIEMPO TOTAL
-    "POR DEFINIR",               // Col R: SLA
-    "",                          // Col S: PUNTOS
-    "",                          // Col T: OBSERVACIONES
-    now,                         // Col U: ÚLTIMA ACTUALIZACIÓN
-    payload.urgencia === "SI" ? "🔴 Urgente" : "🟢 Normal", // Col V: PRIORIDAD SOLICITADA
-    "",                          // Col W: PLAZO SOLICITADO
-    adjuntosUrls                 // Col X: ARCHIVOS ADJUNTOS
+    idTicket,                             // Col A: ID TICKET (ej. TKT-2026-00001)
+    fechaStr,                             // Col B: FECHA SOLICITUD
+    horaStr,                              // Col C: HORA SOLICITUD
+    data.area_solicitante || "General",   // Col D: ÁREA SOLICITANTE
+    data.nombre_solicitante || "Usuario", // Col E: SOLICITANTE
+    data.correo_solicitante || "",        // Col F: CORREO SOLICITANTE
+    data.tipo_solicitud || "General",     // Col G: TIPO DE SOLICITUD
+    data.descripcion || "",               // Col H: DESCRIPCIÓN
+    "POR DEFINIR",                        // Col I: PRIORIDAD
+    "SIN ASIGNAR",                        // Col J: RESPONSABLE
+    "",                                   // Col K: FECHA ASIGNACIÓN
+    data.fecha_requerida || "",           // Col L: FECHA COMPROMISO
+    "NUEVO",                              // Col M: ESTADO
+    "",                                   // Col N: FECHA INICIO
+    "",                                   // Col O: FECHA TERMINACIÓN
+    "",                                   // Col P: TIEMPO EJECUCIÓN
+    "",                                   // Col Q: TIEMPO TOTAL
+    "POR DEFINIR",                        // Col R: SLA
+    "",                                   // Col S: PUNTOS
+    "",                                   // Col T: OBSERVACIONES
+    now,                                  // Col U: ÚLTIMA ACTUALIZACIÓN
+    data.urgencia === "SI" ? "🔴 Urgente" : "🟢 Normal", // Col V: PRIORIDAD SOLICITADA
+    "",                                   // Col W: PLAZO SOLICITADO
+    adjuntosUrls                          // Col X: ARCHIVOS ADJUNTOS
   ];
 
   sheetTickets.appendRow(newRow);
 
-  MailApp.sendEmail({
-    to: payload.correo_solicitante,
-    subject: `[Portal CIARM] Solicitud Registrada - Folio ${idTicket}`,
-    htmlBody: `
-      <h3>Estimado(a) ${payload.nombre_solicitante || 'Colaborador'},</h3>
-      <p>Su solicitud ha sido registrada correctamente con el folio <strong>${idTicket}</strong>.</p>
-      <p><strong>Tipo:</strong> ${payload.tipo_solicitud}<br><strong>Detalle:</strong> ${payload.descripcion}</p>
-      <p><strong>Adjuntos cargados:</strong> ${payload.adjuntos ? payload.adjuntos.length : 0} archivo(s).</p>
-      <hr><small>Colegio Internacional Alemán Riviera Maya</small>
-    `
-  });
+  if (data.correo_solicitante) {
+    try {
+      MailApp.sendEmail({
+        to: data.correo_solicitante,
+        subject: `[Portal CIARM] Solicitud Registrada - Folio ${idTicket}`,
+        htmlBody: `
+          <h3>Estimado(a) ${data.nombre_solicitante || 'Colaborador'},</h3>
+          <p>Su solicitud ha sido registrada correctamente con el folio <strong>${idTicket}</strong>.</p>
+          <p><strong>Tipo:</strong> ${data.tipo_solicitud}<br><strong>Detalle:</strong> ${data.descripcion}</p>
+          <p><strong>Adjuntos cargados:</strong> ${adjuntos.length} archivo(s).</p>
+          <hr><small>Colegio Internacional Alemán Riviera Maya</small>
+        `
+      });
+    } catch (e) {
+      console.warn("⚠️ No se envió correo de notificación:", e);
+    }
+  }
 
   return { id_ticket: idTicket, estado: "NUEVO", adjuntos_urls: adjuntosUrls };
 }
 
-function getTickets(userContext) {
-  if (!userContext.autorizado) return [];
-
-  const ssHT05 = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID_HT05);
-  const sheetTickets = ssHT05.getSheetByName(CONFIG.SHEET_NAMES.TICKETS);
-  const data = sheetTickets.getDataRange().getValues();
-  if (data.length <= 1) return [];
-
-  const tickets = [];
-  const rol = userContext.rol;
-  const email = userContext.email;
-
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    if (!row[0]) continue;
-
-    const item = {
-      id_ticket: row[0],         // Col A
-      fecha_creacion: row[1],    // Col B
-      area_solicitante: row[3],  // Col D
-      correo_solicitante: row[5],// Col F
-      tipo_solicitud: row[6],    // Col G
-      descripcion: row[7],       // Col H
-      correo_ejecutor: row[9],   // Col J
-      estado_actual: row[12],    // Col M
-      observaciones: row[19],    // Col T
-      adjuntos_urls: row[23] || "" // Col X
-    };
-
-    if (rol === "PORTAL_ADMIN" || rol === "PORTAL_DIRECTOR") {
-      tickets.push(item);
-    } else if (rol === "PORTAL_USUARIO" && item.correo_solicitante.toLowerCase() === email.toLowerCase()) {
-      tickets.push(item);
-    }
-  }
-
-  return tickets.reverse();
-}
-
-function updateTicketStatus(payload) {
-  const ssHT05 = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID_HT05);
-  const sheetTickets = ssHT05.getSheetByName(CONFIG.SHEET_NAMES.TICKETS);
-  const data = sheetTickets.getDataRange().getValues();
-
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === payload.id_ticket) {
-      const rowIdx = i + 1;
-
-      sheetTickets.getRange(rowIdx, 13).setValue(payload.nuevo_estado); // Col M
-      if (payload.correo_ejecutor) sheetTickets.getRange(rowIdx, 10).setValue(payload.correo_ejecutor); // Col J
-      if (payload.observaciones) sheetTickets.getRange(rowIdx, 20).setValue(payload.observaciones); // Col T
-      sheetTickets.getRange(rowIdx, 21).setValue(new Date()); // Col U
-
-      MailApp.sendEmail({
-        to: data[i][5],
-        subject: `[Portal CIARM] Solicitud ${payload.id_ticket} -> ${payload.nuevo_estado}`,
-        htmlBody: `<p>Estatus de la solicitud <strong>${payload.id_ticket}</strong> actualizado a: <strong>${payload.nuevo_estado}</strong>.</p>`
-      });
-
-      return { success: true };
-    }
-  }
-  return { success: false, message: "Ticket no encontrado" };
-}
-
-function submitEvaluation(payload) {
-  updateTicketStatus({
-    id_ticket: payload.id_ticket,
-    nuevo_estado: "RECIBI_CONFORME",
-    usuario_cambio: payload.usuario,
-    observaciones: `Evaluación registrada por usuario. Calidad: ${payload.calificacion_calidad}*, Tiempo: ${payload.calificacion_tiempo}*, Amabilidad: ${payload.calificacion_amabilidad}*`
+/**
+ * Función auxiliar para ejecutar pruebas manuales desde la consola
+ */
+function testManual() {
+  var res = createTicket({
+    nombre_solicitante: "Ezequiel Conesa",
+    correo_solicitante: "econesa@ciarm.edu.mx",
+    area_solicitante: "Coordinación Pedagógica",
+    tipo_solicitud: "Prueba Directa Console",
+    urgencia: "NO",
+    descripcion: "Prueba manual de ejecución limpia",
+    adjuntos: []
   });
-
-  return { success: true };
+  Logger.log("📌 Resultado Test: " + JSON.stringify(res));
 }

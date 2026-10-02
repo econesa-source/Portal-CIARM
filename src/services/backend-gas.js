@@ -1,22 +1,16 @@
 /**
  * Backend Serverless Módulo de Solicitudes Internas - Portal CIARM
- * Conectado a 'RESP Archivos Pedidos' (ID: 103wSYfCuSwVKW_aTbTFr2O7b-JyuT619)
+ * Generador de Folios Consecutivos Basado en Celdas con Datos
  */
 
 const CONFIG = {
-  // 1. SCGRC_DM_03_CATALOGO_DE_COLABORADORES
   SPREADSHEET_ID_DM03: "1h14cqmHseHSN3FzrEtK_AwVimzDGkz9qx8LcGBCQuDY",
-  
-  // 2. BD - Sistema de Tickets
   SPREADSHEET_ID_HT05: "1o33Gw6xWsH64SXmaxaN7EDlSsW0fUExDjPE4cGpnPbs",
-  
-  // 3. Carpeta 'RESP Archivos Pedidos' en Google Drive
   ATTACHMENTS_FOLDER_ID: "103wSYfCuSwVKW_aTbTFr2O7b-JyuT619",
-  
   SHEET_NAMES: {
     PERMISOS: "Permisos_de_usuario",
-    TICKETS: "TICKETS",                // Pestaña principal de 24 columnas (A-X)
-    TRAZABILIDAD: "REGISTRO SOLICITUDES", // Pestaña de histórico
+    TICKETS: "TICKETS",
+    TRAZABILIDAD: "REGISTRO SOLICITUDES",
     EVALUACION: "CATALOGOS"
   }
 };
@@ -122,9 +116,6 @@ function getUserContext(email) {
   return { autorizado: false, reason: `El correo ${email} no existe en la base de datos DM03` };
 }
 
-/**
- * Guarda los adjuntos dentro de la carpeta 'RESP Archivos Pedidos'
- */
 function saveAttachmentsToDrive(idTicket, attachments) {
   if (!attachments || !Array.isArray(attachments) || attachments.length === 0) {
     return "";
@@ -152,8 +143,19 @@ function saveAttachmentsToDrive(idTicket, attachments) {
 }
 
 /**
- * Crea la fila del ticket en la pestaña TICKETS mapeando las 24 columnas (A-X)
+ * Calcula las filas reales que contienen datos en la Columna A
  */
+function getRealRowsCount(sheet) {
+  const colAValues = sheet.getRange("A:A").getValues();
+  let count = 0;
+  for (let i = 0; i < colAValues.length; i++) {
+    if (colAValues[i][0] && colAValues[i][0].toString().trim() !== "") {
+      count++;
+    }
+  }
+  return count > 0 ? count : 1;
+}
+
 function createTicket(payload) {
   const data = payload || {};
   const adjuntos = data.adjuntos || [];
@@ -162,8 +164,8 @@ function createTicket(payload) {
   const sheetTickets = ssHT05.getSheetByName(CONFIG.SHEET_NAMES.TICKETS);
 
   const year = new Date().getFullYear();
-  const lastRow = sheetTickets.getLastRow();
-  const nextFolioNum = String(lastRow).padStart(5, '0');
+  const totalRealRows = getRealRowsCount(sheetTickets);
+  const nextFolioNum = String(totalRealRows).padStart(5, '0');
   const idTicket = `TKT-${year}-${nextFolioNum}`;
   const now = new Date();
   const fechaStr = Utilities.formatDate(now, "GMT-5", "dd/MM/yyyy");
@@ -172,7 +174,7 @@ function createTicket(payload) {
   const adjuntosUrls = saveAttachmentsToDrive(idTicket, adjuntos);
 
   const newRow = [
-    idTicket,                             // Col A: ID TICKET (ej. TKT-2026-00001)
+    idTicket,                             // Col A: ID TICKET
     fechaStr,                             // Col B: FECHA SOLICITUD
     horaStr,                              // Col C: HORA SOLICITUD
     data.area_solicitante || "General",   // Col D: ÁREA SOLICITANTE
@@ -221,9 +223,6 @@ function createTicket(payload) {
   return { id_ticket: idTicket, estado: "NUEVO", adjuntos_urls: adjuntosUrls };
 }
 
-/**
- * Función auxiliar para ejecutar pruebas manuales desde la consola
- */
 function testManual() {
   var res = createTicket({
     nombre_solicitante: "Ezequiel Conesa",
@@ -231,7 +230,7 @@ function testManual() {
     area_solicitante: "Coordinación Pedagógica",
     tipo_solicitud: "Prueba Directa Console",
     urgencia: "NO",
-    descripcion: "Prueba manual de ejecución limpia",
+    descripcion: "Prueba manual con contador de filas reales",
     adjuntos: []
   });
   Logger.log("📌 Resultado Test: " + JSON.stringify(res));

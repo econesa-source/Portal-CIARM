@@ -34,11 +34,11 @@ export async function renderMisSolicitudesWidget(containerElement, userEmail) {
         <p style="color: #4B5563; font-size: 0.95rem; margin: 0.5rem 0;">${ticket.descripcion}</p>
         <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #F3F4F6; padding-top: 0.75rem; font-size: 0.85rem; color: #9CA3AF;">
           <span>📅 ${ticket.fecha} ${ticket.hora}</span>
-          ${ticket.driveUrl && ticket.driveUrl.startsWith('http') ? `
+          ${ticket.driveUrl ? `
             <a href="${ticket.driveUrl}" target="_blank" rel="noopener noreferrer" style="color: #1B2B48; font-weight: bold; text-decoration: none;">
-              📁 Ver Subcarpeta en Google Drive ↗
+              📁 Abrir Subcarpeta de Adjuntos ↗
             </a>
-          ` : '<span style="color: #9CA3AF;">Sin subcarpeta de adjuntos</span>'}
+          ` : '<span style="color: #9CA3AF; font-style: italic;">Sin subcarpeta de adjuntos</span>'}
         </div>
       </div>
     `).join('');

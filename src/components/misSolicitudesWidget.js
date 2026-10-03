@@ -5,7 +5,7 @@ export async function renderMisSolicitudesWidget(containerElement, userEmail) {
 
   containerElement.innerHTML = `
     <div style="text-align: center; padding: 2rem;">
-      <p style="color: #1B2B48; font-weight: 600;">Sincronizando solicitudes...</p>
+      <p style="color: #1B2B48; font-weight: 600;">Sincronizando solicitudes en tiempo real...</p>
     </div>
   `;
 
@@ -16,7 +16,7 @@ export async function renderMisSolicitudesWidget(containerElement, userEmail) {
       containerElement.innerHTML = `
         <div style="background: #F9FAFB; border: 1px dashed #D1D5DB; border-radius: 8px; padding: 2.5rem; text-align: center; margin: 1rem 0;">
           <h3 style="color: #1B2B48;">Sin solicitudes registradas</h3>
-          <p style="color: #6B7280;">No hay tickets para <strong>${userEmail}</strong>.</p>
+          <p style="color: #6B7280;">No hay tickets registrados para <strong>${userEmail}</strong>.</p>
         </div>
       `;
       return;
@@ -36,9 +36,9 @@ export async function renderMisSolicitudesWidget(containerElement, userEmail) {
           <span>📅 ${ticket.fecha} ${ticket.hora}</span>
           ${ticket.driveUrl ? `
             <a href="${ticket.driveUrl}" target="_blank" rel="noopener noreferrer" style="color: #1B2B48; font-weight: bold; text-decoration: none;">
-              📁 Abrir Subcarpeta de Adjuntos ↗
+              📎 Ver Archivo Adjunto en Google Drive ↗
             </a>
-          ` : '<span style="color: #9CA3AF; font-style: italic;">Sin subcarpeta de adjuntos</span>'}
+          ` : '<span style="color: #9CA3AF; font-style: italic;">Sin archivos adjuntos</span>'}
         </div>
       </div>
     `).join('');

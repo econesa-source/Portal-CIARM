@@ -23,8 +23,16 @@ export async function renderMisSolicitudesWidget(containerElement, userEmail) {
     }
 
     const cardsHtml = tickets.map(ticket => {
-      const hasValidUrl = ticket.driveUrl && ticket.driveUrl.startsWith('http');
-      
+      const url = ticket.driveUrl ? String(ticket.driveUrl).trim() : '';
+      const isFile = url.includes('/file/d/');
+      const isFolder = url.includes('/folders/');
+      const hasLink = url.startsWith('http') && (isFile || isFolder);
+
+      let buttonLabel = '📎 Ver Archivo Adjunto en Google Drive ↗';
+      if (isFolder) {
+        buttonLabel = '📁 Abrir Subcarpeta del Ticket ↗';
+      }
+
       return `
         <div style="background: #FFF; border: 1px solid #E5E7EB; border-left: 4px solid #C5A059; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
@@ -37,11 +45,11 @@ export async function renderMisSolicitudesWidget(containerElement, userEmail) {
           <p style="color: #4B5563; font-size: 0.95rem; margin: 0.5rem 0;">${ticket.descripcion}</p>
           <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #F3F4F6; padding-top: 0.75rem; font-size: 0.85rem; color: #9CA3AF;">
             <span>📅 ${ticket.fecha} ${ticket.hora}</span>
-            ${hasValidUrl ? `
-              <a href="${ticket.driveUrl}" target="_blank" rel="noopener noreferrer" style="color: #1B2B48; font-weight: bold; text-decoration: none;">
-                📁 Abrir Subcarpeta del Ticket ↗
+            ${hasLink ? `
+              <a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #1B2B48; font-weight: bold; text-decoration: none; display: flex; align-items: center; gap: 0.25rem;">
+                ${buttonLabel}
               </a>
-            ` : '<span style="color: #9CA3AF; font-style: italic;">Sin subcarpeta de adjuntos</span>'}
+            ` : '<span style="color: #9CA3AF; font-style: italic;">Sin archivos adjuntos</span>'}
           </div>
         </div>
       `;
@@ -52,7 +60,7 @@ export async function renderMisSolicitudesWidget(containerElement, userEmail) {
   } catch (error) {
     containerElement.innerHTML = `
       <div style="background: #FEF2F2; color: #991B1B; padding: 1rem; border-radius: 8px;">
-        Error al cargar las solicitudes.
+        Error al cargar las solicitudes. Por favor reintente más tarde.
       </div>
     `;
   }

@@ -26,10 +26,11 @@ export async function renderMisSolicitudesWidget(containerElement, userEmail) {
       const url = ticket.driveUrl || '';
       const isFile = url.includes('/file/d/');
       const isFolder = url.includes('/folders/');
+      const hasLink = url.startsWith('http') && (isFile || isFolder);
 
       let labelText = '📁 Abrir Subcarpeta en Drive ↗';
       if (isFile) {
-        labelText = '📎 Ver Vista Previa del Archivo ↗';
+        labelText = '📎 Ver Archivo Adjunto en Google Drive ↗';
       }
 
       return `
@@ -44,7 +45,7 @@ export async function renderMisSolicitudesWidget(containerElement, userEmail) {
           <p style="color: #4B5563; font-size: 0.95rem; margin: 0.5rem 0;">${ticket.descripcion}</p>
           <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #F3F4F6; padding-top: 0.75rem; font-size: 0.85rem; color: #9CA3AF;">
             <span>📅 ${ticket.fecha} ${ticket.hora}</span>
-            ${url ? `
+            ${hasLink ? `
               <a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #1B2B48; font-weight: bold; text-decoration: underline;">
                 ${labelText}
               </a>
@@ -59,7 +60,7 @@ export async function renderMisSolicitudesWidget(containerElement, userEmail) {
   } catch (error) {
     containerElement.innerHTML = `
       <div style="background: #FEF2F2; color: #991B1B; padding: 1rem; border-radius: 8px;">
-        Error al cargar las solicitudes desde la base de datos.
+        Error al cargar las solicitudes.
       </div>
     `;
   }

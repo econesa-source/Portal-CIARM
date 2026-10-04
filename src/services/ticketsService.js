@@ -11,7 +11,7 @@ export async function getMisSolicitudes(userEmail) {
 
     const textData = await response.text();
     const jsonMatch = textData.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\);/);
-    if (!jsonMatch || !jsonMatch[1]) throw new Error("Respuesta GViz inválida");
+    if (!jsonMatch || !jsonMatch[1]) throw new Error("Respuesta de Google Sheets inválida");
 
     const parsedData = JSON.parse(jsonMatch[1]);
     const rows = parsedData.table.rows || [];
@@ -20,12 +20,8 @@ export async function getMisSolicitudes(userEmail) {
       const c = row.c;
       if (!c) return null;
 
-      let rawUrl = c[10] && c[10].v ? String(c[10].v).trim() : '';
-
-      // Normalizacion de URL de archivo para vista previa aislada en Drive
-      if (rawUrl.includes('/file/d/') && rawUrl.includes('/view')) {
-        rawUrl = rawUrl.replace('/view', '/preview');
-      }
+      // Index 10 corresponde a la Columna X (ARCHIVOS ADJUNTOS) en el SELECT
+      const rawUrl = c[10] && c[10].v ? String(c[10].v).trim() : '';
 
       return {
         folio: c[0] && c[0].v ? c[0].v : 'SIN-FOLIO',
@@ -46,7 +42,7 @@ export async function getMisSolicitudes(userEmail) {
     return allTickets.filter(ticket => ticket.correo === targetEmail);
 
   } catch (error) {
-    console.error("[ticketsService] Error consultando solicitudes:", error);
+    console.error("[ticketsService] Error al consultar solicitudes:", error);
     return [];
   }
 }

@@ -1,0 +1,26 @@
+/* CIARM Theme System v2.2.0 - Ajustes Estéticos Oficiales */
+
+:root {
+  --ciarm-navy: #1B2B48;
+  --ciarm-gold: #C5A059;
+  --ciarm-bg: #F3F4F6;
+  --ciarm-card-bg: #FFFFFF;
+}
+
+/* Sidebar con Borde Derecho Dorado */
+aside, .sidebar, #sidebar {
+  border-right: 3px solid var(--ciarm-gold) !important;
+}
+
+/* Bordes Dorados Superiores para Tarjetas */
+.ciarm-card, .card-gold-top {
+  border-top: 4px solid var(--ciarm-gold) !important;
+  border-radius: 12px;
+  background: #FFFFFF;
+}
+
+/* Marco Dorado para el Asistente CIARM */
+.asistente-container {
+  border-top: 4px solid var(--ciarm-gold) !important;
+  border-radius: 12px;
+}

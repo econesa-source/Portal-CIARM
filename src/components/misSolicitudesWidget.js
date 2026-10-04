@@ -3,6 +3,7 @@ export function renderMisSolicitudesWidget(containerElement, userEmail) {
 
   const email = userEmail || 'econesa@ciarm.edu.mx';
   const SPREADSHEET_ID = '1o33Gw6xWsH64SXmaxaN7EDISsW0fUExDjPE4cGpnPbs';
+  const PARENT_DRIVE_FOLDER_ID = '103wSYfCuSwVKW_aTbTFr2O7b-JyuT619';
 
   containerElement.innerHTML = `
     <div style="background: #FFF; border-radius: 12px; padding: 1.5rem; border: 1px solid #E2E8F0; border-top: 5px solid #C5A059; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); font-family: system-ui, -apple-system, sans-serif;">
@@ -10,7 +11,7 @@ export function renderMisSolicitudesWidget(containerElement, userEmail) {
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid #F1F5F9;">
         <div>
           <h2 style="color: #1B2B48; margin: 0; font-size: 1.4rem;">📋 Mis Solicitudes de Pedido</h2>
-          <p style="color: #64748B; font-size: 0.875rem; margin: 0.25rem 0 0 0;">Sincronizado en tiempo real con Google Workspace (BD - Sistema de Tickets).</p>
+          <p style="color: #64748B; font-size: 0.875rem; margin: 0.25rem 0 0 0;">Sincronizado dinámicamente con Google Workspace (BD - Sistema de Tickets).</p>
         </div>
         <span style="background: #F1F5F9; color: #1B2B48; padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">
           👤 ${email}
@@ -20,8 +21,8 @@ export function renderMisSolicitudesWidget(containerElement, userEmail) {
       <!-- Estado de Carga -->
       <div id="loading-tickets" style="text-align: center; padding: 3rem; color: #64748B;">
         <div style="display: inline-block; width: 32px; height: 32px; border: 3px solid #CBD5E1; border-top-color: #1B2B48; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 1rem;"></div>
-        <p style="font-size: 1rem; margin: 0; font-weight: 600; color: #1B2B48;">Consultando base de datos de tickets...</p>
-        <p style="font-size: 0.85rem; color: #94A3B8; margin-top: 0.25rem;">Cargando registros para ${email}</p>
+        <p style="font-size: 1rem; margin: 0; font-weight: 600; color: #1B2B48;">Consultando base de datos en tiempo real...</p>
+        <p style="font-size: 0.85rem; color: #94A3B8; margin-top: 0.25rem;">Filtrando tickets para ${email}</p>
       </div>
 
       <!-- Mensaje Sin Registros -->
@@ -31,7 +32,7 @@ export function renderMisSolicitudesWidget(containerElement, userEmail) {
         <a href="#solicitudes" style="display: inline-block; margin-top: 1rem; background: #1B2B48; color: #FFF; padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: bold; text-decoration: none; font-size: 0.85rem;">+ Crear Nueva Solicitud</a>
       </div>
 
-      <!-- Tabla de Datos Reales -->
+      <!-- Tabla de Datos Reales Dinámicos -->
       <div id="tickets-table-container" style="display: none; overflow-x: auto;">
         <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
           <thead>
@@ -41,7 +42,7 @@ export function renderMisSolicitudesWidget(containerElement, userEmail) {
               <th style="padding: 0.75rem 1rem;">Tipo / Área</th>
               <th style="padding: 0.75rem 1rem;">Descripción</th>
               <th style="padding: 0.75rem 1rem;">Estado</th>
-              <th style="padding: 0.75rem 1rem; border-radius: 0 6px 0 0; text-align: center;">Adjuntos (Google Drive)</th>
+              <th style="padding: 0.75rem 1rem; border-radius: 0 6px 0 0; text-align: center;">Subcarpeta de Adjuntos (Drive)</th>
             </tr>
           </thead>
           <tbody id="tickets-list-body">
@@ -60,10 +61,10 @@ export function renderMisSolicitudesWidget(containerElement, userEmail) {
     </style>
   `;
 
-  loadTicketsSafely(SPREADSHEET_ID, email);
+  loadTicketsSafely(SPREADSHEET_ID, PARENT_DRIVE_FOLDER_ID, email);
 }
 
-function loadTicketsSafely(spreadsheetId, email) {
+function loadTicketsSafely(spreadsheetId, parentFolderId, email) {
   const loadingEl = document.getElementById('loading-tickets');
   const emptyEl = document.getElementById('no-tickets-msg');
   const tableContainer = document.getElementById('tickets-table-container');
@@ -74,12 +75,11 @@ function loadTicketsSafely(spreadsheetId, email) {
   fetch(gvizUrl)
     .then(res => res.text())
     .then(text => {
-      // Limpieza segura mediante posiciones de parentesis (sin expresiones regulares)
       const startIdx = text.indexOf('(');
       const endIdx = text.lastIndexOf(')');
       
       if (startIdx === -1 || endIdx === -1) {
-        throw new Error("Respuesta de respuesta invalida de GViz");
+        throw new Error("Respuesta invalida de GViz");
       }
 
       const rawJson = text.substring(startIdx + 1, endIdx);
@@ -102,9 +102,12 @@ function loadTicketsSafely(spreadsheetId, email) {
         const tipo = c[6] ? (c[6].v || c[6].f || '') : '';
         const descripcion = c[7] ? (c[7].v || c[7].f || '') : '';
         const estado = c[12] ? (c[12].v || c[12].f || '') : 'NUEVO';
-        const driveUrl = c[23] ? (c[23].v || c[23].f || '') : '';
+        const rawDriveUrl = c[23] ? (c[23].v || c[23].f || '') : '';
 
         if (idTicket && correo.toString().toLowerCase().trim() === email.toLowerCase().trim()) {
+          // Resolución dinámica de la subcarpeta
+          const subfolderUrl = resolveSubfolderUrl(idTicket, rawDriveUrl, parentFolderId);
+
           list.push({
             id: idTicket,
             fecha: fecha,
@@ -112,13 +115,13 @@ function loadTicketsSafely(spreadsheetId, email) {
             tipo: tipo,
             descripcion: descripcion,
             estado: estado,
-            driveUrl: driveUrl
+            subfolderUrl: subfolderUrl
           });
         }
       });
 
       if (list.length === 0) {
-        renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email);
+        renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email, parentFolderId);
         return;
       }
 
@@ -127,12 +130,22 @@ function loadTicketsSafely(spreadsheetId, email) {
       if (tableContainer) tableContainer.style.display = 'block';
     })
     .catch(err => {
-      console.warn("[GViz Safe Fetch Fallback]:", err);
-      renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email);
+      console.warn("[GViz Fetch Exception]:", err);
+      renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email, parentFolderId);
     });
 }
 
-function renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email) {
+function resolveSubfolderUrl(ticketId, rawUrl, parentFolderId) {
+  // Si la Columna X ya trae un link explícito a una subcarpeta (/folders/), respetarlo
+  if (rawUrl && rawUrl.includes('/drive/folders/') && !rawUrl.includes(parentFolderId)) {
+    return rawUrl;
+  }
+  // Búsqueda directa y específica dentro de la subcarpeta del ticket en Google Drive
+  const query = encodeURIComponent(`name contains '${ticketId}'`);
+  return `https://drive.google.com/drive/folders/${parentFolderId}?q=${query}`;
+}
+
+function renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email, parentFolderId) {
   const localData = [
     {
       id: 'TKT-2026-00001',
@@ -141,7 +154,7 @@ function renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email) {
       tipo: 'Limpieza e Intendencia',
       descripcion: 'mdkdkdnksdnksndksdnsdnknd',
       estado: 'NUEVO',
-      driveUrl: 'https://drive.google.com/file/d/17Vls3MVpqpeWvuZMyD6w2112EcV5_7RD/view?usp=drivesdk'
+      rawDriveUrl: 'https://drive.google.com/file/d/17Vls3MVpqpeWvuZMyD6w2112EcV5_7RD/view'
     },
     {
       id: 'TKT-2026-00002',
@@ -150,7 +163,7 @@ function renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email) {
       tipo: 'Soporte Tecnológico / TI',
       descripcion: 'kskskksksksksksks',
       estado: 'NUEVO',
-      driveUrl: 'https://drive.google.com/file/d/1IqHefBdh1ADqhfjkKtRh7BxiuDPmTXfY/view?usp=drivesdk'
+      rawDriveUrl: 'https://drive.google.com/file/d/1IqHefBdh1ADqhfjkKtRh7BxiuDPmTXfY/view'
     },
     {
       id: 'TKT-2026-00003',
@@ -159,7 +172,7 @@ function renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email) {
       tipo: 'Mantenimiento de Instalaciones',
       descripcion: 'kskskkskksks',
       estado: 'NUEVO',
-      driveUrl: 'https://drive.google.com/drive/folders/103wSYfCuSwVKW_aTbTFr2O7b-JyuT619'
+      rawDriveUrl: ''
     },
     {
       id: 'TKT-2026-00004',
@@ -168,7 +181,7 @@ function renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email) {
       tipo: 'Soporte Tecnológico / TI',
       descripcion: 'jsjjsjjsjsjsjsjsjsjsjsjsj',
       estado: 'NUEVO',
-      driveUrl: 'https://drive.google.com/file/d/1tPDMSuBDVC5f3p_Ah77nfpNDt-D1PD0b/view?usp=drivesdk'
+      rawDriveUrl: 'https://drive.google.com/file/d/1tPDMSuBDVC5f3p_Ah77nfpNDt-D1PD0b/view'
     }
   ];
 
@@ -181,13 +194,17 @@ function renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email) {
     return;
   }
 
-  renderRowsTable(filtered, tbody);
+  const processedList = filtered.map(t => ({
+    ...t,
+    subfolderUrl: resolveSubfolderUrl(t.id, t.rawDriveUrl, parentFolderId)
+  }));
+
+  renderRowsTable(processedList, tbody);
   if (tableContainer) tableContainer.style.display = 'block';
 }
 
 function renderRowsTable(tickets, tbody) {
   tbody.innerHTML = tickets.map(t => {
-    const hasDrive = t.driveUrl && t.driveUrl.toString().indexOf('http') === 0;
     return `
       <tr style="border-bottom: 1px solid #E2E8F0;">
         <td style="padding: 0.85rem 1rem; font-weight: bold; color: #1B2B48;">${t.id}</td>
@@ -200,13 +217,9 @@ function renderRowsTable(tickets, tbody) {
           </span>
         </td>
         <td style="padding: 0.85rem 1rem; text-align: center;">
-          ${hasDrive ? `
-            <a href="${t.driveUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 0.3rem; background: #C5A059; color: #FFFFFF; padding: 0.45rem 0.85rem; border-radius: 6px; text-decoration: none; font-size: 0.8rem; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
-              📂 Ver Adjuntos en Drive
-            </a>
-          ` : `
-            <span style="color: #94A3B8; font-size: 0.8rem; font-style: italic;">Sin adjuntos</span>
-          `}
+          <a href="${t.subfolderUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 0.3rem; background: #C5A059; color: #FFFFFF; padding: 0.45rem 0.85rem; border-radius: 6px; text-decoration: none; font-size: 0.8rem; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
+            📂 Abrir Subcarpeta Ticket
+          </a>
         </td>
       </tr>
     `;

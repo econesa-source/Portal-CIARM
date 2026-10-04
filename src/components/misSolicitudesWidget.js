@@ -72,8 +72,8 @@ function loadRealTicketsData(spreadsheetId, email) {
   const gvizUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tq=SELECT%20*&sheet=TICKETS`;
 
   fetch(gvizUrl)
-    .then(res => res.text())
-    .then(text => {
+    .then(function(res) { return res.text(); })
+    .then(function(text) {
       const jsonString = text.replace(/^/*O_o*//\s*google\.visualization\.Query\.setResponse\(/, '').replace(/\);?$/, '');
       const parsedData = JSON.parse(jsonString);
 
@@ -84,7 +84,7 @@ function loadRealTicketsData(spreadsheetId, email) {
       const rows = parsedData.table.rows;
       const ticketsList = [];
 
-      rows.forEach(row => {
+      rows.forEach(function(row) {
         const c = row.c;
         if (!c) return;
 
@@ -97,7 +97,7 @@ function loadRealTicketsData(spreadsheetId, email) {
         const driveUrl = c[23] ? (c[23].v || c[23].f || '') : '';
 
         if (idTicket && correo.toString().toLowerCase().trim() === email.toLowerCase().trim()) {
-          ticketsList.push({ id: idTicket, fecha, correo, tipo, descripcion, estado, driveUrl });
+          ticketsList.push({ id: idTicket, fecha: fecha, correo: correo, tipo: tipo, descripcion: descripcion, estado: estado, driveUrl: driveUrl });
         }
       });
 
@@ -110,7 +110,7 @@ function loadRealTicketsData(spreadsheetId, email) {
       loadingEl.style.display = 'none';
       tableContainer.style.display = 'block';
     })
-    .catch(() => {
+    .catch(function() {
       renderFallbackLocalData(tbody, loadingEl, emptyEl, tableContainer, email);
     });
 }
@@ -155,7 +155,7 @@ function renderFallbackLocalData(tbody, loadingEl, emptyEl, tableContainer, emai
     }
   ];
 
-  const filtered = ticketsBase.filter(t => t.correo.toLowerCase() === email.toLowerCase());
+  const filtered = ticketsBase.filter(function(t) { return t.correo.toLowerCase() === email.toLowerCase(); });
 
   if (loadingEl) loadingEl.style.display = 'none';
 
@@ -169,7 +169,7 @@ function renderFallbackLocalData(tbody, loadingEl, emptyEl, tableContainer, emai
 }
 
 function renderRows(tickets, tbody) {
-  tbody.innerHTML = tickets.map(t => {
+  tbody.innerHTML = tickets.map(function(t) {
     const hasDrive = t.driveUrl && t.driveUrl.toString().startsWith('http');
     return `
       <tr style="border-bottom: 1px solid #E2E8F0;">

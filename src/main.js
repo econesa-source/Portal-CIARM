@@ -1,6 +1,6 @@
-import { renderDashboardWidget } from './components/dashboardWidget.js?v=5.0.0';
-import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=5.0.0';
-import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=5.0.0';
+import { renderDashboardWidget } from './components/dashboardWidget.js?v=6.0.0';
+import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=6.0.0';
+import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=6.0.0';
 
 const USER_SESSION = {
   nombre: 'Ezequiel Conesa',

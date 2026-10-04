@@ -1,41 +1,70 @@
-import { DashboardRealComponent } from './components/dashboardReal.js';
-import { SolicitudesWidgetComponent } from './components/solicitudesWidget.js';
-import { MisSolicitudesWidgetComponent } from './components/misSolicitudesWidget.js';
+import { renderDashboardWidget } from './components/dashboardWidget.js?v=7.0.0';
+import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=7.0.0';
+import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=7.0.0';
 
-document.addEventListener('DOMContentLoaded', () => {
-  const containerId = 'main-content-area';
-  const dashboard = new DashboardRealComponent(containerId);
-  const solicitudes = new SolicitudesWidgetComponent(containerId);
-  const misSolicitudes = new MisSolicitudesWidgetComponent(containerId);
+// Configuración de Endpoint WebApp Apps Script
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA/exec';
 
-  dashboard.render();
+const USER_SESSION = {
+  nombre: 'Ezequiel Conesa',
+  correo: 'econesa@ciarm.edu.mx',
+  area: 'Coordinación Pedagógica',
+  rol: 'PORTAL_USUARIO'
+};
 
-  window.addEventListener('ciarm:navigation-change', (e) => {
-    const targetId = e.detail.id;
+function router() {
+  const container = document.getElementById('app');
+  if (!container) return;
 
-    if (targetId === 'menu-inicio' || targetId === 'view-home') {
-      dashboard.render();
-      updateSidebarActive('menu-inicio');
-    } else if (targetId === 'view-solicitudes') {
-      solicitudes.render();
-      updateSidebarActive(null);
-    } else if (targetId === 'view-mis-solicitudes') {
-      misSolicitudes.render();
-      updateSidebarActive(null);
+  try {
+    const hash = window.location.hash || '#inicio';
+
+    if (hash === '#solicitudes' || hash === '#nueva-solicitud') {
+      container.innerHTML = `
+        <div style="max-width:800px; margin: 0 auto; padding:1rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <a href="#inicio" style="color:#1B2B48; text-decoration:none; font-weight:bold;">← Volver al Inicio</a>
+            <a href="#mis-solicitudes" style="background:#C5A059; color:white; padding:0.5rem 1rem; border-radius:6px; text-decoration:none; font-weight:bold; font-size:0.9rem;">📋 Ver Mis Solicitudes</a>
+          </div>
+          <div id="solicitud-content"></div>
+        </div>
+      `;
+      renderSolicitudesWidget(document.getElementById('solicitud-content'), USER_SESSION, GAS_URL);
+
+    } else if (hash === '#mis-solicitudes') {
+      container.innerHTML = `
+        <div style="max-width:800px; margin: 0 auto; padding:1rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <a href="#solicitudes" style="color:#1B2B48; text-decoration:none; font-weight:bold;">← Crear Nueva Solicitud</a>
+            <a href="#inicio" style="color:#6B7280; text-decoration:none;">Ir al Inicio</a>
+          </div>
+          <div id="mis-solicitudes-content"></div>
+        </div>
+      `;
+      renderMisSolicitudesWidget(document.getElementById('mis-solicitudes-content'), USER_SESSION.correo);
+
+    } else {
+      renderDashboardWidget(container, (modulo) => {
+        if (modulo === 'solicitudes') {
+          window.location.hash = '#solicitudes';
+        }
+      });
     }
-  });
-
-  function updateSidebarActive(activeMenuId) {
-    document.querySelectorAll('.sidebar-item').forEach(item => {
-      if (item.id === activeMenuId) {
-        item.classList.add('active');
-      } else {
-        item.classList.remove('active');
-      }
-    });
+  } catch (err) {
+    console.error("[CIARM Router] Error de inicialización:", err);
+    container.innerHTML = `
+      <div style="max-width: 600px; margin: 4rem auto; padding: 2rem; background: #FFF; border-radius: 8px; border-left: 4px solid #DC2626; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+        <h3 style="color: #991B1B; margin-top: 0;">Error al iniciar la aplicación</h3>
+        <p style="color: #4B5563;">El sistema no pudo cargar el módulo solicitado. Por favor recargue la página.</p>
+        <button onclick="window.location.reload(true)" style="background: #1B2B48; color: #FFF; padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">🔄 Reintentar Carga</button>
+      </div>
+    `;
   }
+}
 
-  document.getElementById("menu-inicio")?.addEventListener("click", () => {
-    window.dispatchEvent(new CustomEvent("ciarm:navigation-change", { detail: { id: "menu-inicio" } }));
-  });
-});
+window.addEventListener('hashchange', router);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', router);
+} else {
+  router();
+}

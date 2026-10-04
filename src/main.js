@@ -1,6 +1,6 @@
-import { renderDashboardWidget } from './components/dashboardWidget.js?v=2.1.0';
-import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=2.1.0';
-import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=2.1.0';
+import { renderDashboardWidget } from './components/dashboardWidget.js?v=3.0.0';
+import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=3.0.0';
+import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=3.0.0';
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA/exec';
 
@@ -55,7 +55,7 @@ function router() {
           <div id="mis-solicitudes-content"></div>
         </div>
       `;
-      renderMisSolicitudesWidget(document.getElementById('mis-solicitudes-content'), USER_SESSION.correo);
+      renderMisSolicitudesWidget(document.getElementById('mis-solicitudes-content'), USER_SESSION.correo, GAS_URL);
 
     } else {
       renderDashboardWidget(container, (modulo) => {

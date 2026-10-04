@@ -3,7 +3,7 @@ export function renderMisSolicitudesWidget(containerElement, userEmail) {
 
   containerElement.innerHTML = `
     <div style="background: #FFF; border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border: 1px solid #E2E8F0;">
-      <div style="display:flex; justify-style:space-between; align-items:center; margin-bottom: 1rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
         <h2 style="color: #1B2B48; margin: 0;">📋 Mis Solicitudes de Pedido</h2>
         <span style="font-size: 0.85rem; color: #64748B;">Usuario: <strong>${userEmail || 'econesa@ciarm.edu.mx'}</strong></span>
       </div>

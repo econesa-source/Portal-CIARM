@@ -11,8 +11,20 @@
 
   <div id="app"></div>
 
-  <!-- Inyección directa del módulo orquestador con Cache Buster -->
-  <script type="module" src="./src/main.js?v=3.0.0"></script>
+  <!-- Carga del modulo orquestador principal -->
+  <script type="module" src="./src/main.js?v=4.0.0"></script>
 
+  <!-- Script de Intercepción Directa para Enlaces de Drive -->
+  <script>
+    document.addEventListener('click', function(e) {
+      const target = e.target.closest('a');
+      if (target && target.innerText.includes('Google Drive')) {
+        // Interceptamos cualquier enlace hacia la carpeta raíz
+        if (target.href.includes('103wSYfCuSwVKW_aTbTFr2O7b-JyuT619')) {
+          console.warn('[CIARM Patch] Interceptando redirección a la carpeta raíz...');
+        }
+      }
+    }, true);
+  </script>
 </body>
 </html>

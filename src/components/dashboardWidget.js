@@ -4,20 +4,19 @@ export function renderDashboardWidget(containerElement, onNavigate) {
   containerElement.innerHTML = `
     <div style="padding: 1.5rem; max-width: 1200px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif;">
       
-      <!-- Banner Asistente CIARM -->
+      <!-- Banner Asistente CIARM con Contenedor de Chat Embedded -->
       <div style="background: linear-gradient(135deg, #1B2B48 0%, #2A4365 100%); border-radius: 12px; padding: 2rem; color: white; margin-bottom: 2rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); position: relative;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
           <div>
             <h1 style="margin: 0; font-size: 1.8rem; font-weight: bold; color: #FFF;">Asistente CIARM</h1>
-            <p style="margin: 0.5rem 0 0 0; color: #CBD5E1; font-size: 0.95rem;">Consulta normativa, procesos y herramientas del colegio.</p>
+            <p style="margin: 0.5rem 0 0 0; color: #CBD5E1; font-size: 0.95rem;">Consulta normativa, procesos y herramientas del colegio en tiempo real.</p>
           </div>
           <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: #C5A059; font-weight: bold;">CONSULTA INSTITUCIONAL</span>
         </div>
-        <div style="position: relative; margin-top: 1.5rem;">
-          <input type="text" placeholder="Mensaje..." style="width: 100%; padding: 0.85rem 3rem 0.85rem 1rem; border-radius: 8px; border: 1px solid #475569; background: #FFFFFF; color: #1E293B; font-size: 0.95rem; box-sizing: border-box;" />
-          <button style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: #2563EB; color: white; border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center;">
-            ↑
-          </button>
+
+        <!-- Contenedor Oficial para el Widget de Voiceflow -->
+        <div id="voiceflow-chat-container" style="min-height: 220px; background: rgba(255, 255, 255, 0.05); border-radius: 8px; border: 1px dashed rgba(255, 255, 255, 0.2); margin-top: 1rem; padding: 0.5rem;">
+          <p style="color: #CBD5E1; font-size: 0.85rem; text-align: center; margin-top: 2rem;">Iniciando Asistente CIARM...</p>
         </div>
       </div>
 
@@ -90,4 +89,44 @@ export function renderDashboardWidget(containerElement, onNavigate) {
       </div>
     </div>
   `;
+
+  // Carga defensiva e inyección del SDK de Voiceflow
+  setTimeout(() => {
+    initVoiceflowWidget();
+  }, 100);
+}
+
+function initVoiceflowWidget() {
+  const targetEl = document.getElementById('voiceflow-chat-container');
+  if (!targetEl) return;
+
+  const loadVF = () => {
+    if (window.voiceflow && window.voiceflow.chat) {
+      window.voiceflow.chat.load({
+        verify: { projectID: '6a81e72529695cfeb738ad6e' },
+        url: 'https://general-runtime.voiceflow.com',
+        voice: {
+          url: "https://runtime-api.voiceflow.com"
+        },
+        render: {
+          mode: 'embedded',
+          target: targetEl
+        }
+      });
+    }
+  };
+
+  // Verificar si el script ya fue inyectado previamente
+  if (document.getElementById('voiceflow-script')) {
+    loadVF();
+    return;
+  }
+
+  // Inyectar dinámicamente el SDK de Voiceflow
+  const script = document.createElement('script');
+  script.id = 'voiceflow-script';
+  script.src = "https://cdn.voiceflow.com/widget-next/bundle.mjs";
+  script.type = "text/javascript";
+  script.onload = loadVF;
+  document.head.appendChild(script);
 }

@@ -1,6 +1,6 @@
-import { renderDashboardWidget } from './components/dashboardWidget.js?v=18.0.0';
-import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=18.0.0';
-import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=18.0.0';
+import { renderDashboardWidget } from './components/dashboardWidget.js?v=2.1.0';
+import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=2.1.0';
+import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=2.1.0';
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA/exec';
 
@@ -12,7 +12,6 @@ const USER_SESSION = {
 };
 
 function getTargetContainer() {
-  // Buscar contenedores comunes del layout o usar #app
   let container = document.getElementById('main-content') || 
                   document.getElementById('content') || 
                   document.getElementById('app') ||

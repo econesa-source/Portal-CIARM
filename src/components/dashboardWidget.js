@@ -11,7 +11,7 @@ export function renderDashboardWidget(containerElement, onNavigate) {
             <h1 style="margin: 0; font-size: 1.8rem; font-weight: bold; color: #FFF;">Asistente CIARM</h1>
             <p style="margin: 0.5rem 0 0 0; color: #CBD5E1; font-size: 0.95rem;">Consulta normativa, procesos y herramientas del colegio.</p>
           </div>
-          <span style="font-size: 0.75rem; text-transform: uppercase; tracking: 1px; color: #C5A059; font-weight: bold;">CONSULTA INSTITUCIONAL</span>
+          <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: #C5A059; font-weight: bold;">CONSULTA INSTITUCIONAL</span>
         </div>
         <div style="position: relative; margin-top: 1.5rem;">
           <input type="text" placeholder="Mensaje..." style="width: 100%; padding: 0.85rem 3rem 0.85rem 1rem; border-radius: 8px; border: 1px solid #475569; background: #FFFFFF; color: #1E293B; font-size: 0.95rem; box-sizing: border-box;" />

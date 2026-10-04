@@ -1,41 +1,52 @@
-import { DashboardRealComponent } from './components/dashboardReal.js';
-import { SolicitudesWidgetComponent } from './components/solicitudesWidget.js';
-import { MisSolicitudesWidgetComponent } from './components/misSolicitudesWidget.js';
+import { renderDashboardWidget } from './components/dashboardWidget.js?v=1.0.8';
+import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=1.0.8';
+import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=1.0.8';
 
-document.addEventListener('DOMContentLoaded', () => {
-  const containerId = 'main-content-area';
-  const dashboard = new DashboardRealComponent(containerId);
-  const solicitudes = new SolicitudesWidgetComponent(containerId);
-  const misSolicitudes = new MisSolicitudesWidgetComponent(containerId);
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbz_REEMPLAZAR_POR_TU_ID_REAL/exec';
 
-  dashboard.render();
+const USER_SESSION = {
+  nombre: 'Ezequiel Conesa',
+  correo: 'econesa@ciarm.edu.mx',
+  area: 'Coordinación Pedagógica',
+  rol: 'PORTAL_USUARIO'
+};
 
-  window.addEventListener('ciarm:navigation-change', (e) => {
-    const targetId = e.detail.id;
+function router() {
+  const container = document.getElementById('app') || document.querySelector('main') || document.body;
+  const hash = window.location.hash || '#inicio';
 
-    if (targetId === 'menu-inicio' || targetId === 'view-home') {
-      dashboard.render();
-      updateSidebarActive('menu-inicio');
-    } else if (targetId === 'view-solicitudes') {
-      solicitudes.render();
-      updateSidebarActive(null);
-    } else if (targetId === 'view-mis-solicitudes') {
-      misSolicitudes.render();
-      updateSidebarActive(null);
-    }
-  });
+  if (hash === '#solicitudes' || hash === '#nueva-solicitud') {
+    container.innerHTML = `
+      <div style="max-width:800px; margin: 0 auto; padding:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+          <a href="#inicio" style="color:#1B2B48; text-decoration:none; font-weight:bold;">← Volver al Inicio</a>
+          <a href="#mis-solicitudes" style="background:#C5A059; color:white; padding:0.5rem 1rem; border-radius:6px; text-decoration:none; font-weight:bold; font-size:0.9rem;">📋 Ver Mis Solicitudes</a>
+        </div>
+        <div id="solicitud-content"></div>
+      </div>
+    `;
+    renderSolicitudesWidget(document.getElementById('solicitud-content'), USER_SESSION, GAS_URL);
 
-  function updateSidebarActive(activeMenuId) {
-    document.querySelectorAll('.sidebar-item').forEach(item => {
-      if (item.id === activeMenuId) {
-        item.classList.add('active');
-      } else {
-        item.classList.remove('active');
+  } else if (hash === '#mis-solicitudes') {
+    container.innerHTML = `
+      <div style="max-width:800px; margin: 0 auto; padding:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+          <a href="#solicitudes" style="color:#1B2B48; text-decoration:none; font-weight:bold;">← Crear Nueva Solicitud</a>
+          <a href="#inicio" style="color:#6B7280; text-decoration:none;">Ir al Inicio</a>
+        </div>
+        <div id="mis-solicitudes-content"></div>
+      </div>
+    `;
+    renderMisSolicitudesWidget(document.getElementById('mis-solicitudes-content'), USER_SESSION.correo);
+
+  } else {
+    renderDashboardWidget(container, (modulo) => {
+      if (modulo === 'solicitudes') {
+        window.location.hash = '#solicitudes';
       }
     });
   }
+}
 
-  document.getElementById("menu-inicio")?.addEventListener("click", () => {
-    window.dispatchEvent(new CustomEvent("ciarm:navigation-change", { detail: { id: "menu-inicio" } }));
-  });
-});
+window.addEventListener('hashchange', router);
+window.addEventListener('DOMContentLoaded', router);

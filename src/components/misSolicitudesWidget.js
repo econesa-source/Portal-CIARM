@@ -1,8 +1,8 @@
 export function renderMisSolicitudesWidget(containerElement, userEmail) {
   if (!containerElement) return;
 
-  var email = userEmail || 'econesa@ciarm.edu.mx';
-  var SPREADSHEET_ID = '1o33Gw6xWsH64SXmaxaN7EDISsW0fUExDjPE4cGpnPbs';
+  const email = userEmail || 'econesa@ciarm.edu.mx';
+  const SPREADSHEET_ID = '1o33Gw6xWsH64SXmaxaN7EDISsW0fUExDjPE4cGpnPbs';
 
   containerElement.innerHTML = `
     <div style="background: #FFF; border-radius: 12px; padding: 1.5rem; border: 1px solid #E2E8F0; border-top: 5px solid #C5A059; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); font-family: system-ui, -apple-system, sans-serif;">
@@ -60,44 +60,52 @@ export function renderMisSolicitudesWidget(containerElement, userEmail) {
     </style>
   `;
 
-  loadRealTicketsData(SPREADSHEET_ID, email);
+  loadTicketsSafely(SPREADSHEET_ID, email);
 }
 
-function loadRealTicketsData(spreadsheetId, email) {
-  var loadingEl = document.getElementById('loading-tickets');
-  var emptyEl = document.getElementById('no-tickets-msg');
-  var tableContainer = document.getElementById('tickets-table-container');
-  var tbody = document.getElementById('tickets-list-body');
+function loadTicketsSafely(spreadsheetId, email) {
+  const loadingEl = document.getElementById('loading-tickets');
+  const emptyEl = document.getElementById('no-tickets-msg');
+  const tableContainer = document.getElementById('tickets-table-container');
+  const tbody = document.getElementById('tickets-list-body');
 
-  var gvizUrl = 'https://docs.google.com/spreadsheets/d/' + spreadsheetId + '/gviz/tq?tq=SELECT%20*&sheet=TICKETS';
+  const gvizUrl = 'https://docs.google.com/spreadsheets/d/' + spreadsheetId + '/gviz/tq?tq=SELECT%20*&sheet=TICKETS';
 
   fetch(gvizUrl)
-    .then(function(res) { return res.text(); })
-    .then(function(text) {
-      var jsonString = text.replace(/^/*O_o*//\s*google\.visualization\.Query\.setResponse\(/, '').replace(/\);?$/, '');
-      var parsedData = JSON.parse(jsonString);
-
-      if (!parsedData || !parsedData.table || !parsedData.table.rows) {
-        throw new Error("Respuesta GViz sin filas");
+    .then(res => res.text())
+    .then(text => {
+      // Limpieza segura mediante posiciones de parentesis (sin expresiones regulares)
+      const startIdx = text.indexOf('(');
+      const endIdx = text.lastIndexOf(')');
+      
+      if (startIdx === -1 || endIdx === -1) {
+        throw new Error("Respuesta de respuesta invalida de GViz");
       }
 
-      var rows = parsedData.table.rows;
-      var ticketsList = [];
+      const rawJson = text.substring(startIdx + 1, endIdx);
+      const parsedData = JSON.parse(rawJson);
 
-      rows.forEach(function(row) {
-        var c = row.c;
-        if (!c) return;
+      if (!parsedData || !parsedData.table || !parsedData.table.rows) {
+        throw new Error("Estructura de tabla vacia");
+      }
 
-        var idTicket = c[0] ? (c[0].v || c[0].f || '') : '';
-        var fecha = c[1] ? (c[1].v || c[1].f || '') : '';
-        var correo = c[5] ? (c[5].v || c[5].f || '') : '';
-        var tipo = c[6] ? (c[6].v || c[6].f || '') : '';
-        var descripcion = c[7] ? (c[7].v || c[7].f || '') : '';
-        var estado = c[12] ? (c[12].v || c[12].f || '') : 'NUEVO';
-        var driveUrl = c[23] ? (c[23].v || c[23].f || '') : '';
+      const rows = parsedData.table.rows;
+      const list = [];
+
+      rows.forEach(row => {
+        if (!row || !row.c) return;
+        const c = row.c;
+
+        const idTicket = c[0] ? (c[0].v || c[0].f || '') : '';
+        const fecha = c[1] ? (c[1].v || c[1].f || '') : '';
+        const correo = c[5] ? (c[5].v || c[5].f || '') : '';
+        const tipo = c[6] ? (c[6].v || c[6].f || '') : '';
+        const descripcion = c[7] ? (c[7].v || c[7].f || '') : '';
+        const estado = c[12] ? (c[12].v || c[12].f || '') : 'NUEVO';
+        const driveUrl = c[23] ? (c[23].v || c[23].f || '') : '';
 
         if (idTicket && correo.toString().toLowerCase().trim() === email.toLowerCase().trim()) {
-          ticketsList.push({
+          list.push({
             id: idTicket,
             fecha: fecha,
             correo: correo,
@@ -109,23 +117,23 @@ function loadRealTicketsData(spreadsheetId, email) {
         }
       });
 
-      if (ticketsList.length === 0) {
-        renderFallbackLocalData(tbody, loadingEl, emptyEl, tableContainer, email);
+      if (list.length === 0) {
+        renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email);
         return;
       }
 
-      renderRows(ticketsList, tbody);
+      renderRowsTable(list, tbody);
       if (loadingEl) loadingEl.style.display = 'none';
       if (tableContainer) tableContainer.style.display = 'block';
     })
-    .catch(function(err) {
-      console.warn("[GViz Fetch Exception]: cargando fallback defensivo:", err);
-      renderFallbackLocalData(tbody, loadingEl, emptyEl, tableContainer, email);
+    .catch(err => {
+      console.warn("[GViz Safe Fetch Fallback]:", err);
+      renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email);
     });
 }
 
-function renderFallbackLocalData(tbody, loadingEl, emptyEl, tableContainer, email) {
-  var ticketsBase = [
+function renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email) {
+  const localData = [
     {
       id: 'TKT-2026-00001',
       fecha: '2026-10-02',
@@ -164,9 +172,7 @@ function renderFallbackLocalData(tbody, loadingEl, emptyEl, tableContainer, emai
     }
   ];
 
-  var filtered = ticketsBase.filter(function(t) {
-    return t.correo.toLowerCase() === email.toLowerCase();
-  });
+  const filtered = localData.filter(t => t.correo.toLowerCase() === email.toLowerCase());
 
   if (loadingEl) loadingEl.style.display = 'none';
 
@@ -175,13 +181,13 @@ function renderFallbackLocalData(tbody, loadingEl, emptyEl, tableContainer, emai
     return;
   }
 
-  renderRows(filtered, tbody);
+  renderRowsTable(filtered, tbody);
   if (tableContainer) tableContainer.style.display = 'block';
 }
 
-function renderRows(tickets, tbody) {
-  tbody.innerHTML = tickets.map(function(t) {
-    var hasDrive = t.driveUrl && t.driveUrl.toString().indexOf('http') === 0;
+function renderRowsTable(tickets, tbody) {
+  tbody.innerHTML = tickets.map(t => {
+    const hasDrive = t.driveUrl && t.driveUrl.toString().indexOf('http') === 0;
     return `
       <tr style="border-bottom: 1px solid #E2E8F0;">
         <td style="padding: 0.85rem 1rem; font-weight: bold; color: #1B2B48;">${t.id}</td>

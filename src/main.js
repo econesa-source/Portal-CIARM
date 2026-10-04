@@ -1,9 +1,8 @@
-import { renderDashboardWidget } from './components/dashboardWidget.js?v=7.0.0';
-import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=7.0.0';
-import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=7.0.0';
+import { renderDashboardWidget } from './components/dashboardWidget.js?v=8.0.0';
+import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=8.0.0';
+import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=8.0.0';
 
-// Configuración de Endpoint WebApp Apps Script
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbz_REEMPLAZAR_POR_TU_ID_REAL/exec';
 
 const USER_SESSION = {
   nombre: 'Ezequiel Conesa',
@@ -51,14 +50,7 @@ function router() {
       });
     }
   } catch (err) {
-    console.error("[CIARM Router] Error de inicialización:", err);
-    container.innerHTML = `
-      <div style="max-width: 600px; margin: 4rem auto; padding: 2rem; background: #FFF; border-radius: 8px; border-left: 4px solid #DC2626; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
-        <h3 style="color: #991B1B; margin-top: 0;">Error al iniciar la aplicación</h3>
-        <p style="color: #4B5563;">El sistema no pudo cargar el módulo solicitado. Por favor recargue la página.</p>
-        <button onclick="window.location.reload(true)" style="background: #1B2B48; color: #FFF; padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">🔄 Reintentar Carga</button>
-      </div>
-    `;
+    console.error("[CIARM Router Error]:", err);
   }
 }
 

@@ -2,7 +2,7 @@ export function renderDashboardWidget(containerElement, onNavigate) {
   if (!containerElement) return;
 
   containerElement.innerHTML = `
-    <div style="padding: 2rem; max-width: 1200px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif;">
+    <div style="padding: 1.5rem; max-width: 1200px; margin: 0 auto; font-family: system-ui, -apple-system, sans-serif;">
       
       <!-- Banner Asistente CIARM -->
       <div style="background: linear-gradient(135deg, #1B2B48 0%, #2A4365 100%); border-radius: 12px; padding: 2rem; color: white; margin-bottom: 2rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); position: relative;">
@@ -22,9 +22,9 @@ export function renderDashboardWidget(containerElement, onNavigate) {
       </div>
 
       <!-- Grid de 6 Tarjetas -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.5rem;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
         
-        <!-- Tarjeta 1: Solicitudes internas (Con botón directo a Mis Solicitudes) -->
+        <!-- Tarjeta 1: Solicitudes internas -->
         <div style="background: #FFF; border-radius: 12px; padding: 1.5rem; border: 1px solid #E2E8F0; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; flex-direction: column; justify-content: space-between;">
           <div>
             <span style="font-size: 0.7rem; text-transform: uppercase; color: #64748B; font-weight: 600;">SERVICIOS INTERNOS</span>

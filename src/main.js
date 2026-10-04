@@ -1,6 +1,6 @@
-import { renderDashboardWidget } from './components/dashboardWidget.js?v=1.0.9';
-import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=1.0.9';
-import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=1.0.9';
+import { renderDashboardWidget } from './components/dashboardWidget.js?v=2.0.0';
+import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=2.0.0';
+import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=2.0.0';
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbz_REEMPLAZAR_POR_TU_ID_REAL/exec';
 

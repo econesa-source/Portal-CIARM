@@ -23,8 +23,14 @@ export async function renderMisSolicitudesWidget(containerElement, userEmail) {
     }
 
     const cardsHtml = tickets.map(ticket => {
-      const targetUrl = ticket.driveUrl ? String(ticket.driveUrl).trim() : '';
-      const hasUrl = targetUrl.startsWith('http');
+      const driveUrl = ticket.driveUrl;
+      const isFile = driveUrl && driveUrl.includes('/file/d/');
+      const isFolder = driveUrl && driveUrl.includes('/folders/');
+
+      let label = '📎 Ver Archivo Adjunto en Google Drive ↗';
+      if (isFolder) {
+        label = '📁 Abrir Subcarpeta del Ticket ↗';
+      }
 
       return `
         <div style="background: #FFF; border: 1px solid #E5E7EB; border-left: 4px solid #C5A059; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
@@ -38,29 +44,17 @@ export async function renderMisSolicitudesWidget(containerElement, userEmail) {
           <p style="color: #4B5563; font-size: 0.95rem; margin: 0.5rem 0;">${ticket.descripcion}</p>
           <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #F3F4F6; padding-top: 0.75rem; font-size: 0.85rem; color: #9CA3AF;">
             <span>📅 ${ticket.fecha} ${ticket.hora}</span>
-            ${hasUrl ? `
-              <button class="btn-open-drive" data-url="${targetUrl}" style="background: transparent; border: none; color: #1B2B48; font-weight: bold; cursor: pointer; padding: 0; text-decoration: underline; font-size: 0.85rem;">
-                📎 Ver Archivo/Subcarpeta en Drive ↗
-              </button>
-            ` : '<span style="color: #9CA3AF; font-style: italic;">Sin adjuntos</span>'}
+            ${driveUrl ? `
+              <a href="${driveUrl}" target="_blank" rel="noopener noreferrer" style="color: #1B2B48; font-weight: bold; text-decoration: none;">
+                ${label}
+              </a>
+            ` : '<span style="color: #9CA3AF; font-style: italic;">Sin archivos adjuntos</span>'}
           </div>
         </div>
       `;
     }).join('');
 
     containerElement.innerHTML = `<div>${cardsHtml}</div>`;
-
-    // Asignar listeners despues de renderizar el HTML para bypass de redirecciones
-    const buttons = containerElement.querySelectorAll('.btn-open-drive');
-    buttons.forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        const url = btn.getAttribute('data-url');
-        if (url) {
-          window.open(url, '_blank', 'noopener,noreferrer');
-        }
-      });
-    });
 
   } catch (error) {
     containerElement.innerHTML = `

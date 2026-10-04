@@ -1,6 +1,6 @@
-import { renderDashboardWidget } from './components/dashboardWidget.js?v=16.0.0';
-import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=16.0.0';
-import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=16.0.0';
+import { renderDashboardWidget } from './components/dashboardWidget.js?v=17.0.0';
+import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=17.0.0';
+import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=17.0.0';
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA/exec';
 
@@ -43,6 +43,7 @@ function router() {
       renderMisSolicitudesWidget(document.getElementById('mis-solicitudes-content'), USER_SESSION.correo);
 
     } else {
+      // Montaje forzado del Dashboard
       renderDashboardWidget(container, (modulo) => {
         if (modulo === 'solicitudes') {
           window.location.hash = '#solicitudes';
@@ -54,9 +55,11 @@ function router() {
   }
 }
 
+// Escuchar cambios de hash y cargar en inicialización
 window.addEventListener('hashchange', router);
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', router);
-} else {
+
+if (document.readyState === 'interactive' || document.readyState === 'complete') {
   router();
+} else {
+  document.addEventListener('DOMContentLoaded', router);
 }

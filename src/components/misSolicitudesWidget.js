@@ -23,13 +23,13 @@ export async function renderMisSolicitudesWidget(containerElement, userEmail) {
     }
 
     const cardsHtml = tickets.map(ticket => {
-      const driveUrl = ticket.driveUrl;
-      const isFile = driveUrl && driveUrl.includes('/file/d/');
-      const isFolder = driveUrl && driveUrl.includes('/folders/');
+      const url = ticket.driveUrl || '';
+      const isFile = url.includes('/file/d/');
+      const isFolder = url.includes('/folders/');
 
-      let label = '📎 Ver Archivo Adjunto en Google Drive ↗';
-      if (isFolder) {
-        label = '📁 Abrir Subcarpeta del Ticket ↗';
+      let labelText = '📁 Abrir Subcarpeta en Drive ↗';
+      if (isFile) {
+        labelText = '📎 Ver Vista Previa del Archivo ↗';
       }
 
       return `
@@ -44,11 +44,11 @@ export async function renderMisSolicitudesWidget(containerElement, userEmail) {
           <p style="color: #4B5563; font-size: 0.95rem; margin: 0.5rem 0;">${ticket.descripcion}</p>
           <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #F3F4F6; padding-top: 0.75rem; font-size: 0.85rem; color: #9CA3AF;">
             <span>📅 ${ticket.fecha} ${ticket.hora}</span>
-            ${driveUrl ? `
-              <a href="${driveUrl}" target="_blank" rel="noopener noreferrer" style="color: #1B2B48; font-weight: bold; text-decoration: none;">
-                ${label}
+            ${url ? `
+              <a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #1B2B48; font-weight: bold; text-decoration: underline;">
+                ${labelText}
               </a>
-            ` : '<span style="color: #9CA3AF; font-style: italic;">Sin archivos adjuntos</span>'}
+            ` : '<span style="color: #9CA3AF; font-style: italic;">Sin adjuntos</span>'}
           </div>
         </div>
       `;
@@ -59,7 +59,7 @@ export async function renderMisSolicitudesWidget(containerElement, userEmail) {
   } catch (error) {
     containerElement.innerHTML = `
       <div style="background: #FEF2F2; color: #991B1B; padding: 1rem; border-radius: 8px;">
-        Error al cargar las solicitudes.
+        Error al cargar las solicitudes desde la base de datos.
       </div>
     `;
   }

@@ -3,9 +3,8 @@ const SHEET_NAME = 'TICKETS';
 
 export async function getMisSolicitudes(userEmail) {
   try {
-    // Consulta explícita a la hoja HT05
     const query = encodeURIComponent("SELECT A, B, C, D, E, F, G, H, I, M, X");
-    const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?sheet=${SHEET_NAME}&tq=${query}&tqx=out:json&cacheBust=${Date.now()}`;
+    const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?sheet=${SHEET_NAME}&tq=${query}&tqx=out:json&t=${Date.now()}`;
 
     const response = await fetch(url, { cache: 'no-store' });
     if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
@@ -21,8 +20,12 @@ export async function getMisSolicitudes(userEmail) {
       const c = row.c;
       if (!c) return null;
 
-      // c[10] ES LA COLUMNA X EN ESTE SELECT ESPECÍFICO
-      const rawDriveUrl = c[10] && c[10].v ? String(c[10].v).trim() : '';
+      let rawUrl = c[10] && c[10].v ? String(c[10].v).trim() : '';
+
+      // Normalizacion de URL de archivo para vista previa aislada en Drive
+      if (rawUrl.includes('/file/d/') && rawUrl.includes('/view')) {
+        rawUrl = rawUrl.replace('/view', '/preview');
+      }
 
       return {
         folio: c[0] && c[0].v ? c[0].v : 'SIN-FOLIO',
@@ -35,7 +38,7 @@ export async function getMisSolicitudes(userEmail) {
         descripcion: c[7] && c[7].v ? c[7].v : '',
         urgencia: c[8] && c[8].v ? c[8].v : 'No',
         estado: c[9] && c[9].v ? c[9].v : 'NUEVO',
-        driveUrl: rawDriveUrl.startsWith('http') ? rawDriveUrl : null
+        driveUrl: rawUrl.startsWith('http') ? rawUrl : null
       };
     }).filter(Boolean);
 

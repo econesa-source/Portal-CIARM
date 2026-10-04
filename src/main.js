@@ -1,8 +1,8 @@
-import { renderDashboardWidget } from './components/dashboardWidget.js?v=10.0.0';
-import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=10.0.0';
-import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=10.0.0';
+import { renderDashboardWidget } from './components/dashboardWidget.js?v=11.0.0';
+import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=11.0.0';
+import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=11.0.0';
 
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbz_REEMPLAZAR_POR_TU_ID_REAL/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA/exec';
 
 const USER_SESSION = {
   nombre: 'Ezequiel Conesa',

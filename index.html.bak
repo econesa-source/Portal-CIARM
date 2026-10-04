@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portal CIARM - Colegio Internacional Alemán Riviera Maya</title>
+  <link rel="icon" type="image/svg+xml" href="assets/images/favicon.svg">
+  <link rel="stylesheet" href="assets/css/ciarm-theme.css">
+</head>
+<body>
+  <header class="ciarm-header">
+    <div class="brand-section">
+      <div class="brand-logo-box">
+        <svg width="40" height="42" viewBox="0 0 100 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M50 0L95 18V55C95 85 50 110 50 110C50 110 5 85 5 55V18L50 0Z" fill="#1B365D"/>
+          <path d="M50 6L88 22V52C88 78 50 100 50 100C50 100 12 78 12 52V22L50 6Z" stroke="#FFFFFF" stroke-width="3"/>
+          <path d="M50 12L82 26V50C82 72 50 92 50 92C50 92 18 72 18 50V26L50 12Z" stroke="#C5A059" stroke-width="2"/>
+          <path d="M30 35L40 68L50 48L60 68L70 35" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="brand-title-group">
+          <h1>COLEGIO INTERNACIONAL ALEMÁN</h1>
+          <h2>RIVIERA MAYA</h2>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-center-title">
+      Información y herramientas
+    </div>
+
+    <div class="header-user-section">
+      <div class="user-info-text">
+        <div class="user-name" id="user-display-name">Ezequiel Conesa</div>
+        <div class="user-role">Cuenta Institucional</div>
+      </div>
+      <div class="user-avatar-circle">
+        <span id="user-avatar-initials">EC</span>
+        <span class="avatar-badge">5</span>
+      </div>
+      <button class="btn-logout" id="btn-header-logout">Cerrar sesión</button>
+    </div>
+  </header>
+
+  <div class="ciarm-workspace">
+    <aside class="ciarm-sidebar-wrapper">
+      <ul class="sidebar-menu">
+        <li class="sidebar-item active" id="menu-inicio">
+          <a href="#" class="sidebar-link">
+            <span>⌂</span> Inicio
+          </a>
+        </li>
+        <li class="sidebar-item" id="menu-obligaciones">
+          <a href="#" class="sidebar-link">
+            <span>✓</span> Mis obligaciones
+          </a>
+        </li>
+        <li class="sidebar-item" id="menu-normativa">
+          <a href="#" class="sidebar-link">
+            <span>≡</span> Normativa
+          </a>
+        </li>
+      </ul>
+    </aside>
+
+    <main style="flex: 1; padding-top: 1rem;" id="main-content-area">
+      <!-- Inyección dinámica de componentes -->
+    </main>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

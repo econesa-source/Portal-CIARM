@@ -1,8 +1,6 @@
-import { renderDashboardWidget } from './components/dashboardWidget.js?v=3.0.0';
-import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=3.0.0';
-import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=3.0.0';
-
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA/exec';
+import { renderDashboardWidget } from './components/dashboardWidget.js?v=4.0.0';
+import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=4.0.0';
+import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=4.0.0';
 
 const USER_SESSION = {
   nombre: 'Ezequiel Conesa',
@@ -43,7 +41,7 @@ function router() {
           <div id="solicitud-content"></div>
         </div>
       `;
-      renderSolicitudesWidget(document.getElementById('solicitud-content'), USER_SESSION, GAS_URL);
+      renderSolicitudesWidget(document.getElementById('solicitud-content'), USER_SESSION);
 
     } else if (hash === '#mis-solicitudes') {
       container.innerHTML = `
@@ -55,7 +53,7 @@ function router() {
           <div id="mis-solicitudes-content"></div>
         </div>
       `;
-      renderMisSolicitudesWidget(document.getElementById('mis-solicitudes-content'), USER_SESSION.correo, GAS_URL);
+      renderMisSolicitudesWidget(document.getElementById('mis-solicitudes-content'), USER_SESSION.correo);
 
     } else {
       renderDashboardWidget(container, (modulo) => {

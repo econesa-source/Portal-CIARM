@@ -3,7 +3,6 @@ export function renderMisSolicitudesWidget(containerElement, userEmail) {
 
   const email = userEmail || 'econesa@ciarm.edu.mx';
   const SPREADSHEET_ID = '1o33Gw6xWsH64SXmaxaN7EDISsW0fUExDjPE4cGpnPbs';
-  const PARENT_DRIVE_FOLDER_ID = '103wSYfCuSwVKW_aTbTFr2O7b-JyuT619';
 
   containerElement.innerHTML = `
     <div style="background: #FFF; border-radius: 12px; padding: 1.5rem; border: 1px solid #E2E8F0; border-top: 5px solid #C5A059; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); font-family: system-ui, -apple-system, sans-serif;">
@@ -61,10 +60,10 @@ export function renderMisSolicitudesWidget(containerElement, userEmail) {
     </style>
   `;
 
-  loadTicketsSafely(SPREADSHEET_ID, PARENT_DRIVE_FOLDER_ID, email);
+  loadTicketsSafely(SPREADSHEET_ID, email);
 }
 
-function loadTicketsSafely(spreadsheetId, parentFolderId, email) {
+function loadTicketsSafely(spreadsheetId, email) {
   const loadingEl = document.getElementById('loading-tickets');
   const emptyEl = document.getElementById('no-tickets-msg');
   const tableContainer = document.getElementById('tickets-table-container');
@@ -105,8 +104,7 @@ function loadTicketsSafely(spreadsheetId, parentFolderId, email) {
         const rawDriveUrl = c[23] ? (c[23].v || c[23].f || '') : '';
 
         if (idTicket && correo.toString().toLowerCase().trim() === email.toLowerCase().trim()) {
-          // Resolución dinámica de la subcarpeta
-          const subfolderUrl = resolveSubfolderUrl(idTicket, rawDriveUrl, parentFolderId);
+          const subfolderUrl = resolveExactSubfolderUrl(idTicket, rawDriveUrl);
 
           list.push({
             id: idTicket,
@@ -121,7 +119,7 @@ function loadTicketsSafely(spreadsheetId, parentFolderId, email) {
       });
 
       if (list.length === 0) {
-        renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email, parentFolderId);
+        renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email);
         return;
       }
 
@@ -131,21 +129,21 @@ function loadTicketsSafely(spreadsheetId, parentFolderId, email) {
     })
     .catch(err => {
       console.warn("[GViz Fetch Exception]:", err);
-      renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email, parentFolderId);
+      renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email);
     });
 }
 
-function resolveSubfolderUrl(ticketId, rawUrl, parentFolderId) {
-  // Si la Columna X ya trae un link explícito a una subcarpeta (/folders/), respetarlo
-  if (rawUrl && rawUrl.includes('/drive/folders/') && !rawUrl.includes(parentFolderId)) {
+function resolveExactSubfolderUrl(ticketId, rawUrl) {
+  // Si en la columna X ya viene un link directo a una carpeta de Drive (/folders/), usarlo
+  if (rawUrl && rawUrl.includes('/drive/folders/') && !rawUrl.includes('103wSYfCuSwVKW')) {
     return rawUrl;
   }
-  // Búsqueda directa y específica dentro de la subcarpeta del ticket en Google Drive
-  const query = encodeURIComponent(`name contains '${ticketId}'`);
-  return `https://drive.google.com/drive/folders/${parentFolderId}?q=${query}`;
+  // Búsqueda exacta en Drive del término con sufijo _Adjuntos
+  const searchTerm = encodeURIComponent(`${ticketId}_Adjuntos`);
+  return `https://drive.google.com/drive/search?q=${searchTerm}`;
 }
 
-function renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email, parentFolderId) {
+function renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email) {
   const localData = [
     {
       id: 'TKT-2026-00001',
@@ -154,7 +152,7 @@ function renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email, p
       tipo: 'Limpieza e Intendencia',
       descripcion: 'mdkdkdnksdnksndksdnsdnknd',
       estado: 'NUEVO',
-      rawDriveUrl: 'https://drive.google.com/file/d/17Vls3MVpqpeWvuZMyD6w2112EcV5_7RD/view'
+      rawDriveUrl: ''
     },
     {
       id: 'TKT-2026-00002',
@@ -163,7 +161,7 @@ function renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email, p
       tipo: 'Soporte Tecnológico / TI',
       descripcion: 'kskskksksksksksks',
       estado: 'NUEVO',
-      rawDriveUrl: 'https://drive.google.com/file/d/1IqHefBdh1ADqhfjkKtRh7BxiuDPmTXfY/view'
+      rawDriveUrl: ''
     },
     {
       id: 'TKT-2026-00003',
@@ -181,7 +179,7 @@ function renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email, p
       tipo: 'Soporte Tecnológico / TI',
       descripcion: 'jsjjsjjsjsjsjsjsjsjsjsjsj',
       estado: 'NUEVO',
-      rawDriveUrl: 'https://drive.google.com/file/d/1tPDMSuBDVC5f3p_Ah77nfpNDt-D1PD0b/view'
+      rawDriveUrl: ''
     }
   ];
 
@@ -196,7 +194,7 @@ function renderFallbackLocal(tbody, loadingEl, emptyEl, tableContainer, email, p
 
   const processedList = filtered.map(t => ({
     ...t,
-    subfolderUrl: resolveSubfolderUrl(t.id, t.rawDriveUrl, parentFolderId)
+    subfolderUrl: resolveExactSubfolderUrl(t.id, t.rawDriveUrl)
   }));
 
   renderRowsTable(processedList, tbody);

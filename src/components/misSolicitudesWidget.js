@@ -1,23 +1,23 @@
 /**
- * Componente Mis Solicitudes - Conexión GViz y Tabla Responsiva
- * Versión: 10.1.0
+ * Portal CIARM - Componente Mis Solicitudes
+ * Versión: 10.0.1 (Hotfix: Restablecimiento de firma de exportación ES6)
  */
-export function render(container) {
+
+export function renderMisSolicitudesWidget(container, userSession) {
   if (!container) return;
 
   const SPREADSHEET_ID = '1o33Gw6xWsH64SXmaxaN7EDISsW0fUExDjPE4cGpnPbs';
-  const USER_EMAIL = 'econesa@ciarm.edu.mx';
+  const USER_EMAIL = (userSession && userSession.correo) ? userSession.correo : 'econesa@ciarm.edu.mx';
   const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=TICKETS`;
 
-  container.innerHTML = `<div style="padding:20px; font-weight:600;">Cargando solicitudes de ${USER_EMAIL}...</div>`;
+  container.innerHTML = `<div style="padding:20px; font-weight:600; color:#0A192F;">Cargando solicitudes de ${USER_EMAIL}...</div>`;
 
   fetch(GVIZ_URL)
     .then(res => res.text())
     .then(text => {
-      // Limpieza del JSONP de Google
       const start = text.indexOf('{');
       const end = text.lastIndexOf('}');
-      if (start === -1 || end === -1) throw new Error('Formato no válido');
+      if (start === -1 || end === -1) throw new Error('Respuesta inválida de Google Sheets');
 
       const jsonData = JSON.parse(text.substring(start, end + 1));
       const rows = jsonData.table?.rows || [];
@@ -32,7 +32,6 @@ export function render(container) {
         const estado = row.c?.[12]?.v || row.c?.[4]?.v || 'NUEVO';
         const email = row.c?.[5]?.v || row.c?.[2]?.v || '';
 
-        // Filtrar o mostrar registros válidos
         if (ticketId) {
           const driveSearchUrl = `https://drive.google.com/drive/search?q=${encodeURIComponent(ticketId + '_Adjuntos')}`;
 
@@ -45,7 +44,7 @@ export function render(container) {
               <td class="col-estado"><span style="background:#FEF3C7; color:#92400E; padding:3px 6px; border-radius:4px; font-weight:bold; font-size:0.75rem;">${estado}</span></td>
               <td class="col-accion">
                 <a href="${driveSearchUrl}" target="_blank" rel="noopener noreferrer" class="btn-drive-subfolder">
-                  📂 Abrir Subcarpeta
+                  📂 Abrir Subcarpeta Ticket
                 </a>
               </td>
             </tr>
@@ -74,7 +73,7 @@ export function render(container) {
                   <th class="col-tipo">Tipo / Área</th>
                   <th class="col-desc">Descripción</th>
                   <th class="col-estado">Estado</th>
-                  <th class="col-accion">Subcarpeta Adjuntos</th>
+                  <th class="col-accion">Subcarpeta de Adjuntos (Drive)</th>
                 </tr>
               </thead>
               <tbody>
@@ -86,7 +85,10 @@ export function render(container) {
       `;
     })
     .catch(err => {
-      console.error('Error al cargar datos:', err);
+      console.error('Error al cargar solicitudes:', err);
       container.innerHTML = `<div style="padding:20px; color:red;">No se pudieron cargar las solicitudes desde Google Sheets.</div>`;
     });
 }
+
+// Alias de exportación para compatibilidad
+export const render = renderMisSolicitudesWidget;

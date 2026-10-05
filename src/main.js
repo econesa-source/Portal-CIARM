@@ -6,7 +6,7 @@
 import { isLoggedIn, getUserSession, logout } from './services/authService.js';
 import { renderLoginWidget } from './components/loginWidget.js';
 
-const APP_VERSION = '13.1.0';
+const APP_VERSION = '13.5.0';
 
 const routes = {
   '#inicio': () => import(`./components/dashboardWidget.js?v=${APP_VERSION}`),
@@ -56,7 +56,7 @@ async function router() {
           <span style="display:block; font-weight:600; font-size:0.85rem; color:#fff;">${user.nombre}</span>
           <span style="font-size:0.75rem; color:#CBD5E1;">${user.correo}</span>
         </div>
-        <button id="btn-logout-header" style="background:#C5A059; color:#fff; border:none; padding:6px 12px; border-radius:4px; font-weight:600; cursor:pointer; font-size:0.75rem;">Cerrar sesión</button>
+        <button id="btn-logout-header" style="background:#C1B27E; color:#fff; border:none; padding:6px 12px; border-radius:4px; font-weight:600; cursor:pointer; font-size:0.75rem;">Cerrar sesión</button>
       </div>
     `;
 

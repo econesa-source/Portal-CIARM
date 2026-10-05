@@ -1,6 +1,6 @@
 /**
  * Módulo de Captura de Solicitudes Internas - Portal CIARM
- * Versión: 14.1.0 (Persistencia Real GAS + Validación Adjuntos max 5 files / 10MB)
+ * Versión: 15.0.0 (Persistencia HT05 + Validaciones 10MB / 5 Archivos)
  */
 
 export function render(container, userSession) {
@@ -12,7 +12,7 @@ export function render(container, userSession) {
   container.innerHTML = `
     <div class="card-container-wide">
       
-      <!-- Navegación Superior Interna -->
+      <!-- Navegación Superior -->
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #F1F5F9; padding-bottom: 12px;">
         <a href="#inicio" style="color: #1B2B48; text-decoration: none; font-weight: 700; font-size: 0.9rem;">
           ← Volver al Inicio
@@ -22,7 +22,7 @@ export function render(container, userSession) {
         </a>
       </div>
 
-      <!-- Encabezado del Formulario -->
+      <!-- Encabezado -->
       <div style="margin-bottom: 24px;">
         <h2 style="margin: 0 0 6px 0; color: #0A192F; font-size: 1.4rem;">➕ Nueva Solicitud de Pedido</h2>
         <p style="margin: 0; color: #64748B; font-size: 0.88rem;">
@@ -32,7 +32,7 @@ export function render(container, userSession) {
 
       <form id="form-solicitud-ciarm" style="display: flex; flex-direction: column; gap: 20px;">
         
-        <!-- Datos de Identificación -->
+        <!-- Identificación del Solicitante -->
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; background: #F8FAFC; padding: 16px; border-radius: 6px; border: 1px solid #E2E8F0;">
           <div>
             <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #475569; margin-bottom: 4px;">SOLICITANTE INSTITUCIONAL</label>
@@ -44,7 +44,7 @@ export function render(container, userSession) {
           </div>
         </div>
 
-        <!-- Selección de Tipo de Servicio -->
+        <!-- Tipo de Servicio -->
         <div>
           <label for="tipoSolicitud" style="display: block; font-size: 0.85rem; font-weight: 700; color: #0A192F; margin-bottom: 6px;">TIPO DE SERVICIO / ÁREA *</label>
           <select id="tipoSolicitud" name="tipoSolicitud" required style="width: 100%; padding: 12px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.9rem; background-color: #FFF; box-sizing: border-box;">
@@ -56,7 +56,7 @@ export function render(container, userSession) {
           </select>
         </div>
 
-        <!-- LÓGICA CONDICIONAL: Fecha Programada de Entrega / Evento -->
+        <!-- LÓGICA CONDICIONAL: Fecha Programada -->
         <div id="grupo-fecha-programada" style="display: none; background: #FFFBEB; border: 2px solid #F59E0B; padding: 16px; border-radius: 6px; transition: all 0.3s ease;">
           <label for="fechaProgramada" style="display: block; font-size: 0.85rem; font-weight: 700; color: #92400E; margin-bottom: 6px;">
             📅 FECHA PROGRAMADA DE ENTREGA / EVENTO (REQUERIDO PARA INTENDENCIA) *
@@ -67,7 +67,7 @@ export function render(container, userSession) {
           <input type="date" id="fechaProgramada" name="fechaProgramada" style="width: 100%; padding: 10px; border: 1px solid #FCD34D; border-radius: 4px; font-size: 0.9rem; box-sizing: border-box;" />
         </div>
 
-        <!-- Nivel de Prioridad -->
+        <!-- Prioridad -->
         <div>
           <label for="prioridad" style="display: block; font-size: 0.85rem; font-weight: 700; color: #0A192F; margin-bottom: 6px;">PRIORIDAD REQUERIDA *</label>
           <select id="prioridad" name="prioridad" required style="width: 100%; padding: 12px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.9rem; background-color: #FFF; box-sizing: border-box;">
@@ -76,13 +76,13 @@ export function render(container, userSession) {
           </select>
         </div>
 
-        <!-- Descripción del Requerimiento -->
+        <!-- Descripción -->
         <div>
           <label for="descripcion" style="display: block; font-size: 0.85rem; font-weight: 700; color: #0A192F; margin-bottom: 6px;">DESCRIPCIÓN DETALLADA *</label>
           <textarea id="descripcion" name="descripcion" rows="4" required placeholder="Describa claramente el requerimiento o falla detectada..." style="width: 100%; padding: 12px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.9rem; box-sizing: border-box; resize: vertical;"></textarea>
         </div>
 
-        <!-- Archivos Adjuntos (Máximo 5 archivos, 10MB c/u) -->
+        <!-- Archivos Adjuntos -->
         <div>
           <label style="display: block; font-size: 0.85rem; font-weight: 700; color: #0A192F; margin-bottom: 6px;">ARCHIVOS ADJUNTOS (MÁXIMO 5 ARCHIVOS, HASTA 10MB C/U)</label>
           <input type="file" id="archivosAdjuntos" multiple accept="image/*,.pdf,.doc,.docx" style="width: 100%; padding: 10px; border: 1px solid #CBD5E1; border-radius: 6px; background-color: #F8FAFC; box-sizing: border-box;" />
@@ -103,7 +103,7 @@ export function render(container, userSession) {
     </div>
   `;
 
-  // EVENTO CONDICIONAL: Limpieza e Intendencia
+  // Control Evento Condicional
   const selectTipo = document.getElementById('tipoSolicitud');
   const grupoFecha = document.getElementById('grupo-fecha-programada');
   const inputFecha = document.getElementById('fechaProgramada');
@@ -119,7 +119,7 @@ export function render(container, userSession) {
     }
   });
 
-  // VALIDACIÓN DE ARCHIVOS EN TIEMPO REAL (MÁXIMO 5 ARCHIVOS, <= 10MB)
+  // Control Validaciones Archivos
   const fileInput = document.getElementById('archivosAdjuntos');
   const fileErrorMsg = document.getElementById('file-error-msg');
 
@@ -133,7 +133,7 @@ export function render(container, userSession) {
       return;
     }
 
-    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB por archivo
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
     const fileTooLarge = files.find(f => f.size > MAX_FILE_SIZE);
     if (fileTooLarge) {
       fileErrorMsg.innerText = `⚠️ El archivo "${fileTooLarge.name}" supera el tamaño máximo permitido de 10 MB.`;
@@ -142,7 +142,7 @@ export function render(container, userSession) {
     }
   });
 
-  // ENVÍO ASÍNCRONO CON CONVERSIÓN BASE64 REAL
+  // Submit Asíncrono
   const form = document.getElementById('form-solicitud-ciarm');
   form?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -196,9 +196,9 @@ export function render(container, userSession) {
       msgEstado.innerHTML = '<strong>✅ Solicitud registrada exitosamente en Google Sheets (HT05) y subcarpeta creada en Google Drive.</strong> Redirigiendo a Mis Solicitudes...';
 
       setTimeout(() => {
-        document.body.removeChild(tempForm);
+        if (document.body.contains(tempForm)) document.body.removeChild(tempForm);
         window.location.hash = '#mis-solicitudes';
-      }, 2000);
+      }, 2500);
 
     } catch (err) {
       console.error('Error procesando solicitud:', err);

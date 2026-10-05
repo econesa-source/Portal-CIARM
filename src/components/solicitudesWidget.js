@@ -1,6 +1,6 @@
 /**
  * Módulo de Captura de Solicitudes Internas - Portal CIARM
- * Versión: 14.0.0 (Persistencia HT05 + Lógica Condicional Intendencia/Logística)
+ * Versión: 14.1.0 (Persistencia Real GAS + Validación Adjuntos max 5 files / 10MB)
  */
 
 export function render(container, userSession) {
@@ -32,15 +32,15 @@ export function render(container, userSession) {
 
       <form id="form-solicitud-ciarm" style="display: flex; flex-direction: column; gap: 20px;">
         
-        <!-- Datos de Identificación (Autocompletados) -->
+        <!-- Datos de Identificación -->
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; background: #F8FAFC; padding: 16px; border-radius: 6px; border: 1px solid #E2E8F0;">
           <div>
             <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #475569; margin-bottom: 4px;">SOLICITANTE INSTITUCIONAL</label>
-            <input type="text" value="${user.nombre}" readonly style="width: 100%; padding: 10px; border: 1px solid #CBD5E1; border-radius: 4px; background: #E2E8F0; color: #1E293B; font-weight: 600; box-sizing: border-box;" />
+            <input type="text" id="solicitanteNombre" value="${user.nombre}" readonly style="width: 100%; padding: 10px; border: 1px solid #CBD5E1; border-radius: 4px; background: #E2E8F0; color: #1E293B; font-weight: 600; box-sizing: border-box;" />
           </div>
           <div>
             <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #475569; margin-bottom: 4px;">CORREO CORPORATIVO</label>
-            <input type="email" id="correoSolicitante" name="correoSolicitante" value="${user.correo}" readonly style="width: 100%; padding: 10px; border: 1px solid #CBD5E1; border-radius: 4px; background: #E2E8F0; color: #1E293B; font-weight: 600; box-sizing: border-box;" />
+            <input type="email" id="correoSolicitante" value="${user.correo}" readonly style="width: 100%; padding: 10px; border: 1px solid #CBD5E1; border-radius: 4px; background: #E2E8F0; color: #1E293B; font-weight: 600; box-sizing: border-box;" />
           </div>
         </div>
 
@@ -82,11 +82,11 @@ export function render(container, userSession) {
           <textarea id="descripcion" name="descripcion" rows="4" required placeholder="Describa claramente el requerimiento o falla detectada..." style="width: 100%; padding: 12px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.9rem; box-sizing: border-box; resize: vertical;"></textarea>
         </div>
 
-        <!-- Archivos Adjuntos (Base64) -->
+        <!-- Archivos Adjuntos (Máximo 5 archivos, 10MB c/u) -->
         <div>
-          <label style="display: block; font-size: 0.85rem; font-weight: 700; color: #0A192F; margin-bottom: 6px;">ARCHIVOS ADJUNTOS (OPCIONAL)</label>
+          <label style="display: block; font-size: 0.85rem; font-weight: 700; color: #0A192F; margin-bottom: 6px;">ARCHIVOS ADJUNTOS (MÁXIMO 5 ARCHIVOS, HASTA 10MB C/U)</label>
           <input type="file" id="archivosAdjuntos" multiple accept="image/*,.pdf,.doc,.docx" style="width: 100%; padding: 10px; border: 1px solid #CBD5E1; border-radius: 6px; background-color: #F8FAFC; box-sizing: border-box;" />
-          <small style="color: #64748B; font-size: 0.78rem;">Soporta imágenes, PDF y documentos. Se creará automáticamente la subcarpeta correspondiente en Google Drive.</small>
+          <small id="file-error-msg" style="color: #D32F2F; font-size: 0.8rem; display: block; margin-top: 4px; font-weight: 600;"></small>
         </div>
 
         <!-- Botón de Envío -->
@@ -99,13 +99,11 @@ export function render(container, userSession) {
       </form>
 
       <div id="mensaje-estado-form" style="margin-top: 15px; display: none;"></div>
-
-      <!-- iframe Oculto para la evasión de CORS -->
       <iframe name="hidden_gas_iframe" id="hidden_gas_iframe" style="display: none;"></iframe>
     </div>
   `;
 
-  // EVENTO CONDICIONAL: Escuchar cambio en Tipo de Servicio
+  // EVENTO CONDICIONAL: Limpieza e Intendencia
   const selectTipo = document.getElementById('tipoSolicitud');
   const grupoFecha = document.getElementById('grupo-fecha-programada');
   const inputFecha = document.getElementById('fechaProgramada');
@@ -121,9 +119,32 @@ export function render(container, userSession) {
     }
   });
 
-  // ENVÍO DEL FORMULARIO
+  // VALIDACIÓN DE ARCHIVOS EN TIEMPO REAL (MÁXIMO 5 ARCHIVOS, <= 10MB)
+  const fileInput = document.getElementById('archivosAdjuntos');
+  const fileErrorMsg = document.getElementById('file-error-msg');
+
+  fileInput?.addEventListener('change', () => {
+    fileErrorMsg.innerText = '';
+    const files = Array.from(fileInput.files);
+
+    if (files.length > 5) {
+      fileErrorMsg.innerText = '⚠️ Límite superado: Únicamente se permite adjuntar un máximo de 5 archivos por solicitud.';
+      fileInput.value = '';
+      return;
+    }
+
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB por archivo
+    const fileTooLarge = files.find(f => f.size > MAX_FILE_SIZE);
+    if (fileTooLarge) {
+      fileErrorMsg.innerText = `⚠️ El archivo "${fileTooLarge.name}" supera el tamaño máximo permitido de 10 MB.`;
+      fileInput.value = '';
+      return;
+    }
+  });
+
+  // ENVÍO ASÍNCRONO CON CONVERSIÓN BASE64 REAL
   const form = document.getElementById('form-solicitud-ciarm');
-  form?.addEventListener('submit', (e) => {
+  form?.addEventListener('submit', async (e) => {
     e.preventDefault();
     
     const btnSubmit = document.getElementById('btn-submit-solicitud');
@@ -131,7 +152,7 @@ export function render(container, userSession) {
 
     btnSubmit.disabled = true;
     btnSubmit.style.backgroundColor = '#64748B';
-    btnSubmit.innerText = '⏳ Procesando y enviando a Google Workspace...';
+    btnSubmit.innerText = '⏳ Procesando archivos y conectando con Google Workspace...';
 
     msgEstado.style.display = 'block';
     msgEstado.style.background = '#EFF6FF';
@@ -139,44 +160,73 @@ export function render(container, userSession) {
     msgEstado.style.color = '#1E40AF';
     msgEstado.style.padding = '12px';
     msgEstado.style.borderRadius = '6px';
-    msgEstado.innerHTML = '<strong>Registrando ticket en BD - Sistema de Tickets (HT05)...</strong>';
+    msgEstado.innerHTML = '<strong>Codificando adjuntos y transmitiendo a BD - Sistema de Tickets (HT05)...</strong>';
 
-    // Formateo del Payload
-    const payload = {
-      solicitante: user.nombre,
-      correo: user.correo,
-      tipo: selectTipo.value,
-      descripcion: document.getElementById('descripcion').value,
-      prioridad: document.getElementById('prioridad').value,
-      fechaProgramada: inputFecha.value || ''
-    };
+    try {
+      const files = Array.from(fileInput.files);
+      const attachments = await Promise.all(files.map(file => convertFileToBase64(file)));
 
-    // Construir formulario dinámico para POST iframe
-    const tempForm = document.createElement('form');
-    tempForm.action = GAS_WEBAPP_URL;
-    tempForm.method = 'POST';
-    tempForm.target = 'hidden_gas_iframe';
+      const payload = {
+        solicitante: user.nombre,
+        correo: user.correo,
+        tipo: selectTipo.value,
+        descripcion: document.getElementById('descripcion').value,
+        prioridad: document.getElementById('prioridad').value,
+        fechaProgramada: inputFecha.value || '',
+        adjuntos: attachments
+      };
 
-    const inputData = document.createElement('input');
-    inputData.type = 'hidden';
-    inputData.name = 'postData';
-    inputData.value = JSON.stringify(payload);
+      const tempForm = document.createElement('form');
+      tempForm.action = GAS_WEBAPP_URL;
+      tempForm.method = 'POST';
+      tempForm.target = 'hidden_gas_iframe';
 
-    tempForm.appendChild(inputData);
-    document.body.appendChild(tempForm);
-    tempForm.submit();
+      const inputData = document.createElement('input');
+      inputData.type = 'hidden';
+      inputData.name = 'postData';
+      inputData.value = encodeURIComponent(JSON.stringify(payload));
 
-    // Redirección de éxito
-    setTimeout(() => {
+      tempForm.appendChild(inputData);
+      document.body.appendChild(tempForm);
+      tempForm.submit();
+
       msgEstado.style.background = '#ECFDF5';
       msgEstado.style.border = '1px solid #A7F3D0';
       msgEstado.style.color = '#065F46';
-      msgEstado.innerHTML = '<strong>✅ Solicitud registrada exitosamente en Google Sheets y Google Drive.</strong> Redirigiendo a Mis Solicitudes...';
-      
+      msgEstado.innerHTML = '<strong>✅ Solicitud registrada exitosamente en Google Sheets (HT05) y subcarpeta creada en Google Drive.</strong> Redirigiendo a Mis Solicitudes...';
+
       setTimeout(() => {
+        document.body.removeChild(tempForm);
         window.location.hash = '#mis-solicitudes';
-      }, 1500);
-    }, 2000);
+      }, 2000);
+
+    } catch (err) {
+      console.error('Error procesando solicitud:', err);
+      btnSubmit.disabled = false;
+      btnSubmit.style.backgroundColor = '#0A192F';
+      btnSubmit.innerText = '🚀 Registrar Solicitud en HT05';
+
+      msgEstado.style.background = '#FFEBEE';
+      msgEstado.style.border = '1px solid #FFCDD2';
+      msgEstado.style.color = '#D32F2F';
+      msgEstado.innerHTML = `<strong>⚠️ Error al procesar solicitud:</strong> ${err.message}`;
+    }
+  });
+}
+
+function convertFileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      const base64Data = reader.result.split(',')[1];
+      resolve({
+        nombre: file.name,
+        mimeType: file.type,
+        base64: base64Data
+      });
+    };
+    reader.onerror = error => reject(error);
   });
 }
 

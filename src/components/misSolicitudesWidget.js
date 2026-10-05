@@ -1,52 +1,56 @@
 /**
  * Componente Mis Solicitudes - Portal CIARM
- * Versión: 11.0.0 (Conexión Nativa GAS JSONP + Contenedor Ampliado 100%)
+ * Versión: 11.1.0 (Fix: Endpoint Oficial Apps Script + Layout Ampliado 100%)
  */
 
 export function renderMisSolicitudesWidget(container, userSession) {
   if (!container) return;
 
-  const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzR8pY7zNf83v1T-3U8-GasExec/exec'; // URL del ejecutable de producción
+  // URL Ejecutable Oficial de Apps Script en Producción
+  const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA/exec';
   const USER_EMAIL = (userSession && userSession.correo) ? userSession.correo : 'econesa@ciarm.edu.mx';
   const CALLBACK_NAME = 'onCiarmTicketsLoaded_' + Date.now();
 
   container.innerHTML = `<div style="padding:20px; font-weight:600; color:#0A192F;">Sincronizando solicitudes en vivo para ${USER_EMAIL}...</div>`;
 
-  // Definir callback global dinámico
+  // Definir callback global dinámico para recibir la respuesta JSONP
   window[CALLBACK_NAME] = function() {
     const rawTickets = window.CIARM_TICKETS_DATA || [];
     delete window[CALLBACK_NAME]; // Limpieza de memoria
     
-    // Remover tag de script inyectado
+    // Eliminar el tag de script inyectado tras la ejecución
     const oldScript = document.getElementById('gas-jsonp-script');
     if (oldScript) oldScript.remove();
 
     let formattedTickets = [];
-    rawTickets.forEach(ticket => {
-      // Mapeo flexible de propiedades retornadas por getTickets()
-      const ticketId = ticket.id || ticket.idTicket || ticket[0] || '';
-      const fecha = ticket.fecha || ticket.fechaSolicitud || ticket[1] || '';
-      const tipo = ticket.tipo || ticket.tipoSolicitud || ticket[6] || ticket[2] || '';
-      const desc = ticket.desc || ticket.descripcion || ticket[7] || ticket[3] || '';
-      const estado = ticket.estado || ticket[12] || ticket[4] || 'NUEVO';
+    
+    if (Array.isArray(rawTickets)) {
+      rawTickets.forEach(ticket => {
+        // Mapeo flexible de propiedades retornadas por getTickets() en Google Apps Script
+        const ticketId = ticket.id || ticket.idTicket || ticket[0] || '';
+        const fecha = ticket.fecha || ticket.fechaSolicitud || ticket[1] || '';
+        const tipo = ticket.tipo || ticket.tipoSolicitud || ticket[6] || ticket[2] || '';
+        const desc = ticket.desc || ticket.descripcion || ticket[7] || ticket[3] || '';
+        const estado = ticket.estado || ticket[12] || ticket[4] || 'NUEVO';
 
-      if (ticketId && ticketId.toString().startsWith('TKT-')) {
-        formattedTickets.push({ id: ticketId, fecha, tipo, desc, estado });
-      }
-    });
+        if (ticketId && ticketId.toString().startsWith('TKT-')) {
+          formattedTickets.push({ id: ticketId, fecha, tipo, desc, estado });
+        }
+      });
+    }
 
     renderTable(container, formattedTickets, USER_EMAIL);
   };
 
-  // Petición por inyección de Script (JSONP sin bloqueo CORS ni 404)
-  const scriptUrl = `https://script.google.com/macros/s/AKfycby3E3fJpW1S6x7T33sX/exec?action=getTickets&email=${encodeURIComponent(USER_EMAIL)}&cb=${CALLBACK_NAME}`;
+  // Construcción de la petición URL con callback
+  const scriptUrl = `${GAS_WEBAPP_URL}?action=getTickets&email=${encodeURIComponent(USER_EMAIL)}&cb=${CALLBACK_NAME}`;
   
-  // Resguardo por si la red falla
+  // Inyección dinámica de Script Tag
   const scriptTag = document.createElement('script');
   scriptTag.id = 'gas-jsonp-script';
   scriptTag.src = scriptUrl;
   scriptTag.onerror = function() {
-    renderErrorBox(container, 'No se pudo conectar con el servidor de Google Apps Script.');
+    renderErrorBox(container, 'No se pudo conectar con el servidor de Google Apps Script. Verifique la publicación del script.');
   };
 
   document.body.appendChild(scriptTag);

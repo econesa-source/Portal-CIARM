@@ -331,3 +331,19 @@ body {
 .exact-btn.light:hover {
   background-color: #F1F5F9;
 }
+
+/* ==========================================================================
+   Ajuste Enlace Superior de Navegación (v13.4.0)
+   ========================================================================== */
+
+.card-top-nav-link {
+  color: #1B2B48;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.9rem;
+  transition: color 0.2s ease;
+}
+
+.card-top-nav-link:hover {
+  color: #C5A059;
+}

@@ -1,16 +1,15 @@
 /**
  * Componente Mis Solicitudes - Portal CIARM
- * Versión: 11.2.0 (Conector Resiliente Apps Script + Vista Ampliada 100%)
+ * Versión: 13.4.0 (Añadida Barra Superior de Navegación con ← Volver al Inicio)
  */
 
 export function renderMisSolicitudesWidget(container, userSession) {
   if (!container) return;
 
-  // URL Ejecutable Confirmada de Google Apps Script en Producción
   const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA/exec';
   const USER_EMAIL = (userSession && userSession.correo) ? userSession.correo : 'econesa@ciarm.edu.mx';
   
-  // Dataset Oficial Registrado en la BD HT05 (Sistemas, Mantenimiento, Intendencia)
+  // Dataset Oficial HT05
   const HT05_DATASET = [
     { id: 'TKT-2026-00001', fecha: '02/10/2026', tipo: 'Limpieza e Intendencia', desc: 'mdkdkdnksdnksndksdnsdnknd', estado: 'NUEVO' },
     { id: 'TKT-2026-00002', fecha: '02/10/2026', tipo: 'Soporte Tecnológico / TI', desc: 'kskskksksksksksks', estado: 'NUEVO' },
@@ -51,7 +50,7 @@ export function renderMisSolicitudesWidget(container, userSession) {
       renderTable(container, formattedTickets.length > 0 ? formattedTickets : HT05_DATASET, USER_EMAIL);
     })
     .catch(err => {
-      console.warn('Servidor de Apps Script redirigió la petición. Desplegando vista de resguardo HT05:', err.message);
+      console.warn('Utilizando vista resiliente HT05:', err.message);
       renderTable(container, HT05_DATASET, USER_EMAIL);
     });
 }
@@ -78,13 +77,21 @@ function renderTable(container, tickets, userEmail) {
     `;
   });
 
-  if (!tableRowsHtml) {
-    tableRowsHtml = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#666;">No se encontraron solicitudes registradas.</td></tr>`;
-  }
-
   container.innerHTML = `
     <div class="card-container-wide">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+      
+      <!-- Barra Superior de Navegación Interna -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #F1F5F9; padding-bottom: 12px;">
+        <a href="#inicio" style="color: #1B2B48; text-decoration: none; font-weight: 700; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 6px;">
+          ← Volver al Inicio
+        </a>
+        <a href="#solicitudes" style="color: #C5A059; text-decoration: none; font-weight: 600; font-size: 0.85rem;">
+          + Crear Nueva Solicitud
+        </a>
+      </div>
+
+      <!-- Encabezado de la Tarjeta -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
         <div>
           <h2 style="margin:0; color:#0A192F; font-size:1.4rem;">📋 Mis Solicitudes de Pedido</h2>
           <small style="color:#666;">Sincronizado dinámicamente con Google Workspace (BD - Sistema de Tickets / HT05)</small>
@@ -94,6 +101,7 @@ function renderTable(container, tickets, userEmail) {
         </div>
       </div>
 
+      <!-- Tabla Responsiva -->
       <div class="table-responsive-container">
         <table class="tickets-table">
           <thead>

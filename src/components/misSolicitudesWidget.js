@@ -1,6 +1,6 @@
 /**
  * Componente Mis Solicitudes - Renderizado Responsivo
- * Versión: 11.0.1
+ * Versión: 11.0.2
  */
 export function render(container) {
   if (!container) return;
@@ -9,7 +9,7 @@ export function render(container) {
   const USER_EMAIL = 'econesa@ciarm.edu.mx';
   const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=TICKETS`;
 
-  container.innerHTML = `<div class="loading" style="padding: 20px; font-weight: 600;">Cargando solicitudes de ${USER_EMAIL}...</div>`;
+  container.innerHTML = `<div class="loading" style="padding:20px; font-weight:600;">Cargando solicitudes de ${USER_EMAIL}...</div>`;
 
   fetch(GVIZ_URL)
     .then(res => res.text())
@@ -79,7 +79,7 @@ export function render(container) {
       `;
     })
     .catch(err => {
-      console.error('Error fetching GViz data:', err);
+      console.error('Error al obtener datos de GViz:', err);
       if (container) {
         container.innerHTML = `<div class="error-box" style="padding:20px; color:red;">No se pudieron cargar las solicitudes desde Google Sheets.</div>`;
       }

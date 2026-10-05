@@ -151,3 +151,183 @@ body {
 .btn-drive-subfolder:hover {
   background-color: #A38243;
 }
+
+/* ==========================================================================
+   Estilos Dashboard Réplica Exacta (v13.3.0)
+   ========================================================================== */
+
+/* Hero Asistente CIARM */
+.assistant-hero-card {
+  background: #0A192F;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  color: #FFFFFF;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.assistant-hero-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.assistant-title {
+  margin: 0 0 4px 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+.assistant-subtitle {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #94A3B8;
+}
+
+.assistant-tag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #C5A059;
+  letter-spacing: 1px;
+}
+
+.assistant-chat-box {
+  background: #1E293B;
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid #334155;
+}
+
+.assistant-chat-history {
+  margin-bottom: 12px;
+}
+
+.assistant-msg {
+  background: #FFFFFF;
+  color: #1E293B;
+  padding: 14px 18px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.assistant-input-group {
+  display: flex;
+  gap: 8px;
+  background: #FFFFFF;
+  border-radius: 6px;
+  padding: 4px 8px;
+  align-items: center;
+}
+
+.assistant-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  color: #1E293B;
+}
+
+.assistant-send-btn {
+  background: #F1F5F9;
+  border: 1px solid #CBD5E1;
+  color: #475569;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+/* Grid de 6 Tarjetas Exactas */
+.dashboard-grid-exact {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .dashboard-grid-exact {
+    grid-template-columns: 1fr;
+  }
+}
+
+.exact-card {
+  background: #FFFFFF;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+  border-top: 4px solid #C5A059;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+}
+
+.exact-card-category {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #94A3B8;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.exact-card-title {
+  margin: 0 0 8px 0;
+  color: #0A192F;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.exact-card-desc {
+  margin: 0 0 16px 0;
+  color: #64748B;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  flex-grow: 1;
+}
+
+.exact-card-btn-group {
+  display: flex;
+  gap: 8px;
+}
+
+.exact-btn {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.exact-btn.dark {
+  background-color: #0A192F;
+  color: #FFFFFF !important;
+}
+
+.exact-btn.gold {
+  background-color: #C5A059;
+  color: #FFFFFF !important;
+}
+
+.exact-btn.light {
+  background-color: #F8FAFC;
+  color: #334155 !important;
+  border: 1px solid #E2E8F0;
+}
+
+.exact-btn.light:hover {
+  background-color: #F1F5F9;
+}

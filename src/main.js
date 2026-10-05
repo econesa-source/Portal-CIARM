@@ -1,76 +1,93 @@
-import { renderDashboardWidget } from './components/dashboardWidget.js?v=10.0.0';
-import { renderSolicitudesWidget } from './components/solicitudesWidget.js?v=10.0.0';
-import { renderMisSolicitudesWidget } from './components/misSolicitudesWidget.js?v=10.0.0';
+/**
+ * Portal CIARM - Router SPA y Guardián de Autenticación
+ * Versión: 13.0.0
+ */
 
-const USER_SESSION = {
-  nombre: 'Ezequiel Conesa',
-  correo: 'econesa@ciarm.edu.mx',
-  area: 'Coordinación Pedagógica',
-  rol: 'PORTAL_USUARIO'
+import { isLoggedIn, getUserSession, logout } from './services/authService.js';
+import { renderLoginWidget } from './components/loginWidget.js';
+
+const APP_VERSION = '13.0.0';
+
+const routes = {
+  '#inicio': () => import(`./components/dashboardWidget.js?v=${APP_VERSION}`),
+  '#solicitudes': () => import(`./components/solicitudesWidget.js?v=${APP_VERSION}`),
+  '#mis-solicitudes': () => import(`./components/misSolicitudesWidget.js?v=${APP_VERSION}`)
 };
 
 function getTargetContainer() {
-  let container = document.getElementById('main-content') || 
-                  document.getElementById('content') || 
-                  document.getElementById('app') ||
-                  document.querySelector('.main-content') ||
-                  document.querySelector('main');
-
+  let container = document.getElementById('main-content');
   if (!container) {
-    container = document.createElement('div');
+    container = document.createElement('main');
     container.id = 'main-content';
-    document.body.appendChild(container);
+    container.className = 'main-body';
+    const wrapper = document.querySelector('.content-wrapper') || document.body;
+    wrapper.appendChild(container);
   }
   return container;
 }
 
-function router() {
-  const container = getTargetContainer();
-  if (!container) return;
+async function router() {
+  const mainContainer = getTargetContainer();
+  const sidebar = document.getElementById('main-sidebar');
+  const userProfileHeader = document.getElementById('header-user-profile');
 
-  try {
-    const hash = window.location.hash || '#inicio';
-
-    if (hash === '#solicitudes' || hash === '#nueva-solicitud') {
-      container.innerHTML = `
-        <div style="max-width:800px; margin: 0 auto; padding:1.5rem;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-            <a href="#inicio" style="color:#1B2B48; text-decoration:none; font-weight:bold;">← Volver al Inicio</a>
-            <a href="#mis-solicitudes" style="background:#C5A059; color:white; padding:0.5rem 1rem; border-radius:6px; text-decoration:none; font-weight:bold; font-size:0.9rem;">📋 Ver Mis Solicitudes</a>
-          </div>
-          <div id="solicitud-content"></div>
-        </div>
-      `;
-      renderSolicitudesWidget(document.getElementById('solicitud-content'), USER_SESSION);
-
-    } else if (hash === '#mis-solicitudes') {
-      container.innerHTML = `
-        <div style="max-width:800px; margin: 0 auto; padding:1.5rem;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-            <a href="#solicitudes" style="color:#1B2B48; text-decoration:none; font-weight:bold;">← Crear Nueva Solicitud</a>
-            <a href="#inicio" style="color:#6B7280; text-decoration:none;">Ir al Inicio</a>
-          </div>
-          <div id="mis-solicitudes-content"></div>
-        </div>
-      `;
-      renderMisSolicitudesWidget(document.getElementById('mis-solicitudes-content'), USER_SESSION.correo);
-
-    } else {
-      renderDashboardWidget(container, (modulo) => {
-        if (modulo === 'solicitudes') {
-          window.location.hash = '#solicitudes';
-        }
-      });
+  // SI NO HAY SESIÓN: Ocultar Sidebar y renderizar vista de Login
+  if (!isLoggedIn()) {
+    if (sidebar) sidebar.style.display = 'none';
+    if (userProfileHeader) {
+      userProfileHeader.innerHTML = `<span class="login-header-tag">ACCESO INSTITUCIONAL</span>`;
     }
-  } catch (err) {
-    console.error("[CIARM Router Error]:", err);
+    
+    mainContainer.innerHTML = '';
+    renderLoginWidget(mainContainer, () => {
+      window.location.hash = '#inicio';
+      router();
+    });
+    return;
+  }
+
+  // SI HAY SESIÓN ACTIVA: Renderizar Sidebar y Header de usuario
+  const user = getUserSession();
+  if (sidebar) sidebar.style.display = 'block';
+  if (userProfileHeader && user) {
+    userProfileHeader.innerHTML = `
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="text-align:right;">
+          <span style="display:block; font-weight:600; font-size:0.85rem; color:#fff;">${user.nombre}</span>
+          <span style="font-size:0.75rem; color:#CBD5E1;">${user.correo}</span>
+        </div>
+        <button id="btn-logout-header" style="background:#C5A059; color:#fff; border:none; padding:5px 10px; border-radius:4px; font-weight:600; cursor:pointer; font-size:0.75rem;">Cerrar sesión</button>
+      </div>
+    `;
+
+    document.getElementById('btn-logout-header')?.addEventListener('click', logout);
+  }
+
+  const hash = window.location.hash || '#inicio';
+
+  if (routes[hash]) {
+    try {
+      const module = await routes[hash]();
+      mainContainer.innerHTML = '';
+      
+      if (typeof module.renderMisSolicitudesWidget === 'function') {
+        module.renderMisSolicitudesWidget(mainContainer, user);
+      } else if (typeof module.render === 'function') {
+        module.render(mainContainer, user);
+      }
+    } catch (error) {
+      console.error(`Error al cargar ${hash}:`, error);
+      mainContainer.innerHTML = `<div style="padding:20px; color:red;">Error al cargar el módulo.</div>`;
+    }
+  } else {
+    window.location.hash = '#inicio';
   }
 }
 
-window.addEventListener('hashchange', router);
-
-if (document.readyState === 'interactive' || document.readyState === 'complete') {
-  router();
-} else {
+if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', router);
+} else {
+  router();
 }
+
+window.addEventListener('hashchange', router);

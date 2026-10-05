@@ -1,454 +1,43 @@
-/* CIARM Theme System v2.2.0 - Ajustes Estéticos Oficiales */
+/* ==========================================================================
+   Portal CIARM - Hoja de Estilos Institucionales (v13.1.0)
+   ========================================================================== */
 
 :root {
-  --ciarm-navy: #1B2B48;
-  --ciarm-gold: #C5A059;
-  --ciarm-bg: #F3F4F6;
-  --ciarm-card-bg: #FFFFFF;
+  --primary-color: #0A192F;
+  --gold-color: #C5A059;
+  --bg-light: #F8FAFC;
+  --text-dark: #1E293B;
 }
 
-/* Sidebar con Borde Derecho Dorado */
-aside, .sidebar, #sidebar {
-  border-right: 3px solid var(--ciarm-gold) !important;
-}
-
-/* Bordes Dorados Superiores para Tarjetas */
-.ciarm-card, .card-gold-top {
-  border-top: 4px solid var(--ciarm-gold) !important;
-  border-radius: 12px;
-  background: #FFFFFF;
-}
-
-/* Marco Dorado para el Asistente CIARM */
-.asistente-container {
-  border-top: 4px solid var(--ciarm-gold) !important;
-  border-radius: 12px;
-}
-
-/* ==========================================================================
-   Ajuste Responsivo para Tabla Mis Solicitudes (v10.1.0)
-   ========================================================================== */
-
-.table-responsive-container {
-  width: 100%;
-  overflow-x: auto;
+* {
   box-sizing: border-box;
 }
 
-.tickets-table {
-  width: 100% !important;
-  table-layout: fixed !important;
-  border-collapse: collapse;
-  font-size: 0.85rem;
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-light);
+  color: var(--text-dark);
 }
 
-.tickets-table th,
-.tickets-table td {
-  padding: 8px 6px;
-  text-align: left;
-  vertical-align: middle;
-  word-break: break-word;
-  overflow-wrap: break-word;
-  box-sizing: border-box;
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
-.tickets-table th.col-id,     .tickets-table td.col-id     { width: 15%; }
-.tickets-table th.col-fecha,  .tickets-table td.col-fecha  { width: 12%; }
-.tickets-table th.col-tipo,   .tickets-table td.col-tipo   { width: 20%; }
-.tickets-table th.col-desc,   .tickets-table td.col-desc   { width: 23%; }
-.tickets-table th.col-estado, .tickets-table td.col-estado { width: 10%; }
-.tickets-table th.col-accion, .tickets-table td.col-accion { width: 20%; }
-
-.btn-drive-subfolder {
-  display: block;
-  width: 100%;
-  background-color: #C5A059;
+/* Header Institucional */
+.main-header {
+  background-color: var(--primary-color) !important;
   color: #FFFFFF !important;
-  text-decoration: none;
-  font-size: 0.72rem;
-  font-weight: 600;
-  padding: 6px 4px;
-  border-radius: 4px;
-  text-align: center;
-  line-height: 1.2;
-  box-sizing: border-box;
+  padding: 12px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 3px solid var(--gold-color) !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
-
-.btn-drive-subfolder:hover {
-  background-color: #A38243;
-}
-
-/* ==========================================================================
-   Ajuste Responsivo de Ancho para Mis Solicitudes (v10.1.0)
-   ========================================================================== */
-
-.table-responsive-container {
-  width: 100%;
-  overflow-x: auto;
-  box-sizing: border-box;
-}
-
-.tickets-table {
-  width: 100% !important;
-  table-layout: fixed !important;
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-
-.tickets-table th,
-.tickets-table td {
-  padding: 8px 6px;
-  text-align: left;
-  vertical-align: middle;
-  word-break: break-word;
-  overflow-wrap: break-word;
-  box-sizing: border-box;
-  border-bottom: 1px solid #E2E8F0;
-}
-
-.tickets-table th.col-id,     .tickets-table td.col-id     { width: 15%; }
-.tickets-table th.col-fecha,  .tickets-table td.col-fecha  { width: 12%; }
-.tickets-table th.col-tipo,   .tickets-table td.col-tipo   { width: 20%; }
-.tickets-table th.col-desc,   .tickets-table td.col-desc   { width: 23%; }
-.tickets-table th.col-estado, .tickets-table td.col-estado { width: 10%; }
-.tickets-table th.col-accion, .tickets-table td.col-accion { width: 20%; }
-
-.btn-drive-subfolder {
-  display: block;
-  width: 100%;
-  background-color: #C5A059;
-  color: #FFFFFF !important;
-  text-decoration: none;
-  font-size: 0.72rem;
-  font-weight: 600;
-  padding: 6px 4px;
-  border-radius: 4px;
-  text-align: center;
-  line-height: 1.2;
-  box-sizing: border-box;
-}
-
-.btn-drive-subfolder:hover {
-  background-color: #A38243;
-}
-
-/* ==========================================================================
-   Ajuste Responsivo para Tabla Mis Solicitudes (v10.2.0)
-   ========================================================================== */
-
-.table-responsive-container {
-  width: 100%;
-  overflow-x: auto;
-  box-sizing: border-box;
-}
-
-.tickets-table {
-  width: 100% !important;
-  table-layout: fixed !important;
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-
-.tickets-table th,
-.tickets-table td {
-  padding: 8px 6px;
-  text-align: left;
-  vertical-align: middle;
-  word-break: break-word;
-  overflow-wrap: break-word;
-  box-sizing: border-box;
-  border-bottom: 1px solid #E2E8F0;
-}
-
-.tickets-table th.col-id,     .tickets-table td.col-id     { width: 15%; }
-.tickets-table th.col-fecha,  .tickets-table td.col-fecha  { width: 12%; }
-.tickets-table th.col-tipo,   .tickets-table td.col-tipo   { width: 20%; }
-.tickets-table th.col-desc,   .tickets-table td.col-desc   { width: 23%; }
-.tickets-table th.col-estado, .tickets-table td.col-estado { width: 10%; }
-.tickets-table th.col-accion, .tickets-table td.col-accion { width: 20%; }
-
-.btn-drive-subfolder {
-  display: block;
-  width: 100%;
-  background-color: #C5A059;
-  color: #FFFFFF !important;
-  text-decoration: none;
-  font-size: 0.72rem;
-  font-weight: 600;
-  padding: 6px 4px;
-  border-radius: 4px;
-  text-align: center;
-  line-height: 1.2;
-  box-sizing: border-box;
-}
-
-.btn-drive-subfolder:hover {
-  background-color: #A38243;
-}
-
-/* ==========================================================================
-   Ajuste de Ancho Ampliado para Tarjeta de Mis Solicitudes (v10.3.0)
-   ========================================================================== */
-
-.card-container-wide {
-  width: 100% !important;
-  max-width: 100% !important;
-  border-top: 5px solid #C5A059;
-  padding: 24px;
-  background: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-  box-sizing: border-box;
-}
-
-.table-responsive-container {
-  width: 100%;
-  overflow-x: auto;
-  box-sizing: border-box;
-}
-
-.tickets-table {
-  width: 100% !important;
-  table-layout: fixed !important;
-  border-collapse: collapse;
-  font-size: 0.88rem;
-}
-
-.tickets-table th,
-.tickets-table td {
-  padding: 10px 8px;
-  text-align: left;
-  vertical-align: middle;
-  word-break: break-word;
-  overflow-wrap: break-word;
-  box-sizing: border-box;
-  border-bottom: 1px solid #E2E8F0;
-}
-
-.tickets-table th.col-id,     .tickets-table td.col-id     { width: 12%; }
-.tickets-table th.col-fecha,  .tickets-table td.col-fecha  { width: 10%; }
-.tickets-table th.col-tipo,   .tickets-table td.col-tipo   { width: 20%; }
-.tickets-table th.col-desc,   .tickets-table td.col-desc   { width: 33%; }
-.tickets-table th.col-estado, .tickets-table td.col-estado { width: 10%; }
-.tickets-table th.col-accion, .tickets-table td.col-accion { width: 15%; }
-
-.btn-drive-subfolder {
-  display: block;
-  width: 100%;
-  background-color: #C5A059;
-  color: #FFFFFF !important;
-  text-decoration: none;
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 8px 4px;
-  border-radius: 4px;
-  text-align: center;
-  line-height: 1.2;
-  box-sizing: border-box;
-}
-
-.btn-drive-subfolder:hover {
-  background-color: #A38243;
-}
-
-/* ==========================================================================
-   Ajuste de Vista Ampliada (v11.0.0)
-   ========================================================================== */
-
-.card-container-wide {
-  width: 100% !important;
-  max-width: 100% !important;
-  border-top: 5px solid #C5A059;
-  padding: 24px;
-  background: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-  box-sizing: border-box;
-}
-
-.table-responsive-container {
-  width: 100%;
-  overflow-x: auto;
-  box-sizing: border-box;
-}
-
-.tickets-table {
-  width: 100% !important;
-  table-layout: fixed !important;
-  border-collapse: collapse;
-  font-size: 0.88rem;
-}
-
-.tickets-table th,
-.tickets-table td {
-  padding: 10px 8px;
-  text-align: left;
-  vertical-align: middle;
-  word-break: break-word;
-  overflow-wrap: break-word;
-  box-sizing: border-box;
-  border-bottom: 1px solid #E2E8F0;
-}
-
-.tickets-table th.col-id,     .tickets-table td.col-id     { width: 12%; }
-.tickets-table th.col-fecha,  .tickets-table td.col-fecha  { width: 10%; }
-.tickets-table th.col-tipo,   .tickets-table td.col-tipo   { width: 20%; }
-.tickets-table th.col-desc,   .tickets-table td.col-desc   { width: 33%; }
-.tickets-table th.col-estado, .tickets-table td.col-estado { width: 10%; }
-.tickets-table th.col-accion, .tickets-table td.col-accion { width: 15%; }
-
-.btn-drive-subfolder {
-  display: block;
-  width: 100%;
-  background-color: #C5A059;
-  color: #FFFFFF !important;
-  text-decoration: none;
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 8px 4px;
-  border-radius: 4px;
-  text-align: center;
-  line-height: 1.2;
-  box-sizing: border-box;
-}
-
-.btn-drive-subfolder:hover {
-  background-color: #A38243;
-}
-
-/* ==========================================================================
-   Ajuste de Vista Ampliada y Maquetación Responsiva (v11.1.0)
-   ========================================================================== */
-
-.card-container-wide {
-  width: 100% !important;
-  max-width: 100% !important;
-  border-top: 5px solid #C5A059;
-  padding: 24px;
-  background: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-  box-sizing: border-box;
-}
-
-.table-responsive-container {
-  width: 100%;
-  overflow-x: auto;
-  box-sizing: border-box;
-}
-
-.tickets-table {
-  width: 100% !important;
-  table-layout: fixed !important;
-  border-collapse: collapse;
-  font-size: 0.88rem;
-}
-
-.tickets-table th,
-.tickets-table td {
-  padding: 10px 8px;
-  text-align: left;
-  vertical-align: middle;
-  word-break: break-word;
-  overflow-wrap: break-word;
-  box-sizing: border-box;
-  border-bottom: 1px solid #E2E8F0;
-}
-
-.tickets-table th.col-id,     .tickets-table td.col-id     { width: 12%; }
-.tickets-table th.col-fecha,  .tickets-table td.col-fecha  { width: 10%; }
-.tickets-table th.col-tipo,   .tickets-table td.col-tipo   { width: 20%; }
-.tickets-table th.col-desc,   .tickets-table td.col-desc   { width: 33%; }
-.tickets-table th.col-estado, .tickets-table td.col-estado { width: 10%; }
-.tickets-table th.col-accion, .tickets-table td.col-accion { width: 15%; }
-
-.btn-drive-subfolder {
-  display: block;
-  width: 100%;
-  background-color: #C5A059;
-  color: #FFFFFF !important;
-  text-decoration: none;
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 8px 4px;
-  border-radius: 4px;
-  text-align: center;
-  line-height: 1.2;
-  box-sizing: border-box;
-}
-
-.btn-drive-subfolder:hover {
-  background-color: #A38243;
-}
-
-/* ==========================================================================
-   Ajuste de Vista Ampliada y Tabla Responsiva (v11.2.0)
-   ========================================================================== */
-
-.card-container-wide {
-  width: 100% !important;
-  max-width: 100% !important;
-  border-top: 5px solid #C5A059;
-  padding: 24px;
-  background: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-  box-sizing: border-box;
-}
-
-.table-responsive-container {
-  width: 100%;
-  overflow-x: auto;
-  box-sizing: border-box;
-}
-
-.tickets-table {
-  width: 100% !important;
-  table-layout: fixed !important;
-  border-collapse: collapse;
-  font-size: 0.88rem;
-}
-
-.tickets-table th,
-.tickets-table td {
-  padding: 10px 8px;
-  text-align: left;
-  vertical-align: middle;
-  word-break: break-word;
-  overflow-wrap: break-word;
-  box-sizing: border-box;
-  border-bottom: 1px solid #E2E8F0;
-}
-
-.tickets-table th.col-id,     .tickets-table td.col-id     { width: 12%; }
-.tickets-table th.col-fecha,  .tickets-table td.col-fecha  { width: 10%; }
-.tickets-table th.col-tipo,   .tickets-table td.col-tipo   { width: 20%; }
-.tickets-table th.col-desc,   .tickets-table td.col-desc   { width: 33%; }
-.tickets-table th.col-estado, .tickets-table td.col-estado { width: 10%; }
-.tickets-table th.col-accion, .tickets-table td.col-accion { width: 15%; }
-
-.btn-drive-subfolder {
-  display: block;
-  width: 100%;
-  background-color: #C5A059;
-  color: #FFFFFF !important;
-  text-decoration: none;
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 8px 4px;
-  border-radius: 4px;
-  text-align: center;
-  line-height: 1.2;
-  box-sizing: border-box;
-}
-
-.btn-drive-subfolder:hover {
-  background-color: #A38243;
-}
-
-/* ==========================================================================
-   Estilos Pantalla de Autenticación Institucional (v13.0.0)
-   ========================================================================== */
 
 .login-header-tag {
   font-size: 0.8rem;
@@ -458,14 +47,107 @@ aside, .sidebar, #sidebar {
   text-transform: uppercase;
 }
 
-.login-card {
+/* Layout Principal */
+.content-wrapper {
+  display: flex;
+  flex: 1;
+  min-height: calc(100vh - 65px);
+}
+
+/* Sidebar Lateral */
+.sidebar {
+  width: 240px;
+  background-color: #0F172A !important;
+  border-right: 3px solid var(--gold-color) !important;
+  padding: 20px 10px;
+  flex-shrink: 0;
+}
+
+.sidebar-nav a {
+  display: block;
+  color: #E2E8F0;
+  text-decoration: none;
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.sidebar-nav a.active, 
+.sidebar-nav a:hover {
+  background-color: #1E293B;
+  color: var(--gold-color);
+}
+
+/* Contenido Principal */
+.main-body {
+  flex: 1;
+  padding: 24px;
+  box-sizing: border-box;
+  background-color: var(--bg-light);
+  width: 100%;
+}
+
+/* Tarjeta Ampliada de Solicitudes */
+.card-container-wide {
+  width: 100% !important;
+  max-width: 100% !important;
+  border-top: 5px solid var(--gold-color);
+  padding: 24px;
   background: #ffffff;
   border-radius: 8px;
-  border-top: 5px solid #C5A059;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  width: 100%;
-  max-width: 520px;
-  padding: 40px 30px;
-  text-align: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
   box-sizing: border-box;
+}
+
+.table-responsive-container {
+  width: 100%;
+  overflow-x: auto;
+  box-sizing: border-box;
+}
+
+.tickets-table {
+  width: 100% !important;
+  table-layout: fixed !important;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  margin-top: 10px;
+}
+
+.tickets-table th,
+.tickets-table td {
+  padding: 10px 8px;
+  text-align: left;
+  vertical-align: middle;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.tickets-table th.col-id,     .tickets-table td.col-id     { width: 12%; }
+.tickets-table th.col-fecha,  .tickets-table td.col-fecha  { width: 10%; }
+.tickets-table th.col-tipo,   .tickets-table td.col-tipo   { width: 20%; }
+.tickets-table th.col-desc,   .tickets-table td.col-desc   { width: 33%; }
+.tickets-table th.col-estado, .tickets-table td.col-estado { width: 10%; }
+.tickets-table th.col-accion, .tickets-table td.col-accion { width: 15%; }
+
+.btn-drive-subfolder {
+  display: block;
+  width: 100%;
+  background-color: var(--gold-color);
+  color: #FFFFFF !important;
+  text-decoration: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 8px 4px;
+  border-radius: 4px;
+  text-align: center;
+  line-height: 1.2;
+  box-sizing: border-box;
+}
+
+.btn-drive-subfolder:hover {
+  background-color: #A38243;
 }

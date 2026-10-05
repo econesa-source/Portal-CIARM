@@ -4,26 +4,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Portal CIARM - Colegio Internacional Alemán Riviera Maya</title>
-  
-  <!-- Hoja de Estilos Institucional -->
-  <link rel="stylesheet" href="ciarm-theme.css?v=13.0.0">
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
-
-  <!-- PASO 1: SDK Oficial de Google Identity Services (OAuth 2.0 / GIS) -->
+  <link rel="stylesheet" href="ciarm-theme.css?v=13.1.0">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <div class="app-layout">
-    <!-- Header Institucional Persistente -->
     <header class="main-header">
       <div class="brand">
         <div class="brand-text">
-          <h1>COLEGIO INTERNACIONAL ALEMÁN</h1>
-          <span>RIVIERA MAYA</span>
+          <h1 style="margin:0; font-size:1.2rem; color:#fff;">COLEGIO INTERNACIONAL ALEMÁN</h1>
+          <span style="font-size:0.8rem; color:#C5A059;">RIVIERA MAYA</span>
         </div>
       </div>
       <div class="header-title">
-        <h2>Información y herramientas</h2>
+        <h2 style="margin:0; font-size:1rem; color:#E2E8F0;">Información y herramientas</h2>
       </div>
       <div class="user-profile" id="header-user-profile">
         <span class="login-header-tag">ACCESO INSTITUCIONAL</span>
@@ -31,7 +25,6 @@
     </header>
 
     <div class="content-wrapper">
-      <!-- Sidebar de Navegación (Oculto por defecto hasta autenticar) -->
       <aside class="sidebar" id="main-sidebar" style="display: none;">
         <nav class="sidebar-nav">
           <a href="#inicio" class="nav-link">⌂ Inicio</a>
@@ -40,14 +33,12 @@
         </nav>
       </aside>
 
-      <!-- Contenedor Dinámico Principal para la SPA -->
       <main id="main-content" class="main-body">
         <div class="loading-spinner">Cargando Portal CIARM...</div>
       </main>
     </div>
   </div>
 
-  <!-- Router Principal de la Aplicación -->
-  <script type="module" src="src/main.js?v=13.0.0"></script>
+  <script type="module" src="src/main.js?v=13.1.0"></script>
 </body>
 </html>

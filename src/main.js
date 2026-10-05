@@ -1,12 +1,12 @@
 /**
  * Portal CIARM - Router SPA y Guardián de Autenticación
- * Versión: 13.0.0
+ * Versión: 13.1.0
  */
 
 import { isLoggedIn, getUserSession, logout } from './services/authService.js';
 import { renderLoginWidget } from './components/loginWidget.js';
 
-const APP_VERSION = '13.0.0';
+const APP_VERSION = '13.1.0';
 
 const routes = {
   '#inicio': () => import(`./components/dashboardWidget.js?v=${APP_VERSION}`),
@@ -31,7 +31,7 @@ async function router() {
   const sidebar = document.getElementById('main-sidebar');
   const userProfileHeader = document.getElementById('header-user-profile');
 
-  // SI NO HAY SESIÓN: Ocultar Sidebar y renderizar vista de Login
+  // GUARDIA DE SESIÓN: Si no hay sesión activa, muestra Login
   if (!isLoggedIn()) {
     if (sidebar) sidebar.style.display = 'none';
     if (userProfileHeader) {
@@ -46,17 +46,17 @@ async function router() {
     return;
   }
 
-  // SI HAY SESIÓN ACTIVA: Renderizar Sidebar y Header de usuario
+  // SESIÓN ACTIVA: Mostrar Sidebar y Header
   const user = getUserSession();
   if (sidebar) sidebar.style.display = 'block';
   if (userProfileHeader && user) {
     userProfileHeader.innerHTML = `
-      <div style="display:flex; align-items:center; gap:10px;">
+      <div style="display:flex; align-items:center; gap:12px;">
         <div style="text-align:right;">
           <span style="display:block; font-weight:600; font-size:0.85rem; color:#fff;">${user.nombre}</span>
           <span style="font-size:0.75rem; color:#CBD5E1;">${user.correo}</span>
         </div>
-        <button id="btn-logout-header" style="background:#C5A059; color:#fff; border:none; padding:5px 10px; border-radius:4px; font-weight:600; cursor:pointer; font-size:0.75rem;">Cerrar sesión</button>
+        <button id="btn-logout-header" style="background:#C5A059; color:#fff; border:none; padding:6px 12px; border-radius:4px; font-weight:600; cursor:pointer; font-size:0.75rem;">Cerrar sesión</button>
       </div>
     `;
 
@@ -64,6 +64,15 @@ async function router() {
   }
 
   const hash = window.location.hash || '#inicio';
+
+  // Actualizar clase active en el Sidebar
+  document.querySelectorAll('.sidebar-nav a').forEach(link => {
+    if (link.getAttribute('href') === hash) {
+      link.classList.add('active');
+    } else {
+      link.classList.remove('active');
+    }
+  });
 
   if (routes[hash]) {
     try {

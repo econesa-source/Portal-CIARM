@@ -1,13 +1,8 @@
-/**
- * Módulo de Captura de Solicitudes Internas - Portal CIARM
- * Versión: 16.5.2 (Conector Script Vinculado Sincronizado)
- */
+import { GAS_WEBAPP_URL } from '../services/apiClient.js';
 
 export function render(container, userSession) {
   if (!container) return;
 
-  // REEMPLAZAR ESTA URL POR LA OBTENIDA EN EL PASO 1
-  const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec';
   const user = userSession || { nombre: 'Ezequiel Conesa', correo: 'econesa@ciarm.edu.mx' };
 
   container.innerHTML = `
@@ -155,13 +150,14 @@ export function render(container, userSession) {
       const files = Array.from(fileInput.files);
       const attachments = await Promise.all(files.map(file => convertFileToBase64(file)));
 
-      const payload = {
-        solicitante: user.nombre,
-        correo: user.correo,
-        tipo: selectTipo.value,
+      const ticketPayload = {
+        nombre_solicitante: user.nombre,
+        correo_solicitante: user.correo,
+        area_solicitante: user.area || 'General',
+        tipo_solicitud: selectTipo.value,
         descripcion: document.getElementById('descripcion').value,
-        prioridad: document.getElementById('prioridad').value,
-        fechaProgramada: inputFecha.value || '',
+        urgencia: document.getElementById('prioridad').value.includes('Urgente') ? 'SI' : 'NO',
+        fecha_requerida: inputFecha.value || '',
         adjuntos: attachments
       };
 
@@ -173,7 +169,7 @@ export function render(container, userSession) {
       const hiddenInput = document.createElement('input');
       hiddenInput.type = 'hidden';
       hiddenInput.name = 'postData';
-      hiddenInput.value = JSON.stringify(payload);
+      hiddenInput.value = JSON.stringify({ action: 'createTicket', payload: ticketPayload });
 
       tempForm.appendChild(hiddenInput);
       document.body.appendChild(tempForm);
@@ -211,9 +207,9 @@ function convertFileToBase64(file) {
     reader.onload = () => {
       const base64Data = reader.result.split(',')[1];
       resolve({
-        nombre: file.name,
+        name: file.name,
         mimeType: file.type,
-        base64: base64Data
+        base64Data: base64Data
       });
     };
     reader.onerror = error => reject(error);

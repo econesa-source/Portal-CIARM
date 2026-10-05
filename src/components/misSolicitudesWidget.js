@@ -3,11 +3,12 @@
  * Versión: 16.6.1 (Consulta Dinámica en Vivo con NUEVA URL Sincronizada)
  */
 
+import { GAS_WEBAPP_URL } from '../services/apiClient.js';
+
 export function renderMisSolicitudesWidget(container, userSession) {
   if (!container) return;
 
-  // SUSTITUIR ESTA VARIABLE CON LA NUEVA URL DE TU DESPLIEGUE
-  const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec';
+  const USER_EMAIL = userSession?.correo || 'econesa@ciarm.edu.mx';
   
   container.innerHTML = `<div style="padding:24px; font-weight:600; color:#0A192F;">⏳ Cargando solicitudes en vivo para ${USER_EMAIL}...</div>`;
 
@@ -19,25 +20,34 @@ export function renderMisSolicitudesWidget(container, userSession) {
     .then(textData => {
       let tickets = [];
       try {
+        let parsed;
         if (textData.includes('window.CIARM_TICKETS_DATA')) {
           const jsonStr = textData.substring(textData.indexOf('['), textData.lastIndexOf(']') + 1);
-          tickets = JSON.parse(jsonStr);
+          parsed = JSON.parse(jsonStr);
         } else {
-          tickets = JSON.parse(textData);
+          parsed = JSON.parse(textData);
+        }
+
+        if (Array.isArray(parsed)) {
+          tickets = parsed;
+        } else if (parsed && Array.isArray(parsed.data)) {
+          tickets = parsed.data;
+        } else if (parsed && typeof parsed.data === 'object' && parsed.data !== null) {
+          tickets = Array.isArray(parsed.data.tickets) ? parsed.data.tickets : [];
         }
       } catch (e) {
         console.warn('Error parseando JSON de Google Apps Script:', e.message);
       }
 
-      renderTable(container, tickets, USER_EMAIL);
+      renderTable(container, tickets, USER_EMAIL, () => renderMisSolicitudesWidget(container, userSession));
     })
     .catch(err => {
       console.error('Error de red al consultar Google Sheets:', err.message);
-      renderTable(container, [], USER_EMAIL);
+      renderTable(container, [], USER_EMAIL, () => renderMisSolicitudesWidget(container, userSession));
     });
 }
 
-function renderTable(container, tickets, userEmail) {
+function renderTable(container, tickets, userEmail, onRefresh) {
   let tableRowsHtml = '';
 
   if (!Array.isArray(tickets) || tickets.length === 0) {
@@ -51,13 +61,14 @@ function renderTable(container, tickets, userEmail) {
   } else {
     tickets.forEach(ticket => {
       const driveUrl = ticket.driveUrl ? ticket.driveUrl.split('\n')[0] : `https://drive.google.com/drive/search?q=${encodeURIComponent(ticket.id + '_Adjuntos')}`;
+      const fechaLimpia = ticket.fecha ? (ticket.fecha.includes('T') ? ticket.fecha.split('T')[0] : ticket.fecha) : '';
 
       tableRowsHtml += `
         <tr>
           <td class="col-id"><strong>${ticket.id}</strong></td>
-          <td class="col-fecha">${ticket.fecha}</td>
-          <td class="col-tipo">${ticket.tipo}</td>
-          <td class="col-desc">${ticket.desc}</td>
+          <td class="col-fecha">${fechaLimpia}</td>
+          <td class="col-tipo">${ticket.tipo || 'General'}</td>
+          <td class="col-desc">${ticket.desc || ''}</td>
           <td class="col-estado">
             <span style="background:#FEF3C7; color:#92400E; padding:4px 8px; border-radius:4px; font-weight:bold; font-size:0.75rem;">
               ${ticket.estado || 'NUEVO'}
@@ -81,9 +92,14 @@ function renderTable(container, tickets, userEmail) {
         <a href="#inicio" style="color: #1B2B48; text-decoration: none; font-weight: 700; font-size: 0.9rem;">
           ← Volver al Inicio
         </a>
-        <a href="#solicitudes" style="color: #C5A059; text-decoration: none; font-weight: 600; font-size: 0.85rem;">
-          + Crear Nueva Solicitud
-        </a>
+        <div style="display:flex; gap:12px; align-items:center;">
+          <button id="btn-refresh-tickets" style="background:#F1F5F9; color:#0A192F; border:1px solid #CBD5E1; padding:6px 12px; border-radius:4px; font-weight:600; cursor:pointer; font-size:0.8rem;">
+            🔄 Actualizar Datos
+          </button>
+          <a href="#solicitudes" style="color: #C5A059; text-decoration: none; font-weight: 600; font-size: 0.85rem;">
+            + Crear Nueva Solicitud
+          </a>
+        </div>
       </div>
 
       <!-- Encabezado -->
@@ -117,6 +133,10 @@ function renderTable(container, tickets, userEmail) {
       </div>
     </div>
   `;
+
+  document.getElementById('btn-refresh-tickets')?.addEventListener('click', () => {
+    if (onRefresh) onRefresh();
+  });
 }
 
 export const render = renderMisSolicitudesWidget;

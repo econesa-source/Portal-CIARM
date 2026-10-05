@@ -39,13 +39,19 @@ function doGet(e) {
 function doPost(e) {
   let responseData = { status: "error", message: "Petición no válida" };
   try {
-    if (!e || !e.postData || !e.postData.contents) {
+    let contents = null;
+    if (e && e.parameter && e.parameter.postData) {
+      contents = typeof e.parameter.postData === 'string' ? JSON.parse(e.parameter.postData) : e.parameter.postData;
+    } else if (e && e.postData && e.postData.contents) {
+      contents = JSON.parse(e.postData.contents);
+    }
+
+    if (!contents) {
       return ContentService
         .createTextOutput(JSON.stringify({ status: "error", message: "Sin contenido POST" }))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
-    const contents = JSON.parse(e.postData.contents);
     const action = contents.action;
 
     if (action === "createTicket") {

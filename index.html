@@ -4,46 +4,44 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Portal CIARM - Colegio Internacional Alemán Riviera Maya</title>
-  <link rel="stylesheet" href="ciarm-theme.css?v=11.0.4">
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="ciarm-theme.css?v=11.0.5">
 </head>
 <body>
   <div class="app-layout">
-    <header class="main-header">
+    <header class="main-header" style="background:#0A192F; color:#fff; padding:15px 20px; display:flex; justify-content:space-between; align-items:center;">
       <div class="brand">
         <div class="brand-text">
-          <h1>COLEGIO INTERNACIONAL ALEMÁN</h1>
-          <span>RIVIERA MAYA</span>
+          <h1 style="margin:0; font-size:1.2rem; color:#fff;">COLEGIO INTERNACIONAL ALEMÁN</h1>
+          <span style="font-size:0.8rem; color:#C5A059;">RIVIERA MAYA</span>
         </div>
       </div>
       <div class="header-title">
-        <h2>Información y herramientas</h2>
+        <h2 style="margin:0; font-size:1rem; color:#E2E8F0;">Información y herramientas</h2>
       </div>
-      <div class="user-profile">
-        <div class="user-info">
-          <span class="user-name">Ezequiel Conesa</span>
-          <span class="user-role">Cuenta Institucional</span>
+      <div class="user-profile" style="display:flex; align-items:center; gap:10px;">
+        <div class="user-info" style="text-align:right;">
+          <span class="user-name" style="display:block; font-weight:600; font-size:0.85rem;">Ezequiel Conesa</span>
+          <span class="user-role" style="font-size:0.75rem; color:#CBD5E1;">Cuenta Institucional</span>
         </div>
-        <div class="user-avatar">EC</div>
-        <button class="btn-logout">Cerrar sesión</button>
+        <div class="user-avatar" style="background:#C5A059; color:#fff; padding:6px 10px; border-radius:50%; font-weight:bold; font-size:0.85rem;">EC</div>
       </div>
     </header>
 
-    <div class="content-wrapper">
-      <aside class="sidebar">
-        <nav class="sidebar-nav">
-          <a href="#inicio" class="nav-link"><span class="icon">⌂</span> Inicio</a>
-          <a href="#mis-solicitudes" class="nav-link active"><span class="icon">✓</span> Mis obligaciones</a>
-          <a href="#solicitudes" class="nav-link"><span class="icon">≡</span> Normativa</a>
+    <div class="content-wrapper" style="display:flex; min-height:calc(100vh - 70px);">
+      <aside class="sidebar" style="width:220px; background:#0F172A; color:#fff; padding:20px 10px;">
+        <nav class="sidebar-nav" style="display:flex; flex-direction:column; gap:10px;">
+          <a href="#inicio" style="color:#fff; text-decoration:none; padding:10px; border-radius:4px; display:block;">⌂ Inicio</a>
+          <a href="#mis-solicitudes" style="color:#fff; text-decoration:none; padding:10px; border-radius:4px; background:#1E293B; display:block;">✓ Mis obligaciones</a>
+          <a href="#solicitudes" style="color:#fff; text-decoration:none; padding:10px; border-radius:4px; display:block;">≡ Normativa</a>
         </nav>
       </aside>
 
-      <main id="main-content" class="main-body">
+      <main id="main-content" class="main-body" style="flex:1; padding:20px; background:#F8FAFC;">
         <div class="loading-spinner">Cargando módulo...</div>
       </main>
     </div>
   </div>
 
-  <script type="module" src="src/main.js?v=11.0.4"></script>
+  <script type="module" src="src/main.js?v=11.0.5"></script>
 </body>
 </html>

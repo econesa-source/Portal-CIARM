@@ -1,9 +1,9 @@
 /**
  * Portal CIARM - Router SPA Síncrono a Prueba de Fallos
- * Versión: 11.0.4
+ * Versión: 11.0.5
  */
 
-const APP_VERSION = '11.0.4';
+const APP_VERSION = '11.0.5';
 
 const routes = {
   '#inicio': () => import(`./components/dashboardWidget.js?v=${APP_VERSION}`),
@@ -11,7 +11,6 @@ const routes = {
   '#mis-solicitudes': () => import(`./components/misSolicitudesWidget.js?v=${APP_VERSION}`)
 };
 
-// Función síncrona de obtención o creación inmediata de contenedor (Sin bucles)
 function getTargetContainer() {
   let container = document.getElementById('main-content');
   if (!container) {
@@ -43,7 +42,6 @@ async function router() {
   }
 }
 
-// Inicialización limpia
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', router);
 } else {

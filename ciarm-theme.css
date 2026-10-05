@@ -24,3 +24,56 @@ aside, .sidebar, #sidebar {
   border-top: 4px solid var(--ciarm-gold) !important;
   border-radius: 12px;
 }
+
+/* ==========================================================================
+   Ajuste Responsivo para Tabla Mis Solicitudes (v10.1.0)
+   ========================================================================== */
+
+.table-responsive-container {
+  width: 100%;
+  overflow-x: auto;
+  box-sizing: border-box;
+}
+
+.tickets-table {
+  width: 100% !important;
+  table-layout: fixed !important;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.tickets-table th,
+.tickets-table td {
+  padding: 8px 6px;
+  text-align: left;
+  vertical-align: middle;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
+}
+
+.tickets-table th.col-id,     .tickets-table td.col-id     { width: 15%; }
+.tickets-table th.col-fecha,  .tickets-table td.col-fecha  { width: 12%; }
+.tickets-table th.col-tipo,   .tickets-table td.col-tipo   { width: 20%; }
+.tickets-table th.col-desc,   .tickets-table td.col-desc   { width: 23%; }
+.tickets-table th.col-estado, .tickets-table td.col-estado { width: 10%; }
+.tickets-table th.col-accion, .tickets-table td.col-accion { width: 20%; }
+
+.btn-drive-subfolder {
+  display: block;
+  width: 100%;
+  background-color: #C5A059;
+  color: #FFFFFF !important;
+  text-decoration: none;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 6px 4px;
+  border-radius: 4px;
+  text-align: center;
+  line-height: 1.2;
+  box-sizing: border-box;
+}
+
+.btn-drive-subfolder:hover {
+  background-color: #A38243;
+}

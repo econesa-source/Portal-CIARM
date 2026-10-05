@@ -445,3 +445,27 @@ aside, .sidebar, #sidebar {
 .btn-drive-subfolder:hover {
   background-color: #A38243;
 }
+
+/* ==========================================================================
+   Estilos Pantalla de Autenticación Institucional (v13.0.0)
+   ========================================================================== */
+
+.login-header-tag {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #E2E8F0;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.login-card {
+  background: #ffffff;
+  border-radius: 8px;
+  border-top: 5px solid #C5A059;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  width: 100%;
+  max-width: 520px;
+  padding: 40px 30px;
+  text-align: center;
+  box-sizing: border-box;
+}

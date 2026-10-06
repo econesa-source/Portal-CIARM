@@ -117,10 +117,10 @@ jobs:
 
           CODE="$(get "$BASE/?sha=$EXPECTED_SHA" /tmp/root.html || echo 000)"
           echo "root HTTP=$CODE"
-          if [ "$CODE" = "200" ] && grep -F 'src/main-v1782.js?v=17.10.5' /tmp/root.html >/dev/null; then
-            echo "OK: el sitio público usa el entrypoint v17.10.5."
+          if [ "$CODE" = "200" ] && grep -F 'src/main-v1782.js?v=17.10.7' /tmp/root.html >/dev/null; then
+            echo "OK: el sitio público usa el entrypoint v17.10.7."
           else
-            echo "ERROR: el sitio público NO usa el entrypoint v17.10.5."
+            echo "ERROR: el sitio público NO usa el entrypoint v17.10.7."
             ERRORS=1
           fi
 
@@ -201,6 +201,14 @@ jobs:
             fi
           else
             echo "ERROR: no se pudo consultar el backend getTickets."
+            ERRORS=1
+          fi
+
+          if grep -F '<span class="exact-btn light exact-btn-disabled" aria-disabled="true">Consultar Normativa</span>' /tmp/vf.js >/dev/null && \
+             ! grep -F 'href="#solicitudes" class="exact-btn light">Consultar Normativa</a>' /tmp/vf.js >/dev/null; then
+            echo "OK: tarjeta Normas y herramientas ya no apunta a Nueva Solicitud."
+          else
+            echo "ERROR: la tarjeta Normas y herramientas conserva el vínculo incorrecto."
             ERRORS=1
           fi
 

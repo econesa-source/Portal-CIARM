@@ -684,6 +684,17 @@ body {
   border-color: var(--gold-color);
 }
 
+.exact-btn-disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.exact-btn-disabled:hover {
+  transform: none;
+  background-color: #F8FAFC !important;
+  border-color: #E2E8F0 !important;
+}
+
 /* ==========================================================================
    Ajuste Enlace Superior de Navegación (v13.4.0)
    ========================================================================== */

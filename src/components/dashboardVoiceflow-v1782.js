@@ -1,6 +1,6 @@
 /**
  * Módulo de Inicio - Dashboard Oficial CIARM
- * Versión: 17.8.2
+ * Versión: 17.10.7
  */
 
 const VOICEFLOW_PROJECT_ID = '6a81e72529695cfeb738ad6e';
@@ -118,7 +118,7 @@ export function render(container, userSession) {
           <span class="exact-card-category">FICHE - SISTEMA INTEGRAL DE CUMPLIMIENTO</span>
           <h3 class="exact-card-title">Normas y herramientas</h3>
           <p class="exact-card-desc">Consulta normativa aplicable, protocolos, formatos, hojas de registro y genera informes.</p>
-          <a href="#solicitudes" class="exact-btn light">Consultar Normativa</a>
+          <span class="exact-btn light exact-btn-disabled" aria-disabled="true">Consultar Normativa</span>
         </div>
 
         <!-- Tarjeta 4: Comunicados -->

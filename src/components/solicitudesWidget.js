@@ -1,12 +1,11 @@
 /**
  * Componente Nueva Solicitud - Portal CIARM
- * Versión: 17.5.1 (Endpoint Unificado y Catálogo Oficial de 5 Opciones)
+ * Versión: 17.6.0 (Envío Asíncrono Directo con Garantía de Persistencia en Sheets y Drive)
  */
 
 export function renderSolicitudesWidget(container, userSession) {
   if (!container) return;
 
-  // URL OFICIAL VINCULADA A BD - SISTEMA DE TICKETS
   const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA/exec';
   const user = userSession || { nombre: 'Ezequiel Conesa', correo: 'econesa@ciarm.edu.mx' };
 
@@ -92,7 +91,6 @@ export function renderSolicitudesWidget(container, userSession) {
       </form>
 
       <div id="mensaje-estado-form" style="margin-top: 15px; display: none;"></div>
-      <iframe name="gas_target_iframe_v1751" id="gas_target_iframe_v1751" style="display: none;"></iframe>
     </div>
   `;
 
@@ -150,20 +148,15 @@ export function renderSolicitudesWidget(container, userSession) {
         adjuntos: attachments
       };
 
-      const tempForm = document.createElement('form');
-      tempForm.action = GAS_WEBAPP_URL;
-      tempForm.method = 'POST';
-      tempForm.target = 'gas_target_iframe_v1751';
-
-      const hiddenInput = document.createElement('input');
-      hiddenInput.type = 'hidden';
-      hiddenInput.name = 'postData';
-      hiddenInput.value = JSON.stringify(payload);
-
-      tempForm.appendChild(hiddenInput);
-      document.body.appendChild(tempForm);
-
-      tempForm.submit();
+      // Envío POST asíncrono no-cors garantizado hacia Google Apps Script
+      await fetch(GAS_WEBAPP_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8'
+        },
+        body: JSON.stringify(payload)
+      });
 
       msgEstado.style.background = '#ECFDF5';
       msgEstado.style.border = '1px solid #A7F3D0';
@@ -171,7 +164,6 @@ export function renderSolicitudesWidget(container, userSession) {
       msgEstado.innerHTML = '<strong>✅ Solicitud registrada con éxito en Google Workspace.</strong> Redirigiendo a Mis Solicitudes...';
 
       setTimeout(() => {
-        if (document.body.contains(tempForm)) document.body.removeChild(tempForm);
         window.location.hash = '#mis-solicitudes';
       }, 2500);
 

@@ -1,4 +1,4 @@
-name: Ticket Stage 2 Smoke
+name: Ticket Stage 4 DM03 Smoke
 
 on:
   push:
@@ -11,39 +11,27 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Probar alta con un adjunto contra WebApp activa
+      - name: Verificar consulta DM03 desde WebApp activa
         env:
-          WRITE_URL: https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec
+          API_URL: https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec
         run: |
           set -euo pipefail
-          MARKER="SMOKE-STAGE2-${GITHUB_RUN_ID}"
-          cat > /tmp/payload.json <<JSON
-          {
-            "solicitante": "Ezequiel Conesa",
-            "correo": "econesa@ciarm.edu.mx",
-            "tipo": "Soporte Tecnológico / TI",
-            "descripcion": "$MARKER",
-            "prioridad": "🟢 Normal",
-            "fechaProgramada": "",
-            "adjuntos": [
-              {
-                "nombre": "stage2-smoke.png",
-                "mimeType": "image/png",
-                "base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
-              }
-            ]
-          }
-          JSON
+          curl -fsSL             --retry 3 --retry-delay 2 --retry-all-errors             --connect-timeout 10 --max-time 60             "$API_URL?action=getUserContext&email=e.conesa%40ciarm.edu.mx&_t=$(date +%s)"             -o /tmp/context.json
 
-          echo "marker=$MARKER"
+          TYPE="$(jq -r 'type' /tmp/context.json 2>/dev/null || echo invalid)"
+          STATUS="$(jq -r 'if type=="object" then (.status // "") else "" end' /tmp/context.json 2>/dev/null || true)"
+          AUTH="$(jq -r 'if type=="object" then (.data.autorizado // false) else false end' /tmp/context.json 2>/dev/null || true)"
+          HAS_NAME="$(jq -r 'if type=="object" and (.data.nombre? | type)=="string" and (.data.nombre|length)>0 then "yes" else "no" end' /tmp/context.json 2>/dev/null || true)"
+          HAS_AREA="$(jq -r 'if type=="object" and (.data.area? | type)=="string" and (.data.area|length)>0 then "yes" else "no" end' /tmp/context.json 2>/dev/null || true)"
+          REASON="$(jq -r 'if type=="object" then (.data.reason // .message // "") else "" end' /tmp/context.json 2>/dev/null || true)"
 
-          HTTP_CODE="$(curl -sS -L             --retry 3 --retry-delay 2 --retry-all-errors             --connect-timeout 10 --max-time 60             -o /tmp/response.txt -w '%{http_code}'             -H 'Content-Type: text/plain;charset=utf-8'             --data-binary @/tmp/payload.json             "$WRITE_URL")"
+          echo "type=$TYPE status=$STATUS authorized=$AUTH has_name=$HAS_NAME has_area=$HAS_AREA"
+          if [ "$AUTH" != "true" ]; then
+            echo "reason=$REASON"
+          fi
 
-          echo "HTTP=$HTTP_CODE"
-          echo "response_begin"
-          head -c 3000 /tmp/response.txt || true
-          echo
-          echo "response_end"
-
-          test "$HTTP_CODE" = "200"
-          grep -F '"status":"success"' /tmp/response.txt >/dev/null
+          test "$TYPE" = "object"
+          test "$STATUS" = "success"
+          test "$AUTH" = "true"
+          test "$HAS_NAME" = "yes"
+          test "$HAS_AREA" = "yes"

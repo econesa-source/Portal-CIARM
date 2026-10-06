@@ -1,0 +1,42 @@
+name: Ticket Stage 1 Smoke
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/ticket-stage1-smoke.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probar alta simple contra WebApp de escritura histórica
+        env:
+          WRITE_URL: https://script.google.com/macros/s/AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA/exec
+        run: |
+          set -euo pipefail
+          MARKER="SMOKE-STAGE1-${GITHUB_RUN_ID}"
+          cat > /tmp/payload.json <<JSON
+          {
+            "solicitante": "Ezequiel Conesa",
+            "correo": "econesa@ciarm.edu.mx",
+            "tipo": "Soporte Tecnológico / TI",
+            "descripcion": "$MARKER",
+            "prioridad": "🟢 Normal",
+            "fechaProgramada": "",
+            "adjuntos": []
+          }
+          JSON
+
+          echo "marker=$MARKER"
+
+          HTTP_CODE="$(curl -sS -L             --retry 3 --retry-delay 2 --retry-all-errors             --connect-timeout 10 --max-time 60             -o /tmp/response.txt -w '%{http_code}'             -H 'Content-Type: text/plain;charset=utf-8'             --data-binary @/tmp/payload.json             "$WRITE_URL")"
+
+          echo "HTTP=$HTTP_CODE"
+          echo "response_begin"
+          head -c 3000 /tmp/response.txt || true
+          echo
+          echo "response_end"
+
+          test "$HTTP_CODE" = "200"

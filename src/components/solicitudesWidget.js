@@ -1,6 +1,6 @@
 /**
  * Componente Nueva Solicitud - Portal CIARM
- * Versión: 17.10.5
+ * Versión: 18.0.0
  */
 
 import { GAS_WEBAPP_URL } from '../services/apiClient.js';
@@ -11,7 +11,12 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 export function renderSolicitudesWidget(container, userSession) {
   if (!container) return;
 
-  const user = userSession || { nombre: 'Ezequiel Conesa', correo: 'e.conesa@ciarm.edu.mx' };
+  const user = userSession;
+
+  if (!user?.correo) {
+    container.innerHTML = '<div class="card-container-wide"><strong>Sesión institucional no disponible.</strong></div>';
+    return;
+  }
 
   container.innerHTML = `
     <div class="card-container-wide solicitud-card">

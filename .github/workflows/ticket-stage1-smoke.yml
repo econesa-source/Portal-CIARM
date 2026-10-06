@@ -11,9 +11,9 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Probar alta simple contra WebApp de escritura histórica
+      - name: Probar alta simple contra WebApp activa con contrato legacy
         env:
-          WRITE_URL: https://script.google.com/macros/s/AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA/exec
+          WRITE_URL: https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec
         run: |
           set -euo pipefail
           MARKER="SMOKE-STAGE1-${GITHUB_RUN_ID}"

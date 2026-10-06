@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Portal CIARM - Hoja de Estilos Institucionales (v17.9.0)
+   Portal CIARM - Hoja de Estilos Institucionales (v17.10.0)
    ========================================================================== */
 
 :root {
@@ -689,3 +689,127 @@ body {
 .card-top-nav-link:hover {
   color: var(--gold-color);
 }
+
+/* Mis Solicitudes */
+.mis-solicitudes-card {
+  min-height: 0;
+}
+
+.mis-solicitudes-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.mis-solicitudes-header h2 {
+  margin: 0 0 4px;
+  color: var(--primary-color);
+  font-size: 1.3rem;
+}
+
+.mis-solicitudes-header p {
+  margin: 0;
+  color: #64748B;
+  font-size: 0.82rem;
+}
+
+.mis-solicitudes-user {
+  background: #F1F5F9;
+  color: var(--primary-color);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.mis-solicitudes-loading,
+.mis-solicitudes-error {
+  padding: 24px;
+  text-align: center;
+  color: #64748B;
+}
+
+.mis-solicitudes-error {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  color: #991B1B;
+  border-radius: 8px;
+}
+
+.mis-solicitudes-error button {
+  border: 0;
+  background: var(--primary-color);
+  color: #FFFFFF;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tickets-table thead tr {
+  background: var(--primary-color);
+  color: #FFFFFF;
+}
+
+.tickets-table th {
+  font-size: 0.76rem;
+  letter-spacing: 0.01em;
+}
+
+.ticket-time,
+.ticket-priority {
+  display: block;
+  margin-top: 3px;
+  color: #64748B;
+  font-size: 0.7rem;
+}
+
+.ticket-status {
+  display: inline-block;
+  background: #FEF3C7;
+  color: #92400E;
+  padding: 4px 7px;
+  border-radius: 5px;
+  font-weight: 700;
+  font-size: 0.72rem;
+}
+
+.ticket-attachment-link {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--primary-color);
+  font-size: 0.73rem;
+  font-weight: 700;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.ticket-attachment-link:hover {
+  color: #1F3A66;
+  text-decoration: underline;
+}
+
+.ticket-no-attachments {
+  color: #94A3B8;
+  font-size: 0.72rem;
+}
+
+.tickets-empty {
+  text-align: center !important;
+  padding: 28px !important;
+  color: #64748B;
+}
+
+@media (max-width: 900px) {
+  .tickets-table {
+    min-width: 860px;
+  }
+}
+

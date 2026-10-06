@@ -1,7 +1,74 @@
 /**
- * Módulo de Inicio - Dashboard Oficial CIARM (Fiel a Réplica)
- * Versión: 13.3.0
+ * Módulo de Inicio - Dashboard Oficial CIARM
+ * Versión: 17.8.0
  */
+
+const VOICEFLOW_PROJECT_ID = '6a81e72529695cfeb738ad6e';
+const VOICEFLOW_SCRIPT_ID = 'ciarm-voiceflow-widget-script';
+const VOICEFLOW_SCRIPT_SRC = 'https://cdn.voiceflow.com/widget-next/bundle.mjs';
+
+function loadVoiceflowScript() {
+  if (window.voiceflow?.chat) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const existing = document.getElementById(VOICEFLOW_SCRIPT_ID);
+
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error('No se pudo cargar Voiceflow.')), { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = VOICEFLOW_SCRIPT_ID;
+    script.type = 'text/javascript';
+    script.src = VOICEFLOW_SCRIPT_SRC;
+
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('No se pudo cargar Voiceflow.'));
+
+    document.head.appendChild(script);
+  });
+}
+
+async function mountVoiceflowAssistant() {
+  const target = document.getElementById('voiceflow-chat');
+
+  if (!target) return;
+
+  target.innerHTML = '<div class="voiceflow-loading">Cargando Asistente CIARM...</div>';
+
+  try {
+    await loadVoiceflowScript();
+
+    if (!window.voiceflow?.chat?.load) {
+      throw new Error('La API del widget de Voiceflow no está disponible.');
+    }
+
+    target.innerHTML = '';
+
+    await window.voiceflow.chat.load({
+      verify: { projectID: VOICEFLOW_PROJECT_ID },
+      url: 'https://general-runtime.voiceflow.com',
+      voice: {
+        url: 'https://runtime-api.voiceflow.com'
+      },
+      render: {
+        mode: 'embedded',
+        target
+      }
+    });
+  } catch (error) {
+    console.error('Error al inicializar Asistente CIARM:', error);
+    target.innerHTML = `
+      <div class="voiceflow-error">
+        No fue posible cargar el Asistente CIARM. Actualizá la página e intentá nuevamente.
+      </div>
+    `;
+  }
+}
 
 export function render(container, userSession) {
   if (!container) return;
@@ -20,17 +87,7 @@ export function render(container, userSession) {
         </div>
 
         <div class="assistant-chat-box">
-          <div class="assistant-chat-history">
-            <div class="assistant-msg">
-              ¡Hola! Soy el Asistente CIARM, tu asistente institucional del Colegio Internacional Alemán de la Riviera Maya. Estoy aquí para ayudarte a consultar información, reglas, procesos, políticas y herramientas institucionales del Colegio.
-              <br><br><strong>¿En qué puedo ayudarte hoy?</strong>
-            </div>
-          </div>
-
-          <div class="assistant-input-group">
-            <input type="text" id="ai-chat-input" placeholder="¿Cómo puedo ayudarte?" class="assistant-input" />
-            <button id="ai-chat-send-btn" class="assistant-send-btn">↑</button>
-          </div>
+          <div id="voiceflow-chat" class="voiceflow-embed-target" aria-label="Asistente CIARM"></div>
         </div>
       </div>
 
@@ -93,14 +150,7 @@ export function render(container, userSession) {
     </div>
   `;
 
-  // Evento interactivo para el input del Chat
-  document.getElementById('ai-chat-send-btn')?.addEventListener('click', () => {
-    const input = document.getElementById('ai-chat-input');
-    if (input && input.value.trim()) {
-      alert(`Asistente CIARM: Consultando sobre "${input.value}"...`);
-      input.value = '';
-    }
-  });
+  mountVoiceflowAssistant();
 }
 
 export const renderDashboardWidget = render;

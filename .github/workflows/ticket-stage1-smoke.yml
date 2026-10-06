@@ -1,4 +1,4 @@
-name: Ticket Stage 1 Smoke
+name: Ticket Stage 2 Smoke
 
 on:
   push:
@@ -11,12 +11,12 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Probar alta simple contra WebApp activa con contrato legacy
+      - name: Probar alta con un adjunto contra WebApp activa
         env:
           WRITE_URL: https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec
         run: |
           set -euo pipefail
-          MARKER="SMOKE-STAGE1-${GITHUB_RUN_ID}"
+          MARKER="SMOKE-STAGE2-${GITHUB_RUN_ID}"
           cat > /tmp/payload.json <<JSON
           {
             "solicitante": "Ezequiel Conesa",
@@ -25,7 +25,13 @@ jobs:
             "descripcion": "$MARKER",
             "prioridad": "🟢 Normal",
             "fechaProgramada": "",
-            "adjuntos": []
+            "adjuntos": [
+              {
+                "nombre": "stage2-smoke.png",
+                "mimeType": "image/png",
+                "base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+              }
+            ]
           }
           JSON
 
@@ -40,3 +46,4 @@ jobs:
           echo "response_end"
 
           test "$HTTP_CODE" = "200"
+          grep -F '"status":"success"' /tmp/response.txt >/dev/null

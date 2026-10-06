@@ -1,60 +1,90 @@
 /**
- * Servicio de Autenticación y Control de Sesión - Portal CIARM
- * Versión: 13.0.0
+ * Servicio de Autenticación y Sesión - Portal CIARM
+ * Versión: 18.0.0
+ *
+ * La sesión real vive en PHP mediante cookie HttpOnly.
+ * El navegador nunca persiste el ID token de Google.
  */
 
-const SESSION_KEY = 'ciarm_user_session';
-const ALLOWED_DOMAIN = 'ciarm.edu.mx';
+export const GOOGLE_CLIENT_ID =
+  '202621439702-edb2e8j6hfnsm72po5n22eh63q27ee0d.apps.googleusercontent.com';
 
-export function isLoggedIn() {
-  const session = sessionStorage.getItem(SESSION_KEY);
-  return session !== null;
-}
+let currentUser = null;
 
-export function getUserSession() {
-  const session = sessionStorage.getItem(SESSION_KEY);
-  return session ? JSON.parse(session) : null;
-}
+export async function getAuthenticatedUser(forceRefresh = false) {
+  if (currentUser && !forceRefresh) {
+    return currentUser;
+  }
 
-export function saveUserSession(userData) {
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(userData));
-}
-
-export function logout() {
-  sessionStorage.removeItem(SESSION_KEY);
-  window.location.hash = '#inicio';
-  window.location.reload();
-}
-
-export function handleGoogleCredential(response, onSuccess, onError) {
   try {
-    const payload = parseJwt(response.credential);
-    
-    if (!payload.email.endsWith('@' + ALLOWED_DOMAIN) && payload.hd !== ALLOWED_DOMAIN) {
-      throw new Error(`Acceso restringido. Utilice una cuenta @${ALLOWED_DOMAIN}`);
+    const response = await fetch('/auth-session.php', {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' }
+    });
+
+    if (response.status === 401) {
+      currentUser = null;
+      return null;
     }
 
-    const user = {
-      nombre: payload.name || 'Usuario CIARM',
-      correo: payload.email,
-      foto: payload.picture || '',
-      token: response.credential
-    };
+    if (!response.ok) {
+      throw new Error(`No se pudo validar la sesión (HTTP ${response.status}).`);
+    }
 
-    saveUserSession(user);
-    if (onSuccess) onSuccess(user);
+    const payload = await response.json();
+    currentUser = payload?.ok === true && payload?.user ? payload.user : null;
+    return currentUser;
 
-  } catch (err) {
-    console.error('Error al validar cuenta:', err);
-    if (onError) onError(err.message);
+  } catch (error) {
+    console.error('Error consultando sesión institucional:', error);
+    currentUser = null;
+    return null;
   }
 }
 
-function parseJwt(token) {
-  const base64Url = token.split('.')[1];
-  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-  const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => {
-    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-  }).join(''));
-  return JSON.parse(jsonPayload);
+export async function authenticateGoogleCredential(credential) {
+  const response = await fetch('/auth-google.php', {
+    method: 'POST',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ credential })
+  });
+
+  let payload = {};
+  try {
+    payload = await response.json();
+  } catch (_) {}
+
+  if (!response.ok || payload?.ok !== true || !payload?.user) {
+    const error = new Error('No fue posible iniciar sesión con esta cuenta.');
+    error.code = payload?.code || `http_${response.status}`;
+    throw error;
+  }
+
+  currentUser = payload.user;
+  return currentUser;
+}
+
+export async function logout() {
+  try {
+    await fetch('/auth-logout.php', {
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' }
+    });
+  } catch (error) {
+    console.warn('No fue posible confirmar el cierre de sesión en servidor:', error);
+  }
+
+  currentUser = null;
+  window.google?.accounts?.id?.disableAutoSelect?.();
+  window.location.hash = '#inicio';
+  window.location.reload();
 }

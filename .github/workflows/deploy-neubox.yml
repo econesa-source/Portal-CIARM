@@ -172,6 +172,12 @@ jobs:
           if curl -fsSL --retry 4 --retry-delay 3 --retry-all-errors \
                "$GAS_URL?action=getTickets&email=econesa%40ciarm.edu.mx&_t=$(date +%s)" \
                -o /tmp/tickets-api.json; then
+            TYPE="$(jq -r 'type' /tmp/tickets-api.json 2>/dev/null || echo invalid)"
+            STATUS="$(jq -r 'if type=="object" then (.status // "") else "" end' /tmp/tickets-api.json 2>/dev/null || true)"
+            MESSAGE="$(jq -r 'if type=="object" then (.message // "") else "" end' /tmp/tickets-api.json 2>/dev/null || true)"
+            KEYS="$(jq -r 'if type=="object" then (keys | join(",")) else "" end' /tmp/tickets-api.json 2>/dev/null || true)"
+            echo "Backend shape: type=$TYPE status=$STATUS keys=$KEYS"
+            if [ -n "$MESSAGE" ]; then echo "Backend message: $MESSAGE"; fi
             COUNT="$(jq -r 'if type=="array" then length elif ((.data? | type)=="array") then (.data | length) elif ((.tickets? | type)=="array") then (.tickets | length) else -1 end' /tmp/tickets-api.json 2>/dev/null || echo -1)"
             if [ "$COUNT" -gt 0 ] 2>/dev/null; then
               echo "OK: backend getTickets respondió $COUNT solicitud(es) para el correo de prueba."

@@ -20,6 +20,6 @@ jobs:
           server: ${{ secrets.NEUBOX_FTP_SERVER || 'portal2.ciarm.edu.mx' }}
           username: ${{ secrets.NEUBOX_FTP_USERNAME }}
           password: ${{ secrets.NEUBOX_FTP_PASSWORD }}
-          server-dir: ${{ secrets.NEUBOX_REMOTE_PATH || '/' }}
+          server-dir: ./
           protocol: ftp
           dangerous-clean-slate: false

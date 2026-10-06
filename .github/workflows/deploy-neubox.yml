@@ -12,11 +12,15 @@ concurrency:
 
 jobs:
   web-deploy:
-    name: Desplegar en Neubox vía FTP
+    name: Desplegar y validar Portal 2
     runs-on: ubuntu-latest
     steps:
       - name: Checkout del Repositorio
         uses: actions/checkout@v4
+
+      - name: Crear prueba de despliegue
+        run: |
+          printf 'commit=%s\nrun=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > deploy-proof.txt
 
       - name: Sincronizar archivos por FTP a Neubox — intento 1
         id: ftp_attempt_1
@@ -61,3 +65,40 @@ jobs:
           server-dir: ./
           protocol: ftp
           dangerous-clean-slate: false
+
+      - name: Validar que portal2 publica exactamente este commit
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          BASE="https://portal2.ciarm.edu.mx"
+
+          fetch() {
+            curl -fsSL               --retry 8               --retry-delay 5               --retry-all-errors               --connect-timeout 10               --max-time 30               -H 'Cache-Control: no-cache'               "$1"
+          }
+
+          echo "1/4 Validando prueba de despliegue..."
+          PROOF="$(fetch "$BASE/deploy-proof.txt?sha=$EXPECTED_SHA")"
+          echo "$PROOF"
+          echo "$PROOF" | grep -F "commit=$EXPECTED_SHA"
+
+          echo "2/4 Validando entrypoint público..."
+          ROOT="$(fetch "$BASE/?sha=$EXPECTED_SHA")"
+          echo "$ROOT" | grep -F 'src/main-v1782.js?v=17.8.2'
+
+          echo "3/4 Validando estilos institucionales..."
+          CSS="$(fetch "$BASE/ciarm-theme.css?sha=$EXPECTED_SHA")"
+          echo "$CSS" | grep -F -- '--primary-color: #26487F;'
+          echo "$CSS" | grep -F -- '--gold-color: #C1B27E;'
+          echo "$CSS" | grep -F '.exact-card:hover'
+
+          echo "4/4 Validando módulo Voiceflow..."
+          VF="$(fetch "$BASE/src/components/dashboardVoiceflow-v1782.js?sha=$EXPECTED_SHA")"
+          echo "$VF" | grep -F "6a81e72529695cfeb738ad6e"
+          echo "$VF" | grep -F "mode: 'embedded'"
+          if echo "$VF" | grep -F "alert(" >/dev/null; then
+            echo "ERROR: el módulo público todavía contiene el chat simulado con alert()."
+            exit 1
+          fi
+
+          echo "VALIDACIÓN OK: portal2.ciarm.edu.mx publica el commit $EXPECTED_SHA con estilos CIARM y Voiceflow embebido."

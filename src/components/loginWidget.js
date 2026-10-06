@@ -44,7 +44,7 @@ export function renderLoginWidget(container, onLoginSuccess) {
   document.getElementById('btn-login-demo')?.addEventListener('click', () => {
     const demoUser = {
       nombre: 'Ezequiel Conesa',
-      correo: 'econesa@ciarm.edu.mx',
+      correo: 'e.conesa@ciarm.edu.mx',
       foto: '',
       token: 'demo-token'
     };

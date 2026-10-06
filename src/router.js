@@ -42,11 +42,11 @@ export async function handleRouting(userSession) {
 }
 
 window.addEventListener('hashchange', () => {
-  const mockUser = { nombre: 'Ezequiel Conesa', correo: 'econesa@ciarm.edu.mx' };
+  const mockUser = { nombre: 'Ezequiel Conesa', correo: 'e.conesa@ciarm.edu.mx' };
   handleRouting(mockUser);
 });
 
 window.addEventListener('DOMContentLoaded', () => {
-  const mockUser = { nombre: 'Ezequiel Conesa', correo: 'econesa@ciarm.edu.mx' };
+  const mockUser = { nombre: 'Ezequiel Conesa', correo: 'e.conesa@ciarm.edu.mx' };
   handleRouting(mockUser);
 });

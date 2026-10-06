@@ -1,6 +1,6 @@
 /**
  * Componente Mis Solicitudes - Portal CIARM
- * Versión: 17.10.1
+ * Versión: 17.10.5
  *
  * Fuente: BD - Sistema de Tickets / hoja TICKETS.
  * El listado se solicita por el correo de la sesión institucional y,
@@ -53,8 +53,29 @@ export async function renderMisSolicitudesWidget(container, userSession) {
 }
 
 async function fetchTicketsForUser(userEmail) {
+  const acceptedEmails = getTicketEmailAliases(userEmail);
+  const batches = await Promise.all(
+    acceptedEmails.map(email => fetchTicketsForExactEmail(email))
+  );
+
+  const byId = new Map();
+
+  batches
+    .flat()
+    .map(normalizeTicket)
+    .filter(ticket => !ticket.correo || acceptedEmails.includes(ticket.correo))
+    .forEach(ticket => {
+      if (ticket.id && !byId.has(ticket.id)) {
+        byId.set(ticket.id, ticket);
+      }
+    });
+
+  return [...byId.values()].sort(sortTicketsNewestFirst);
+}
+
+async function fetchTicketsForExactEmail(email) {
   const requestUrl =
-    `${GAS_WEBAPP_URL}?action=getTickets&email=${encodeURIComponent(userEmail)}&_t=${Date.now()}`;
+    `${GAS_WEBAPP_URL}?action=getTickets&email=${encodeURIComponent(email)}&_t=${Date.now()}`;
 
   const response = await fetch(requestUrl, {
     method: 'GET',
@@ -74,25 +95,24 @@ async function fetchTicketsForUser(userEmail) {
     throw new Error(payload.message || 'El backend devolvió un error.');
   }
 
-  let rawTickets = [];
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.tickets)) return payload.tickets;
+  return [];
+}
 
-  if (Array.isArray(payload)) {
-    rawTickets = payload;
-  } else if (Array.isArray(payload?.data)) {
-    rawTickets = payload.data;
-  } else if (Array.isArray(payload?.tickets)) {
-    rawTickets = payload.tickets;
+function getTicketEmailAliases(userEmail) {
+  const normalized = String(userEmail || '').trim().toLowerCase();
+
+  if (normalized === 'e.conesa@ciarm.edu.mx') {
+    return ['e.conesa@ciarm.edu.mx', 'econesa@ciarm.edu.mx'];
   }
 
-  return rawTickets
-    .map(normalizeTicket)
-    .filter(ticket => {
-      // Si el backend incluye correo en el registro, exigimos que coincida
-      // exactamente con el usuario autenticado. Si no lo incluye, confiamos
-      // en el filtro server-side action=getTickets&email=...
-      return !ticket.correo || ticket.correo === userEmail;
-    })
-    .sort(sortTicketsNewestFirst);
+  if (normalized === 'econesa@ciarm.edu.mx') {
+    return ['econesa@ciarm.edu.mx', 'e.conesa@ciarm.edu.mx'];
+  }
+
+  return [normalized];
 }
 
 function parsePayload(text) {

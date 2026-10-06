@@ -117,10 +117,10 @@ jobs:
 
           CODE="$(get "$BASE/?sha=$EXPECTED_SHA" /tmp/root.html || echo 000)"
           echo "root HTTP=$CODE"
-          if [ "$CODE" = "200" ] && grep -F 'src/main-v1782.js?v=17.10.4' /tmp/root.html >/dev/null; then
-            echo "OK: el sitio público usa el entrypoint v17.10.4."
+          if [ "$CODE" = "200" ] && grep -F 'src/main-v1782.js?v=17.10.5' /tmp/root.html >/dev/null; then
+            echo "OK: el sitio público usa el entrypoint v17.10.5."
           else
-            echo "ERROR: el sitio público NO usa el entrypoint v17.10.4."
+            echo "ERROR: el sitio público NO usa el entrypoint v17.10.5."
             ERRORS=1
           fi
 

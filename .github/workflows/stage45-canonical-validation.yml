@@ -1,0 +1,34 @@
+name: Stage 4.5 Canonical Email Validation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/stage45-canonical-validation.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Crear ticket con correo canónico DM03
+        env:
+          API_URL: https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec
+        run: |
+          set -euo pipefail
+          MARKER="SMOKE-STAGE45-${GITHUB_RUN_ID}"
+          cat > /tmp/payload.json <<JSON
+          {
+            "solicitante": "Ezequiel Conesa",
+            "correo": "e.conesa@ciarm.edu.mx",
+            "tipo": "Soporte Tecnológico / TI",
+            "descripcion": "$MARKER",
+            "prioridad": "🟢 Normal",
+            "fechaProgramada": "",
+            "adjuntos": []
+          }
+          JSON
+
+          curl -sS             --retry 2 --retry-delay 2 --retry-all-errors             --connect-timeout 10 --max-time 60             --data-urlencode 'postData@/tmp/payload.json'             "$API_URL"             -o /tmp/response.txt || true
+
+          echo "marker=$MARKER"

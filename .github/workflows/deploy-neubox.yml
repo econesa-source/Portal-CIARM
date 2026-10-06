@@ -117,10 +117,10 @@ jobs:
 
           CODE="$(get "$BASE/?sha=$EXPECTED_SHA" /tmp/root.html || echo 000)"
           echo "root HTTP=$CODE"
-          if [ "$CODE" = "200" ] && grep -F 'src/main-v1782.js?v=18.0.0' /tmp/root.html >/dev/null; then
-            echo "OK: el sitio público usa el entrypoint v18.0.0."
+          if [ "$CODE" = "200" ] && grep -F 'src/main-v1782.js?v=18.0.1' /tmp/root.html >/dev/null; then
+            echo "OK: el sitio público usa el entrypoint v18.0.1."
           else
-            echo "ERROR: el sitio público NO usa el entrypoint v18.0.0."
+            echo "ERROR: el sitio público NO usa el entrypoint v18.0.1."
             ERRORS=1
           fi
 
@@ -141,6 +141,7 @@ jobs:
           if [ "$CODE" = "200" ] && \
              grep -F '/auth-session.php' /tmp/auth-service.js >/dev/null && \
              grep -F '/auth-google.php' /tmp/auth-service.js >/dev/null && \
+             grep -F '202621439702-c0sm91am6s8pl8oi6v2245hk1md3bbea.apps.googleusercontent.com' /tmp/auth-service.js >/dev/null && \
              ! grep -F 'sessionStorage' /tmp/auth-service.js >/dev/null && \
              ! grep -F 'demo-token' /tmp/auth-service.js >/dev/null; then
             echo "OK: frontend usa sesión server-side y no identidad demo."

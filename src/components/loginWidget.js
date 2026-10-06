@@ -1,6 +1,6 @@
 /**
  * Componente de Login Institucional - Portal CIARM
- * Versión: 18.0.0
+ * Versión: 18.0.1
  */
 
 import {

@@ -1,13 +1,13 @@
 /**
  * Servicio de Autenticación y Sesión - Portal CIARM
- * Versión: 18.0.0
+ * Versión: 18.0.1
  *
  * La sesión real vive en PHP mediante cookie HttpOnly.
  * El navegador nunca persiste el ID token de Google.
  */
 
 export const GOOGLE_CLIENT_ID =
-  '202621439702-edb2e8j6hfnsm72po5n22eh63q27ee0d.apps.googleusercontent.com';
+  '202621439702-c0sm91am6s8pl8oi6v2245hk1md3bbea.apps.googleusercontent.com';
 
 let currentUser = null;
 

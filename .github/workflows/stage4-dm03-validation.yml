@@ -1,0 +1,50 @@
+name: Stage 4 DM03 Validation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/stage4-dm03-validation.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Crear ticket de prueba vía contrato real del Portal
+        env:
+          API_URL: https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec
+        run: |
+          set -euo pipefail
+          MARKER="SMOKE-STAGE4-DM03-${GITHUB_RUN_ID}"
+          cat > /tmp/payload.json <<JSON
+          {
+            "solicitante": "Ezequiel Conesa",
+            "correo": "econesa@ciarm.edu.mx",
+            "tipo": "Soporte Tecnológico / TI",
+            "descripcion": "$MARKER",
+            "prioridad": "🟢 Normal",
+            "fechaProgramada": "",
+            "adjuntos": [
+              {
+                "nombre": "stage4-dm03-smoke.png",
+                "mimeType": "image/png",
+                "base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+              }
+            ]
+          }
+          JSON
+
+          CODE="$(curl -sS -L             --retry 2 --retry-delay 2 --retry-all-errors             --connect-timeout 10 --max-time 90             -o /tmp/post-response.txt -w '%{http_code}'             --data-urlencode 'postData@/tmp/payload.json'             "$API_URL")"
+
+          echo "marker=$MARKER"
+          echo "post_http=$CODE"
+          echo "response_begin"
+          head -c 2000 /tmp/post-response.txt || true
+          echo
+          echo "response_end"
+
+          test "$CODE" = "200"
+          grep -F '"status":"success"' /tmp/post-response.txt >/dev/null
+          grep -F '"encontrado":true' /tmp/post-response.txt >/dev/null
+          grep -F '"area":"Administración"' /tmp/post-response.txt >/dev/null

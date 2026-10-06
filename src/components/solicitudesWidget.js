@@ -1,6 +1,6 @@
 /**
  * Componente Nueva Solicitud - Portal CIARM
- * Versión: 17.10.3
+ * Versión: 17.10.4
  */
 
 import { GAS_WEBAPP_URL } from '../services/apiClient.js';
@@ -149,14 +149,12 @@ export function renderSolicitudesWidget(container, userSession) {
       const beforeIds = new Set(beforeTickets.map(ticket => ticket.id).filter(Boolean));
 
       const ticketPayload = {
-        nombre_solicitante: user.nombre,
-        correo_solicitante: user.correo,
-        // Fase actual: identidad/área provienen de la sesión en duro. OAuth/DM03 se integrará después.
-        area_solicitante: user.area || 'General',
-        tipo_solicitud: selectTipo.value,
+        solicitante: user.nombre,
+        correo: user.correo,
+        tipo: selectTipo.value,
         descripcion,
-        urgencia: document.getElementById('prioridad').value.includes('Urgente') ? 'SI' : 'NO',
-        fecha_requerida: inputFecha.value || '',
+        prioridad: document.getElementById('prioridad').value,
+        fechaProgramada: inputFecha.value || '',
         adjuntos: attachments
       };
 
@@ -167,7 +165,7 @@ export function renderSolicitudesWidget(container, userSession) {
       const confirmedTicket = await waitForTicketConfirmation({
         email: user.correo,
         beforeIds,
-        tipo: ticketPayload.tipo_solicitud,
+        tipo: ticketPayload.tipo,
         descripcion: ticketPayload.descripcion,
         requireAttachments: attachments.length > 0
       });
@@ -251,9 +249,9 @@ function convertFileToBase64(file) {
     reader.onload = () => {
       const base64Data = reader.result.split(',')[1];
       resolve({
-        name: file.name,
+        nombre: file.name,
         mimeType: file.type,
-        base64Data
+        base64: base64Data
       });
     };
     reader.onerror = error => reject(error);
@@ -275,10 +273,7 @@ function submitTicketViaHiddenForm(ticketPayload) {
   const hiddenInput = document.createElement('input');
   hiddenInput.type = 'hidden';
   hiddenInput.name = 'postData';
-  hiddenInput.value = JSON.stringify({
-    action: 'createTicket',
-    payload: ticketPayload
-  });
+  hiddenInput.value = JSON.stringify(ticketPayload);
 
   form.appendChild(hiddenInput);
   document.body.appendChild(iframe);

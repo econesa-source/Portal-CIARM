@@ -1,8 +1,13 @@
-const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec';
+/**
+ * Componente Nueva Solicitud - Portal CIARM
+ * Versión: 17.5.1 (Endpoint Unificado y Catálogo Oficial de 5 Opciones)
+ */
 
-export function render(container, userSession) {
+export function renderSolicitudesWidget(container, userSession) {
   if (!container) return;
 
+  // URL OFICIAL VINCULADA A BD - SISTEMA DE TICKETS
+  const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA/exec';
   const user = userSession || { nombre: 'Ezequiel Conesa', correo: 'econesa@ciarm.edu.mx' };
 
   container.innerHTML = `
@@ -40,11 +45,12 @@ export function render(container, userSession) {
         <div>
           <label for="tipoSolicitud" style="display: block; font-size: 0.85rem; font-weight: 700; color: #0A192F; margin-bottom: 6px;">TIPO DE SERVICIO / ÁREA *</label>
           <select id="tipoSolicitud" name="tipoSolicitud" required style="width: 100%; padding: 12px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.9rem; background-color: #FFF; box-sizing: border-box;">
-            <option value="">-- Seleccione el área requerida --</option>
+            <option value="" disabled selected>-- Seleccione el área requerida --</option>
             <option value="Soporte Tecnológico / TI">Soporte Tecnológico / TI</option>
             <option value="Mantenimiento de Instalaciones">Mantenimiento de Instalaciones</option>
-            <option value="Limpieza e Intendencia">Limpieza e Intendencia</option>
-            <option value="Recursos Humanos / Admón">Recursos Humanos / Admón.</option>
+            <option value="Limpieza">Limpieza</option>
+            <option value="Intendencia">Intendencia</option>
+            <option value="RRHH / Admin">RRHH / Admin</option>
           </select>
         </div>
 
@@ -86,7 +92,7 @@ export function render(container, userSession) {
       </form>
 
       <div id="mensaje-estado-form" style="margin-top: 15px; display: none;"></div>
-      <iframe name="gas_target_iframe_v1652" id="gas_target_iframe_v1652" style="display: none;"></iframe>
+      <iframe name="gas_target_iframe_v1751" id="gas_target_iframe_v1751" style="display: none;"></iframe>
     </div>
   `;
 
@@ -95,7 +101,7 @@ export function render(container, userSession) {
   const inputFecha = document.getElementById('fechaProgramada');
 
   selectTipo?.addEventListener('change', (e) => {
-    if (e.target.value === 'Limpieza e Intendencia') {
+    if (e.target.value === 'Intendencia') {
       grupoFecha.style.display = 'block';
       inputFecha.setAttribute('required', 'required');
     } else {
@@ -105,38 +111,21 @@ export function render(container, userSession) {
     }
   });
 
-  const fileInput = document.getElementById('archivosAdjuntos');
-  const fileErrorMsg = document.getElementById('file-error-msg');
-
-  fileInput?.addEventListener('change', () => {
-    fileErrorMsg.innerText = '';
-    const files = Array.from(fileInput.files);
-
-    if (files.length > 5) {
-      fileErrorMsg.innerText = '⚠️ Límite superado: Únicamente se permite adjuntar un máximo de 5 archivos por solicitud.';
-      fileInput.value = '';
-      return;
-    }
-
-    const MAX_FILE_SIZE = 10 * 1024 * 1024;
-    const fileTooLarge = files.find(f => f.size > MAX_FILE_SIZE);
-    if (fileTooLarge) {
-      fileErrorMsg.innerText = `⚠️ El archivo "${fileTooLarge.name}" supera el tamaño máximo permitido de 10 MB.`;
-      fileInput.value = '';
-      return;
-    }
-  });
-
   const form = document.getElementById('form-solicitud-ciarm');
   form?.addEventListener('submit', async (e) => {
     e.preventDefault();
+
+    if (!selectTipo.value) {
+      alert("Por favor seleccione un Tipo de Servicio / Área válido.");
+      return;
+    }
 
     const btnSubmit = document.getElementById('btn-submit-solicitud');
     const msgEstado = document.getElementById('mensaje-estado-form');
 
     btnSubmit.disabled = true;
     btnSubmit.style.backgroundColor = '#64748B';
-    btnSubmit.innerText = '⏳ Procesando archivos y conectando con Google Workspace...';
+    btnSubmit.innerText = '⏳ Procesando requerimiento y conectando con Google Workspace...';
 
     msgEstado.style.display = 'block';
     msgEstado.style.background = '#EFF6FF';
@@ -144,32 +133,32 @@ export function render(container, userSession) {
     msgEstado.style.color = '#1E40AF';
     msgEstado.style.padding = '12px';
     msgEstado.style.borderRadius = '6px';
-    msgEstado.innerHTML = '<strong>Codificando adjuntos y transmitiendo a BD - Sistema de Tickets (HT05)...</strong>';
+    msgEstado.innerHTML = '<strong>Transmitiendo datos a BD - Sistema de Tickets (HT05)...</strong>';
 
     try {
+      const fileInput = document.getElementById('archivosAdjuntos');
       const files = Array.from(fileInput.files);
       const attachments = await Promise.all(files.map(file => convertFileToBase64(file)));
 
-      const ticketPayload = {
-        nombre_solicitante: user.nombre,
-        correo_solicitante: user.correo,
-        area_solicitante: user.area || 'General',
-        tipo_solicitud: selectTipo.value,
+      const payload = {
+        solicitante: user.nombre,
+        correo: user.correo,
+        tipo: selectTipo.value,
         descripcion: document.getElementById('descripcion').value,
-        urgencia: document.getElementById('prioridad').value.includes('Urgente') ? 'SI' : 'NO',
-        fecha_requerida: inputFecha.value || '',
+        prioridad: document.getElementById('prioridad').value,
+        fechaProgramada: inputFecha.value || '',
         adjuntos: attachments
       };
 
       const tempForm = document.createElement('form');
       tempForm.action = GAS_WEBAPP_URL;
       tempForm.method = 'POST';
-      tempForm.target = 'gas_target_iframe_v1652';
+      tempForm.target = 'gas_target_iframe_v1751';
 
       const hiddenInput = document.createElement('input');
       hiddenInput.type = 'hidden';
       hiddenInput.name = 'postData';
-      hiddenInput.value = JSON.stringify({ action: 'createTicket', payload: ticketPayload });
+      hiddenInput.value = JSON.stringify(payload);
 
       tempForm.appendChild(hiddenInput);
       document.body.appendChild(tempForm);
@@ -179,12 +168,12 @@ export function render(container, userSession) {
       msgEstado.style.background = '#ECFDF5';
       msgEstado.style.border = '1px solid #A7F3D0';
       msgEstado.style.color = '#065F46';
-      msgEstado.innerHTML = '<strong>✅ Solicitud enviada a Google Workspace.</strong> Redirigiendo a Mis Solicitudes...';
+      msgEstado.innerHTML = '<strong>✅ Solicitud registrada con éxito en Google Workspace.</strong> Redirigiendo a Mis Solicitudes...';
 
       setTimeout(() => {
         if (document.body.contains(tempForm)) document.body.removeChild(tempForm);
         window.location.hash = '#mis-solicitudes';
-      }, 3000);
+      }, 2500);
 
     } catch (err) {
       console.error('Error procesando solicitud:', err);
@@ -207,13 +196,13 @@ function convertFileToBase64(file) {
     reader.onload = () => {
       const base64Data = reader.result.split(',')[1];
       resolve({
-        name: file.name,
+        nombre: file.name,
         mimeType: file.type,
-        base64Data: base64Data
+        base64: base64Data
       });
     };
     reader.onerror = error => reject(error);
   });
 }
 
-export const renderSolicitudesWidget = render;
+export const render = renderSolicitudesWidget;

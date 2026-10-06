@@ -1,12 +1,12 @@
 /**
  * Portal CIARM - Router SPA y Guardián de Autenticación
- * Versión: 17.10.7
+ * Versión: 17.10.8
  */
 
 import { isLoggedIn, getUserSession, logout } from './services/authService.js';
 import { renderLoginWidget } from './components/loginWidget.js';
 
-const APP_VERSION = '17.10.7';
+const APP_VERSION = '17.10.8';
 
 const routes = {
   '#inicio': () => import(`./components/dashboardVoiceflow-v1782.js?v=${APP_VERSION}`),

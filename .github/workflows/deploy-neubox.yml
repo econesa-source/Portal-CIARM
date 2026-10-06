@@ -22,6 +22,20 @@ jobs:
         run: |
           printf 'commit=%s\nrun=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > deploy-proof.txt
 
+      - name: Diagnosticar raíz real de la cuenta FTP
+        env:
+          FTP_SERVER: ${{ secrets.NEUBOX_FTP_SERVER || 'portal2.ciarm.edu.mx' }}
+          FTP_USERNAME: ${{ secrets.NEUBOX_FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.NEUBOX_FTP_PASSWORD }}
+        run: |
+          set -u
+          echo "=== FTP / ==="
+          curl -sS --retry 4 --retry-delay 3 --retry-all-errors --connect-timeout 10 --max-time 30 \
+            --user "$FTP_USERNAME:$FTP_PASSWORD" --list-only "ftp://$FTP_SERVER/" || true
+          echo "=== FTP /portal2.ciarm.edu.mx/ ==="
+          curl -sS --retry 4 --retry-delay 3 --retry-all-errors --connect-timeout 10 --max-time 30 \
+            --user "$FTP_USERNAME:$FTP_PASSWORD" --list-only "ftp://$FTP_SERVER/portal2.ciarm.edu.mx/" || true
+
       - name: Sincronizar archivos por FTP a Neubox — intento 1
         id: ftp_attempt_1
         continue-on-error: true
@@ -30,7 +44,7 @@ jobs:
           server: ${{ secrets.NEUBOX_FTP_SERVER || 'portal2.ciarm.edu.mx' }}
           username: ${{ secrets.NEUBOX_FTP_USERNAME }}
           password: ${{ secrets.NEUBOX_FTP_PASSWORD }}
-          server-dir: /portal2.ciarm.edu.mx/
+          server-dir: ./
           protocol: ftp
           dangerous-clean-slate: false
 
@@ -47,7 +61,7 @@ jobs:
           server: ${{ secrets.NEUBOX_FTP_SERVER || 'portal2.ciarm.edu.mx' }}
           username: ${{ secrets.NEUBOX_FTP_USERNAME }}
           password: ${{ secrets.NEUBOX_FTP_PASSWORD }}
-          server-dir: /portal2.ciarm.edu.mx/
+          server-dir: ./
           protocol: ftp
           dangerous-clean-slate: false
 
@@ -62,7 +76,7 @@ jobs:
           server: ${{ secrets.NEUBOX_FTP_SERVER || 'portal2.ciarm.edu.mx' }}
           username: ${{ secrets.NEUBOX_FTP_USERNAME }}
           password: ${{ secrets.NEUBOX_FTP_PASSWORD }}
-          server-dir: /portal2.ciarm.edu.mx/
+          server-dir: ./
           protocol: ftp
           dangerous-clean-slate: false
 

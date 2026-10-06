@@ -1,7 +1,10 @@
 /**
  * Componente Nueva Solicitud - Portal CIARM
- * Versión: 17.6.0 (Envío Asíncrono Directo con Garantía de Persistencia en Sheets y Drive)
+ * Versión: 17.9.0
  */
+
+const MAX_FILES = 5;
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 export function renderSolicitudesWidget(container, userSession) {
   if (!container) return;
@@ -10,40 +13,32 @@ export function renderSolicitudesWidget(container, userSession) {
   const user = userSession || { nombre: 'Ezequiel Conesa', correo: 'econesa@ciarm.edu.mx' };
 
   container.innerHTML = `
-    <div class="card-container-wide">
-      
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #F1F5F9; padding-bottom: 12px;">
-        <a href="#inicio" style="color: #1B2B48; text-decoration: none; font-weight: 700; font-size: 0.9rem;">
-          ← Volver al Inicio
-        </a>
-        <a href="#mis-solicitudes" style="color: #C5A059; text-decoration: none; font-weight: 600; font-size: 0.85rem;">
-          📋 Ver Mis Solicitudes
-        </a>
+    <div class="card-container-wide solicitud-card">
+      <div class="solicitud-topbar">
+        <a href="#inicio" class="card-top-nav-link">← Volver al Inicio</a>
+        <a href="#mis-solicitudes" class="solicitud-secondary-link">📋 Ver Mis Solicitudes</a>
       </div>
 
-      <div style="margin-bottom: 24px;">
-        <h2 style="margin: 0 0 6px 0; color: #0A192F; font-size: 1.4rem;">➕ Nueva Solicitud de Pedido</h2>
-        <p style="margin: 0; color: #64748B; font-size: 0.88rem;">
-          Complete el formulario para registrar un requerimiento en la Base de Datos Institucional (HT05).
-        </p>
+      <div class="solicitud-heading">
+        <h2>➕ Nueva Solicitud de Pedido</h2>
+        <p>Complete el formulario para registrar un requerimiento en la Base de Datos Institucional (HT05).</p>
       </div>
 
-      <form id="form-solicitud-ciarm" style="display: flex; flex-direction: column; gap: 20px;">
-        
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; background: #F8FAFC; padding: 16px; border-radius: 6px; border: 1px solid #E2E8F0;">
-          <div>
-            <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #475569; margin-bottom: 4px;">SOLICITANTE INSTITUCIONAL</label>
-            <input type="text" id="solicitanteNombre" value="${user.nombre}" readonly style="width: 100%; padding: 10px; border: 1px solid #CBD5E1; border-radius: 4px; background: #E2E8F0; color: #1E293B; font-weight: 600; box-sizing: border-box;" />
+      <form id="form-solicitud-ciarm" class="solicitud-form">
+        <div class="solicitud-identity">
+          <div class="solicitud-field">
+            <label>SOLICITANTE INSTITUCIONAL</label>
+            <input type="text" id="solicitanteNombre" value="${user.nombre}" readonly />
           </div>
-          <div>
-            <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #475569; margin-bottom: 4px;">CORREO CORPORATIVO</label>
-            <input type="email" id="correoSolicitante" value="${user.correo}" readonly style="width: 100%; padding: 10px; border: 1px solid #CBD5E1; border-radius: 4px; background: #E2E8F0; color: #1E293B; font-weight: 600; box-sizing: border-box;" />
+          <div class="solicitud-field">
+            <label>CORREO CORPORATIVO</label>
+            <input type="email" id="correoSolicitante" value="${user.correo}" readonly />
           </div>
         </div>
 
-        <div>
-          <label for="tipoSolicitud" style="display: block; font-size: 0.85rem; font-weight: 700; color: #0A192F; margin-bottom: 6px;">TIPO DE SERVICIO / ÁREA *</label>
-          <select id="tipoSolicitud" name="tipoSolicitud" required style="width: 100%; padding: 12px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.9rem; background-color: #FFF; box-sizing: border-box;">
+        <div class="solicitud-field">
+          <label for="tipoSolicitud">TIPO DE SERVICIO / ÁREA *</label>
+          <select id="tipoSolicitud" name="tipoSolicitud" required>
             <option value="" disabled selected>-- Seleccione el área requerida --</option>
             <option value="Soporte Tecnológico / TI">Soporte Tecnológico / TI</option>
             <option value="Mantenimiento de Instalaciones">Mantenimiento de Instalaciones</option>
@@ -53,59 +48,68 @@ export function renderSolicitudesWidget(container, userSession) {
           </select>
         </div>
 
-        <div id="grupo-fecha-programada" style="display: none; background: #FFFBEB; border: 2px solid #F59E0B; padding: 16px; border-radius: 6px; transition: all 0.3s ease;">
-          <label for="fechaProgramada" style="display: block; font-size: 0.85rem; font-weight: 700; color: #92400E; margin-bottom: 6px;">
-            📅 FECHA PROGRAMADA DE ENTREGA / EVENTO (REQUERIDO PARA INTENDENCIA) *
-          </label>
-          <small style="display: block; color: #B45309; font-size: 0.8rem; margin-bottom: 8px;">
-            Especifique la fecha exacta en la que se requiere listo el servicio de intendencia o logística para eventos.
-          </small>
-          <input type="date" id="fechaProgramada" name="fechaProgramada" style="width: 100%; padding: 10px; border: 1px solid #FCD34D; border-radius: 4px; font-size: 0.9rem; box-sizing: border-box;" />
-        </div>
-
-        <div>
-          <label for="prioridad" style="display: block; font-size: 0.85rem; font-weight: 700; color: #0A192F; margin-bottom: 6px;">PRIORIDAD REQUERIDA *</label>
-          <select id="prioridad" name="prioridad" required style="width: 100%; padding: 12px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.9rem; background-color: #FFF; box-sizing: border-box;">
+        <div class="solicitud-field">
+          <label for="prioridad">PRIORIDAD REQUERIDA *</label>
+          <select id="prioridad" name="prioridad" required>
             <option value="🟢 Normal">🟢 Normal (Atención regular)</option>
             <option value="🔴 Urgente">🔴 Urgente (Afecta operación inmediata)</option>
           </select>
         </div>
 
-        <div>
-          <label for="descripcion" style="display: block; font-size: 0.85rem; font-weight: 700; color: #0A192F; margin-bottom: 6px;">DESCRIPCIÓN DETALLADA *</label>
-          <textarea id="descripcion" name="descripcion" rows="4" required placeholder="Describa claramente el requerimiento o falla detectada..." style="width: 100%; padding: 12px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.9rem; box-sizing: border-box; resize: vertical;"></textarea>
+        <div id="grupo-fecha-programada" class="solicitud-date-field">
+          <label for="fechaProgramada">📅 FECHA PROGRAMADA DE ENTREGA / EVENTO *</label>
+          <small>Requerido para Intendencia o logística de eventos.</small>
+          <input type="date" id="fechaProgramada" name="fechaProgramada" />
         </div>
 
-        <div>
-          <label style="display: block; font-size: 0.85rem; font-weight: 700; color: #0A192F; margin-bottom: 6px;">ARCHIVOS ADJUNTOS (MÁXIMO 5 ARCHIVOS, HASTA 10MB C/U)</label>
-          <input type="file" id="archivosAdjuntos" multiple accept="image/*,.pdf,.doc,.docx" style="width: 100%; padding: 10px; border: 1px solid #CBD5E1; border-radius: 6px; background-color: #F8FAFC; box-sizing: border-box;" />
-          <small id="file-error-msg" style="color: #D32F2F; font-size: 0.8rem; display: block; margin-top: 4px; font-weight: 600;"></small>
+        <div class="solicitud-field solicitud-description">
+          <label for="descripcion">DESCRIPCIÓN DETALLADA *</label>
+          <textarea id="descripcion" name="descripcion" rows="3" required placeholder="Describa claramente el requerimiento o falla detectada..."></textarea>
         </div>
 
-        <div style="margin-top: 10px;">
-          <button type="submit" id="btn-submit-solicitud" style="width: 100%; background-color: #0A192F; color: #FFF; border: none; padding: 14px; border-radius: 6px; font-size: 1rem; font-weight: 700; cursor: pointer; transition: background-color 0.2s ease;">
+        <div class="solicitud-field solicitud-files">
+          <label for="archivosAdjuntos">ARCHIVOS ADJUNTOS (MÁX. 5 · 10 MB C/U)</label>
+          <input type="file" id="archivosAdjuntos" multiple accept="image/*,.pdf,.doc,.docx" />
+          <div id="solicitud-file-list" class="solicitud-file-list" aria-live="polite"></div>
+          <small id="file-error-msg" class="solicitud-file-error"></small>
+        </div>
+
+        <div class="solicitud-submit-row">
+          <button type="submit" id="btn-submit-solicitud" class="solicitud-submit-btn">
             🚀 Registrar Solicitud en HT05
           </button>
         </div>
-
       </form>
 
-      <div id="mensaje-estado-form" style="margin-top: 15px; display: none;"></div>
+      <div id="mensaje-estado-form" class="solicitud-status"></div>
     </div>
   `;
 
   const selectTipo = document.getElementById('tipoSolicitud');
   const grupoFecha = document.getElementById('grupo-fecha-programada');
   const inputFecha = document.getElementById('fechaProgramada');
+  const fileInput = document.getElementById('archivosAdjuntos');
+  const fileList = document.getElementById('solicitud-file-list');
+  const fileError = document.getElementById('file-error-msg');
 
   selectTipo?.addEventListener('change', (e) => {
     if (e.target.value === 'Intendencia') {
-      grupoFecha.style.display = 'block';
+      grupoFecha.classList.add('is-visible');
       inputFecha.setAttribute('required', 'required');
     } else {
-      grupoFecha.style.display = 'none';
+      grupoFecha.classList.remove('is-visible');
       inputFecha.removeAttribute('required');
       inputFecha.value = '';
+    }
+  });
+
+  fileInput?.addEventListener('change', () => {
+    const files = Array.from(fileInput.files || []);
+    renderSelectedFiles(files, fileList, fileError);
+
+    const invalid = validateFiles(files);
+    if (invalid) {
+      fileError.textContent = invalid;
     }
   });
 
@@ -114,7 +118,14 @@ export function renderSolicitudesWidget(container, userSession) {
     e.preventDefault();
 
     if (!selectTipo.value) {
-      alert("Por favor seleccione un Tipo de Servicio / Área válido.");
+      alert('Por favor seleccione un Tipo de Servicio / Área válido.');
+      return;
+    }
+
+    const files = Array.from(fileInput?.files || []);
+    const fileValidationError = validateFiles(files);
+    if (fileValidationError) {
+      fileError.textContent = fileValidationError;
       return;
     }
 
@@ -122,20 +133,12 @@ export function renderSolicitudesWidget(container, userSession) {
     const msgEstado = document.getElementById('mensaje-estado-form');
 
     btnSubmit.disabled = true;
-    btnSubmit.style.backgroundColor = '#64748B';
-    btnSubmit.innerText = '⏳ Procesando requerimiento y conectando con Google Workspace...';
+    btnSubmit.textContent = '⏳ Procesando y conectando con Google Workspace...';
 
-    msgEstado.style.display = 'block';
-    msgEstado.style.background = '#EFF6FF';
-    msgEstado.style.border = '1px solid #BFDBFE';
-    msgEstado.style.color = '#1E40AF';
-    msgEstado.style.padding = '12px';
-    msgEstado.style.borderRadius = '6px';
+    msgEstado.className = 'solicitud-status is-visible is-loading';
     msgEstado.innerHTML = '<strong>Transmitiendo datos a BD - Sistema de Tickets (HT05)...</strong>';
 
     try {
-      const fileInput = document.getElementById('archivosAdjuntos');
-      const files = Array.from(fileInput.files);
       const attachments = await Promise.all(files.map(file => convertFileToBase64(file)));
 
       const payload = {
@@ -148,7 +151,6 @@ export function renderSolicitudesWidget(container, userSession) {
         adjuntos: attachments
       };
 
-      // Envío POST asíncrono no-cors garantizado hacia Google Apps Script
       await fetch(GAS_WEBAPP_URL, {
         method: 'POST',
         mode: 'no-cors',
@@ -158,9 +160,7 @@ export function renderSolicitudesWidget(container, userSession) {
         body: JSON.stringify(payload)
       });
 
-      msgEstado.style.background = '#ECFDF5';
-      msgEstado.style.border = '1px solid #A7F3D0';
-      msgEstado.style.color = '#065F46';
+      msgEstado.className = 'solicitud-status is-visible is-success';
       msgEstado.innerHTML = '<strong>✅ Solicitud registrada con éxito en Google Workspace.</strong> Redirigiendo a Mis Solicitudes...';
 
       setTimeout(() => {
@@ -170,15 +170,58 @@ export function renderSolicitudesWidget(container, userSession) {
     } catch (err) {
       console.error('Error procesando solicitud:', err);
       btnSubmit.disabled = false;
-      btnSubmit.style.backgroundColor = '#0A192F';
-      btnSubmit.innerText = '🚀 Registrar Solicitud en HT05';
+      btnSubmit.textContent = '🚀 Registrar Solicitud en HT05';
 
-      msgEstado.style.background = '#FFEBEE';
-      msgEstado.style.border = '1px solid #FFCDD2';
-      msgEstado.style.color = '#D32F2F';
+      msgEstado.className = 'solicitud-status is-visible is-error';
       msgEstado.innerHTML = `<strong>⚠️ Error al procesar solicitud:</strong> ${err.message}`;
     }
   });
+}
+
+function validateFiles(files) {
+  if (files.length > MAX_FILES) {
+    return `Podés adjuntar hasta ${MAX_FILES} archivos. Actualmente seleccionaste ${files.length}.`;
+  }
+
+  const oversized = files.find(file => file.size > MAX_FILE_SIZE);
+  if (oversized) {
+    return `“${oversized.name}” supera el máximo permitido de 10 MB.`;
+  }
+
+  return '';
+}
+
+function renderSelectedFiles(files, container, errorContainer) {
+  if (!container) return;
+
+  if (errorContainer) errorContainer.textContent = '';
+
+  if (!files.length) {
+    container.innerHTML = '<span class="solicitud-file-empty">No hay archivos seleccionados.</span>';
+    return;
+  }
+
+  container.innerHTML = files.map(file => `
+    <div class="solicitud-file-item" title="${escapeHtml(file.name)}">
+      <span class="solicitud-file-name">📎 ${escapeHtml(file.name)}</span>
+      <span class="solicitud-file-size">${formatFileSize(file.size)}</span>
+    </div>
+  `).join('');
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
 
 function convertFileToBase64(file) {

@@ -1,15 +1,15 @@
 /**
  * Portal CIARM - Router SPA y Guardián de Autenticación
- * Versión: 17.8.2
+ * Versión: 17.9.0
  */
 
 import { isLoggedIn, getUserSession, logout } from './services/authService.js';
 import { renderLoginWidget } from './components/loginWidget.js';
 
-const APP_VERSION = '17.8.2';
+const APP_VERSION = '17.9.0';
 
 const routes = {
-  '#inicio': () => import(`./components/dashboardVoiceflow-v1782.js`),
+  '#inicio': () => import(`./components/dashboardVoiceflow-v1782.js?v=${APP_VERSION}`),
   '#solicitudes': () => import(`./components/solicitudesWidget.js?v=${APP_VERSION}`),
   '#mis-solicitudes': () => import(`./components/misSolicitudesWidget.js?v=${APP_VERSION}`)
 };
@@ -64,6 +64,9 @@ async function router() {
   }
 
   const hash = window.location.hash || '#inicio';
+
+  // Ajustar el layout al tipo de vista.
+  mainContainer.classList.toggle('solicitud-screen', hash === '#solicitudes');
 
   // Actualizar clase active en el Sidebar
   document.querySelectorAll('.sidebar-nav a').forEach(link => {

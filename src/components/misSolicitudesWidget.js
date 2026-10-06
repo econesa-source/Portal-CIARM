@@ -1,9 +1,4 @@
-/**
- * Componente Mis Solicitudes - Portal CIARM
- * Versión: 16.6.1 (Consulta Dinámica en Vivo con NUEVA URL Sincronizada)
- */
-
-import { GAS_WEBAPP_URL } from '../services/apiClient.js';
+const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec';
 
 export function renderMisSolicitudesWidget(container, userSession) {
   if (!container) return;

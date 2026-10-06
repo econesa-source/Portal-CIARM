@@ -1,4 +1,4 @@
-import { GAS_WEBAPP_URL } from '../services/apiClient.js';
+const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec';
 
 export function render(container, userSession) {
   if (!container) return;

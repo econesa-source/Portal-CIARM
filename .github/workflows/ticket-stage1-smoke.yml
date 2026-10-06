@@ -1,4 +1,4 @@
-name: Ticket Stage 4 DM03 Smoke
+name: Ticket Stage 3 Frontend Contract Smoke
 
 on:
   push:
@@ -11,27 +11,54 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Verificar consulta DM03 desde WebApp activa
+      - name: Reproducir envío del Portal y confirmar por lectura
         env:
           API_URL: https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec
         run: |
           set -euo pipefail
-          curl -fsSL             --retry 3 --retry-delay 2 --retry-all-errors             --connect-timeout 10 --max-time 60             "$API_URL?action=getUserContext&email=e.conesa%40ciarm.edu.mx&_t=$(date +%s)"             -o /tmp/context.json
+          MARKER="SMOKE-STAGE3-${GITHUB_RUN_ID}"
+          cat > /tmp/payload.json <<JSON
+          {
+            "solicitante": "Ezequiel Conesa",
+            "correo": "econesa@ciarm.edu.mx",
+            "tipo": "Soporte Tecnológico / TI",
+            "descripcion": "$MARKER",
+            "prioridad": "🟢 Normal",
+            "fechaProgramada": "",
+            "adjuntos": [
+              {
+                "nombre": "stage3-smoke.png",
+                "mimeType": "image/png",
+                "base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+              }
+            ]
+          }
+          JSON
 
-          TYPE="$(jq -r 'type' /tmp/context.json 2>/dev/null || echo invalid)"
-          STATUS="$(jq -r 'if type=="object" then (.status // "") else "" end' /tmp/context.json 2>/dev/null || true)"
-          AUTH="$(jq -r 'if type=="object" then (.data.autorizado // false) else false end' /tmp/context.json 2>/dev/null || true)"
-          HAS_NAME="$(jq -r 'if type=="object" and (.data.nombre? | type)=="string" and (.data.nombre|length)>0 then "yes" else "no" end' /tmp/context.json 2>/dev/null || true)"
-          HAS_AREA="$(jq -r 'if type=="object" and (.data.area? | type)=="string" and (.data.area|length)>0 then "yes" else "no" end' /tmp/context.json 2>/dev/null || true)"
-          REASON="$(jq -r 'if type=="object" then (.data.reason // .message // "") else "" end' /tmp/context.json 2>/dev/null || true)"
+          # Mismo mecanismo del frontend: form-urlencoded, parámetro postData.
+          CODE="$(curl -sS             --retry 2 --retry-delay 2 --retry-all-errors             --connect-timeout 10 --max-time 60             -o /tmp/post-response.txt -w '%{http_code}'             --data-urlencode 'postData@/tmp/payload.json'             "$API_URL" || true)"
+          echo "post_http=$CODE marker=$MARKER"
 
-          echo "type=$TYPE status=$STATUS authorized=$AUTH has_name=$HAS_NAME has_area=$HAS_AREA"
-          if [ "$AUTH" != "true" ]; then
-            echo "reason=$REASON"
-          fi
+          FOUND=0
+          for i in $(seq 1 12); do
+            sleep 2
+            if curl -fsSL               --connect-timeout 10 --max-time 30               "$API_URL?action=getTickets&email=econesa%40ciarm.edu.mx&_t=$(date +%s)"               -o /tmp/tickets.json; then
+              if jq -e --arg m "$MARKER" '
+                if type=="array" then
+                  any(.[]; (.desc // .descripcion // "") == $m and
+                           (.tipo // .tipo_solicitud // "") == "Soporte Tecnológico / TI" and
+                           ((.driveUrl // .adjuntos_urls // "") | contains("drive.google.com/file")))
+                elif ((.data? | type)=="array") then
+                  any(.data[]; (.desc // .descripcion // "") == $m and
+                               (.tipo // .tipo_solicitud // "") == "Soporte Tecnológico / TI" and
+                               ((.driveUrl // .adjuntos_urls // "") | contains("drive.google.com/file")))
+                else false end
+              ' /tmp/tickets.json >/dev/null; then
+                FOUND=1
+                break
+              fi
+            fi
+          done
 
-          test "$TYPE" = "object"
-          test "$STATUS" = "success"
-          test "$AUTH" = "true"
-          test "$HAS_NAME" = "yes"
-          test "$HAS_AREA" = "yes"
+          echo "confirmed=$FOUND"
+          test "$FOUND" = "1"

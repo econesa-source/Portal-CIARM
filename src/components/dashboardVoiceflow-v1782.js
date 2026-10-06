@@ -1,6 +1,6 @@
 /**
  * Módulo de Inicio - Dashboard Oficial CIARM
- * Versión: 17.10.7
+ * Versión: 17.10.8
  */
 
 const VOICEFLOW_PROJECT_ID = '6a81e72529695cfeb738ad6e';
@@ -110,7 +110,7 @@ export function render(container, userSession) {
           <span class="exact-card-category">BIBLIOTECA CIARM</span>
           <h3 class="exact-card-title">Libros y Papers</h3>
           <p class="exact-card-desc">Busca bibliografía académica, consulta fuentes y propón o inicia una investigación.</p>
-          <a href="#inicio" class="exact-btn light">Acceder a Biblioteca</a>
+          <span class="exact-btn light exact-btn-disabled" aria-disabled="true">Acceder a Biblioteca</span>
         </div>
 
         <!-- Tarjeta 3: Normas y herramientas -->
@@ -126,7 +126,7 @@ export function render(container, userSession) {
           <span class="exact-card-category">COMUNICACIÓN INSTITUCIONAL</span>
           <h3 class="exact-card-title">Comunicados</h3>
           <p class="exact-card-desc">Consulta avisos, novedades y comunicaciones institucionales relevantes para tu función.</p>
-          <a href="#inicio" class="exact-btn light">Ver Comunicados</a>
+          <span class="exact-btn light exact-btn-disabled" aria-disabled="true">Ver Comunicados</span>
         </div>
 
         <!-- Tarjeta 5: Administración -->
@@ -134,7 +134,7 @@ export function render(container, userSession) {
           <span class="exact-card-category">SIGCOE - SISTEMA DE CONTROL DE GESTIÓN</span>
           <h3 class="exact-card-title">Administración</h3>
           <p class="exact-card-desc">Órdenes de compra, reportes y herramientas administrativas habilitadas para tu perfil.</p>
-          <a href="#inicio" class="exact-btn light">Gestión Administrativa</a>
+          <span class="exact-btn light exact-btn-disabled" aria-disabled="true">Gestión Administrativa</span>
         </div>
 
         <!-- Tarjeta 6: IB -->
@@ -142,7 +142,7 @@ export function render(container, userSession) {
           <span class="exact-card-category">BACHILLERATO INTERNACIONAL</span>
           <h3 class="exact-card-title">IB</h3>
           <p class="exact-card-desc">Accede a documentación, programas, recursos y herramientas correspondientes a tu función.</p>
-          <a href="#inicio" class="exact-btn light">Acceso Módulo IB</a>
+          <span class="exact-btn light exact-btn-disabled" aria-disabled="true">Acceso Módulo IB</span>
         </div>
 
       </div>

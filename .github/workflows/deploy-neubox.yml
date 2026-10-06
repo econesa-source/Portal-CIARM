@@ -117,10 +117,10 @@ jobs:
 
           CODE="$(get "$BASE/?sha=$EXPECTED_SHA" /tmp/root.html || echo 000)"
           echo "root HTTP=$CODE"
-          if [ "$CODE" = "200" ] && grep -F 'src/main-v1782.js?v=17.10.8' /tmp/root.html >/dev/null; then
-            echo "OK: el sitio público usa el entrypoint v17.10.8."
+          if [ "$CODE" = "200" ] && grep -F 'src/main-v1782.js?v=18.0.0' /tmp/root.html >/dev/null; then
+            echo "OK: el sitio público usa el entrypoint v18.0.0."
           else
-            echo "ERROR: el sitio público NO usa el entrypoint v17.10.8."
+            echo "ERROR: el sitio público NO usa el entrypoint v18.0.0."
             ERRORS=1
           fi
 
@@ -131,6 +131,63 @@ jobs:
             echo "OK: sidebar sin vínculos incorrectos; solo Inicio queda navegable entre esos accesos."
           else
             echo "ERROR: el sidebar conserva vínculos semánticamente incorrectos."
+            ERRORS=1
+          fi
+
+          echo "=== VALIDACIÓN AUTENTICACIÓN REAL ==="
+
+          CODE="$(get "$BASE/src/services/authService.js?sha=$EXPECTED_SHA" /tmp/auth-service.js || echo 000)"
+          echo "authService.js HTTP=$CODE"
+          if [ "$CODE" = "200" ] && \
+             grep -F '/auth-session.php' /tmp/auth-service.js >/dev/null && \
+             grep -F '/auth-google.php' /tmp/auth-service.js >/dev/null && \
+             ! grep -F 'sessionStorage' /tmp/auth-service.js >/dev/null && \
+             ! grep -F 'demo-token' /tmp/auth-service.js >/dev/null; then
+            echo "OK: frontend usa sesión server-side y no identidad demo."
+          else
+            echo "ERROR: authService no corresponde al flujo real esperado."
+            ERRORS=1
+          fi
+
+          CODE="$(get "$BASE/src/components/loginWidget.js?sha=$EXPECTED_SHA" /tmp/login-widget.js || echo 000)"
+          echo "loginWidget.js HTTP=$CODE"
+          if [ "$CODE" = "200" ] && \
+             grep -F 'GOOGLE_CLIENT_ID' /tmp/login-widget.js >/dev/null && \
+             grep -F 'authenticateGoogleCredential' /tmp/login-widget.js >/dev/null && \
+             ! grep -F 'btn-login-demo' /tmp/login-widget.js >/dev/null; then
+            echo "OK: login real de Google está publicado."
+          else
+            echo "ERROR: loginWidget todavía no usa Google Identity Services real."
+            ERRORS=1
+          fi
+
+          CODE="$(get "$BASE/auth-session.php?sha=$EXPECTED_SHA" /tmp/auth-session.json || echo 000)"
+          echo "auth-session.php HTTP=$CODE"
+          if [ "$CODE" = "401" ] && grep -F '"not_authenticated"' /tmp/auth-session.json >/dev/null; then
+            echo "OK: endpoint de sesión PHP ejecuta y deniega sesión inexistente."
+          else
+            echo "ERROR: auth-session.php no está ejecutándose como endpoint PHP."
+            ERRORS=1
+          fi
+
+          CODE="$(curl -sS -L --connect-timeout 10 --max-time 30 \
+            -H 'Content-Type: application/json' \
+            -d '{"credential":"invalid-ciarm-smoke"}' \
+            -o /tmp/auth-google.json -w '%{http_code}' "$BASE/auth-google.php?sha=$EXPECTED_SHA" || echo 000)"
+          echo "auth-google.php invalid credential HTTP=$CODE"
+          if [ "$CODE" = "401" ] && grep -F '"invalid_google_credential"' /tmp/auth-google.json >/dev/null; then
+            echo "OK: backend PHP valida credencial con Google y rechaza token inválido."
+          else
+            echo "ERROR: auth-google.php no pudo validar el flujo Google."
+            ERRORS=1
+          fi
+
+          CODE="$(get "$BASE/auth-dm03-health.php?sha=$EXPECTED_SHA" /tmp/auth-dm03-health.json || echo 000)"
+          echo "auth-dm03-health.php HTTP=$CODE"
+          if [ "$CODE" = "200" ] && grep -F '"ok":true' /tmp/auth-dm03-health.json >/dev/null; then
+            echo "OK: backend PHP puede leer DM03 con la cuenta de servicio."
+          else
+            echo "ERROR: backend PHP no puede leer DM03 o la credencial privada no está disponible."
             ERRORS=1
           fi
 
@@ -186,7 +243,7 @@ jobs:
           echo "=== VALIDACIÓN BACKEND DE TICKETS ==="
           GAS_URL='https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec'
           if curl -fsSL --retry 4 --retry-delay 3 --retry-all-errors \
-               "$GAS_URL?action=getTickets&email=econesa%40ciarm.edu.mx&_t=$(date +%s)" \
+               "$GAS_URL?action=getTickets&email=e.conesa%40ciarm.edu.mx&_t=$(date +%s)" \
                -o /tmp/tickets-api.json; then
             TYPE="$(jq -r 'type' /tmp/tickets-api.json 2>/dev/null || echo invalid)"
             STATUS="$(jq -r 'if type=="object" then (.status // "") else "" end' /tmp/tickets-api.json 2>/dev/null || true)"

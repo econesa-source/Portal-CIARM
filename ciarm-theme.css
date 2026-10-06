@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Portal CIARM - Hoja de Estilos Institucionales (v13.1.0)
+   Portal CIARM - Hoja de Estilos Institucionales (v17.7.0)
    ========================================================================== */
 
 :root {
@@ -83,10 +83,10 @@ body {
   font-size: 0.9rem;
 }
 
-.sidebar-nav a.active, 
+.sidebar-nav a.active,
 .sidebar-nav a:hover {
-  background-color: #1E293B;
-  color: var(--gold-color);
+  background-color: #1F3A66;
+  color: #FFFFFF;
 }
 
 /* Contenido Principal */
@@ -203,10 +203,10 @@ body {
 }
 
 .assistant-chat-box {
-  background: #1E293B;
+  background: #1F3A66;
   border-radius: 8px;
   padding: 16px;
-  border: 1px solid #334155;
+  border: 1px solid rgba(255,255,255,0.14);
 }
 
 .assistant-chat-history {
@@ -276,6 +276,23 @@ body {
   flex-direction: column;
   justify-content: space-between;
   box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  transition: transform 0.20s ease, box-shadow 0.20s ease, border-color 0.20s ease;
+}
+
+.exact-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 24px rgba(38,72,127,0.16);
+  border-color: rgba(193,178,126,0.75);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exact-card {
+    transition: box-shadow 0.20s ease, border-color 0.20s ease;
+  }
+
+  .exact-card:hover {
+    transform: none;
+  }
 }
 
 .exact-card-category {
@@ -337,8 +354,21 @@ body {
   border: 1px solid #E2E8F0;
 }
 
+.exact-btn:hover {
+  transform: translateY(-1px);
+}
+
+.exact-btn.dark:hover {
+  filter: brightness(0.94);
+}
+
+.exact-btn.gold:hover {
+  filter: brightness(0.96);
+}
+
 .exact-btn.light:hover {
   background-color: #F1F5F9;
+  border-color: var(--gold-color);
 }
 
 /* ==========================================================================

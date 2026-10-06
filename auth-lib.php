@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+// Portal CIARM Auth Backend v18.0.0
+
 const CIARM_GOOGLE_CLIENT_ID = '202621439702-edb2e8j6hfnsm72po5n22eh63q27ee0d.apps.googleusercontent.com';
 const CIARM_ALLOWED_DOMAIN = 'ciarm.edu.mx';
 const CIARM_DM03_SPREADSHEET_ID = '1h14cqmHseHSN3FzrEtK_AwVimzDGkz9qx8LcGBCQuDY';

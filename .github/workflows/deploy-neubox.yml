@@ -84,35 +84,76 @@ jobs:
         env:
           EXPECTED_SHA: ${{ github.sha }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           BASE="https://portal2.ciarm.edu.mx"
+          ERRORS=0
 
-          fetch() {
-            curl -fsSL               --retry 8               --retry-delay 5               --retry-all-errors               --connect-timeout 10               --max-time 30               -H 'Cache-Control: no-cache'               "$1"
+          get() {
+            local url="$1"
+            local out="$2"
+            curl -sS -L \
+              --retry 4 \
+              --retry-delay 3 \
+              --retry-all-errors \
+              --connect-timeout 10 \
+              --max-time 30 \
+              -H 'Cache-Control: no-cache' \
+              -o "$out" -w '%{http_code}' "$url"
           }
 
-          echo "1/4 Validando prueba de despliegue..."
-          PROOF="$(fetch "$BASE/deploy-proof.txt?sha=$EXPECTED_SHA")"
-          echo "$PROOF"
-          echo "$PROOF" | grep -F "commit=$EXPECTED_SHA"
+          echo "=== VALIDACIÓN PÚBLICA END-TO-END ==="
 
-          echo "2/4 Validando entrypoint público..."
-          ROOT="$(fetch "$BASE/?sha=$EXPECTED_SHA")"
-          echo "$ROOT" | grep -F 'src/main-v1782.js?v=17.8.2'
+          CODE="$(get "$BASE/deploy-proof.txt?sha=$EXPECTED_SHA" /tmp/proof.txt || echo 000)"
+          echo "deploy-proof.txt HTTP=$CODE"
+          if [ "$CODE" = "200" ] && grep -F "commit=$EXPECTED_SHA" /tmp/proof.txt >/dev/null; then
+            echo "OK: el commit desplegado es visible públicamente."
+          else
+            echo "ERROR: FTP informó upload, pero deploy-proof.txt no corresponde al sitio público."
+            ERRORS=1
+          fi
 
-          echo "3/4 Validando estilos institucionales..."
-          CSS="$(fetch "$BASE/ciarm-theme.css?sha=$EXPECTED_SHA")"
-          echo "$CSS" | grep -F -- '--primary-color: #26487F;'
-          echo "$CSS" | grep -F -- '--gold-color: #C1B27E;'
-          echo "$CSS" | grep -F '.exact-card:hover'
+          CODE="$(get "$BASE/?sha=$EXPECTED_SHA" /tmp/root.html || echo 000)"
+          echo "root HTTP=$CODE"
+          if [ "$CODE" = "200" ] && grep -F 'src/main-v1782.js?v=17.8.2' /tmp/root.html >/dev/null; then
+            echo "OK: el sitio público usa el entrypoint v17.8.2."
+          else
+            echo "ERROR: el sitio público NO usa el entrypoint v17.8.2."
+            ERRORS=1
+          fi
 
-          echo "4/4 Validando módulo Voiceflow..."
-          VF="$(fetch "$BASE/src/components/dashboardVoiceflow-v1782.js?sha=$EXPECTED_SHA")"
-          echo "$VF" | grep -F "6a81e72529695cfeb738ad6e"
-          echo "$VF" | grep -F "mode: 'embedded'"
-          if echo "$VF" | grep -F "alert(" >/dev/null; then
-            echo "ERROR: el módulo público todavía contiene el chat simulado con alert()."
+          CODE="$(get "$BASE/ciarm-theme.css?sha=$EXPECTED_SHA" /tmp/theme.css || echo 000)"
+          echo "ciarm-theme.css HTTP=$CODE"
+          if [ "$CODE" = "200" ] && \
+             grep -F -- '--primary-color: #26487F;' /tmp/theme.css >/dev/null && \
+             grep -F -- '--gold-color: #C1B27E;' /tmp/theme.css >/dev/null && \
+             grep -F '.exact-card:hover' /tmp/theme.css >/dev/null; then
+            echo "OK: paleta CIARM y hover están publicados."
+          else
+            echo "ERROR: los cambios estéticos CIARM no están publicados en el CSS público."
+            ERRORS=1
+          fi
+
+          CODE="$(get "$BASE/src/components/dashboardVoiceflow-v1782.js?sha=$EXPECTED_SHA" /tmp/vf.js || echo 000)"
+          echo "dashboardVoiceflow-v1782.js HTTP=$CODE"
+          if [ "$CODE" = "200" ] && \
+             grep -F '6a81e72529695cfeb738ad6e' /tmp/vf.js >/dev/null && \
+             grep -F "mode: 'embedded'" /tmp/vf.js >/dev/null && \
+             ! grep -F 'alert(' /tmp/vf.js >/dev/null; then
+            echo "OK: módulo Voiceflow nuevo está publicado."
+          else
+            echo "ERROR: el módulo Voiceflow nuevo no está publicado correctamente."
+            ERRORS=1
+          fi
+
+          CODE="$(get "$BASE/src/components/dashboardWidget.js?sha=$EXPECTED_SHA" /tmp/old-dashboard.js || echo 000)"
+          echo "dashboardWidget.js HTTP=$CODE"
+          if [ "$CODE" = "200" ] && grep -F 'alert(' /tmp/old-dashboard.js >/dev/null; then
+            echo "DIAGNÓSTICO: el sitio público todavía expone el dashboard viejo con alert()."
+          fi
+
+          if [ "$ERRORS" -ne 0 ]; then
+            echo "VALIDACIÓN FALLIDA: el contenido subido por FTP y el contenido servido por portal2.ciarm.edu.mx NO son el mismo deployment."
             exit 1
           fi
 
-          echo "VALIDACIÓN OK: portal2.ciarm.edu.mx publica el commit $EXPECTED_SHA con estilos CIARM y Voiceflow embebido."
+          echo "VALIDACIÓN OK: portal2.ciarm.edu.mx publica este commit, la paleta CIARM y Voiceflow embebido."

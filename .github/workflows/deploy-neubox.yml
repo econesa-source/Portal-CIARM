@@ -172,30 +172,11 @@ jobs:
           if curl -fsSL --retry 4 --retry-delay 3 --retry-all-errors \
                "$GAS_URL?action=getTickets&email=econesa%40ciarm.edu.mx&_t=$(date +%s)" \
                -o /tmp/tickets-api.json; then
-            python3 - <<'PY'
-import json, sys
-text = open('/tmp/tickets-api.json', encoding='utf-8').read().strip()
-try:
-    payload = json.loads(text)
-except Exception as exc:
-    print(f"ERROR: backend getTickets no devolvió JSON válido: {exc}")
-    sys.exit(1)
-
-if isinstance(payload, list):
-    tickets = payload
-elif isinstance(payload, dict) and isinstance(payload.get('data'), list):
-    tickets = payload['data']
-elif isinstance(payload, dict) and isinstance(payload.get('tickets'), list):
-    tickets = payload['tickets']
-else:
-    print("ERROR: backend getTickets no devolvió una lista reconocible.")
-    sys.exit(1)
-
-print(f"OK: backend getTickets respondió {len(tickets)} solicitud(es) para el correo de prueba.")
-if len(tickets) < 1:
-    sys.exit(1)
-PY
-            if [ "$?" -ne 0 ]; then
+            COUNT="$(jq -r 'if type=="array" then length elif ((.data? | type)=="array") then (.data | length) elif ((.tickets? | type)=="array") then (.tickets | length) else -1 end' /tmp/tickets-api.json 2>/dev/null || echo -1)"
+            if [ "$COUNT" -gt 0 ] 2>/dev/null; then
+              echo "OK: backend getTickets respondió $COUNT solicitud(es) para el correo de prueba."
+            else
+              echo "ERROR: backend getTickets no devolvió una lista con solicitudes."
               ERRORS=1
             fi
           else

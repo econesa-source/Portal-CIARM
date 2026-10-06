@@ -1,9 +1,9 @@
 /**
  * Componente Nueva Solicitud - Portal CIARM
- * Versión: 17.10.2
+ * Versión: 17.10.3
  */
 
-import { GAS_WEBAPP_URL, fetchUserContextAPI } from '../services/apiClient.js';
+import { GAS_WEBAPP_URL } from '../services/apiClient.js';
 
 const MAX_FILES = 5;
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -148,17 +148,11 @@ export function renderSolicitudesWidget(container, userSession) {
       const beforeTickets = await readTicketsForUser(user.correo);
       const beforeIds = new Set(beforeTickets.map(ticket => ticket.id).filter(Boolean));
 
-      let userContext = {};
-      try {
-        userContext = await fetchUserContextAPI(user.correo);
-      } catch (_) {
-        userContext = {};
-      }
-
       const ticketPayload = {
         nombre_solicitante: user.nombre,
         correo_solicitante: user.correo,
-        area_solicitante: userContext?.area || user.area || 'General',
+        // Fase actual: identidad/área provienen de la sesión en duro. OAuth/DM03 se integrará después.
+        area_solicitante: user.area || 'General',
         tipo_solicitud: selectTipo.value,
         descripcion,
         urgencia: document.getElementById('prioridad').value.includes('Urgente') ? 'SI' : 'NO',

@@ -6,7 +6,7 @@
 import { isLoggedIn, getUserSession, logout } from './services/authService.js';
 import { renderLoginWidget } from './components/loginWidget.js';
 
-const APP_VERSION = '17.8.0';
+const APP_VERSION = '17.8.1';
 
 const routes = {
   '#inicio': () => import(`./components/dashboardWidget.js?v=${APP_VERSION}`),

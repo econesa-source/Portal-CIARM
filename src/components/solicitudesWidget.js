@@ -1,7 +1,9 @@
 /**
  * Componente Nueva Solicitud - Portal CIARM
- * Versión: 17.9.0
+ * Versión: 17.10.2
  */
+
+import { GAS_WEBAPP_URL, fetchUserContextAPI } from '../services/apiClient.js';
 
 const MAX_FILES = 5;
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -9,7 +11,6 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 export function renderSolicitudesWidget(container, userSession) {
   if (!container) return;
 
-  const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA/exec';
   const user = userSession || { nombre: 'Ezequiel Conesa', correo: 'econesa@ciarm.edu.mx' };
 
   container.innerHTML = `
@@ -21,7 +22,7 @@ export function renderSolicitudesWidget(container, userSession) {
 
       <div class="solicitud-heading">
         <h2>➕ Nueva Solicitud de Pedido</h2>
-        <p>Complete el formulario para registrar un requerimiento en la Base de Datos Institucional (HT05).</p>
+        <p>Complete el formulario para registrar un requerimiento en BD - Sistema de Tickets.</p>
       </div>
 
       <form id="form-solicitud-ciarm" class="solicitud-form">
@@ -76,7 +77,7 @@ export function renderSolicitudesWidget(container, userSession) {
 
         <div class="solicitud-submit-row">
           <button type="submit" id="btn-submit-solicitud" class="solicitud-submit-btn">
-            🚀 Registrar Solicitud en HT05
+            🚀 Registrar Solicitud
           </button>
         </div>
       </form>
@@ -136,32 +137,57 @@ export function renderSolicitudesWidget(container, userSession) {
     btnSubmit.textContent = '⏳ Procesando y conectando con Google Workspace...';
 
     msgEstado.className = 'solicitud-status is-visible is-loading';
-    msgEstado.innerHTML = '<strong>Transmitiendo datos a BD - Sistema de Tickets (HT05)...</strong>';
+    msgEstado.innerHTML = '<strong>Transmitiendo datos a BD - Sistema de Tickets...</strong>';
 
     try {
       const attachments = await Promise.all(files.map(file => convertFileToBase64(file)));
+      const descripcion = document.getElementById('descripcion').value.trim();
 
-      const payload = {
-        solicitante: user.nombre,
-        correo: user.correo,
-        tipo: selectTipo.value,
-        descripcion: document.getElementById('descripcion').value,
-        prioridad: document.getElementById('prioridad').value,
-        fechaProgramada: inputFecha.value || '',
+      // Mis Solicitudes ya usa esta misma WebApp. Primero tomamos una foto
+      // de los tickets existentes para poder confirmar que el POST creó uno nuevo.
+      const beforeTickets = await readTicketsForUser(user.correo);
+      const beforeIds = new Set(beforeTickets.map(ticket => ticket.id).filter(Boolean));
+
+      let userContext = {};
+      try {
+        userContext = await fetchUserContextAPI(user.correo);
+      } catch (_) {
+        userContext = {};
+      }
+
+      const ticketPayload = {
+        nombre_solicitante: user.nombre,
+        correo_solicitante: user.correo,
+        area_solicitante: userContext?.area || user.area || 'General',
+        tipo_solicitud: selectTipo.value,
+        descripcion,
+        urgencia: document.getElementById('prioridad').value.includes('Urgente') ? 'SI' : 'NO',
+        fecha_requerida: inputFecha.value || '',
         adjuntos: attachments
       };
 
-      await fetch(GAS_WEBAPP_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8'
-        },
-        body: JSON.stringify(payload)
+      // Enviamos exactamente una vez. El formulario oculto evita problemas de CORS
+      // de Apps Script; luego confirmamos por GET antes de mostrar éxito.
+      submitTicketViaHiddenForm(ticketPayload);
+
+      const confirmedTicket = await waitForTicketConfirmation({
+        email: user.correo,
+        beforeIds,
+        tipo: ticketPayload.tipo_solicitud,
+        descripcion: ticketPayload.descripcion,
+        requireAttachments: attachments.length > 0
       });
 
+      if (!confirmedTicket) {
+        throw new Error(
+          attachments.length > 0
+            ? 'La solicitud fue enviada, pero no se pudo confirmar todavía el registro completo y sus adjuntos. Revisá “Mis Solicitudes” antes de volver a enviarla para evitar duplicados.'
+            : 'La solicitud fue enviada, pero no se pudo confirmar todavía su registro. Revisá “Mis Solicitudes” antes de volver a enviarla para evitar duplicados.'
+        );
+      }
+
       msgEstado.className = 'solicitud-status is-visible is-success';
-      msgEstado.innerHTML = '<strong>✅ Solicitud registrada con éxito en Google Workspace.</strong> Redirigiendo a Mis Solicitudes...';
+      msgEstado.innerHTML = `<strong>✅ Solicitud ${escapeHtml(confirmedTicket.id)} registrada en BD - Sistema de Tickets.</strong>${attachments.length ? ' Adjuntos confirmados en Drive.' : ''} Redirigiendo a Mis Solicitudes...`;
 
       setTimeout(() => {
         window.location.hash = '#mis-solicitudes';
@@ -170,10 +196,10 @@ export function renderSolicitudesWidget(container, userSession) {
     } catch (err) {
       console.error('Error procesando solicitud:', err);
       btnSubmit.disabled = false;
-      btnSubmit.textContent = '🚀 Registrar Solicitud en HT05';
+      btnSubmit.textContent = '🚀 Registrar Solicitud';
 
       msgEstado.className = 'solicitud-status is-visible is-error';
-      msgEstado.innerHTML = `<strong>⚠️ Error al procesar solicitud:</strong> ${err.message}`;
+      msgEstado.innerHTML = `<strong>⚠️ No se pudo confirmar el registro:</strong> ${escapeHtml(err.message)}`;
     }
   });
 }
@@ -231,13 +257,152 @@ function convertFileToBase64(file) {
     reader.onload = () => {
       const base64Data = reader.result.split(',')[1];
       resolve({
-        nombre: file.name,
+        name: file.name,
         mimeType: file.type,
-        base64: base64Data
+        base64Data
       });
     };
     reader.onerror = error => reject(error);
   });
+}
+
+function submitTicketViaHiddenForm(ticketPayload) {
+  const iframeName = `gas_ticket_target_${Date.now()}`;
+  const iframe = document.createElement('iframe');
+  iframe.name = iframeName;
+  iframe.style.display = 'none';
+
+  const form = document.createElement('form');
+  form.action = GAS_WEBAPP_URL;
+  form.method = 'POST';
+  form.target = iframeName;
+  form.style.display = 'none';
+
+  const hiddenInput = document.createElement('input');
+  hiddenInput.type = 'hidden';
+  hiddenInput.name = 'postData';
+  hiddenInput.value = JSON.stringify({
+    action: 'createTicket',
+    payload: ticketPayload
+  });
+
+  form.appendChild(hiddenInput);
+  document.body.appendChild(iframe);
+  document.body.appendChild(form);
+  form.submit();
+
+  setTimeout(() => {
+    form.remove();
+    iframe.remove();
+  }, 30000);
+}
+
+async function readTicketsForUser(email) {
+  const requestUrl =
+    `${GAS_WEBAPP_URL}?action=getTickets&email=${encodeURIComponent(email)}&_t=${Date.now()}`;
+
+  const response = await fetch(requestUrl, {
+    method: 'GET',
+    mode: 'cors',
+    redirect: 'follow',
+    cache: 'no-store'
+  });
+
+  if (!response.ok) {
+    throw new Error(`No se pudo consultar BD - Sistema de Tickets (HTTP ${response.status}).`);
+  }
+
+  const text = await response.text();
+  const payload = parseTicketPayload(text);
+
+  if (payload && payload.status === 'error') {
+    throw new Error(payload.message || 'El backend de tickets devolvió un error.');
+  }
+
+  let rows = [];
+  if (Array.isArray(payload)) rows = payload;
+  else if (Array.isArray(payload?.data)) rows = payload.data;
+  else if (Array.isArray(payload?.tickets)) rows = payload.tickets;
+
+  return rows.map(normalizeTicketForConfirmation);
+}
+
+function parseTicketPayload(text) {
+  const clean = String(text || '').trim();
+  if (!clean) return [];
+
+  try {
+    return JSON.parse(clean);
+  } catch (_) {
+    const arrayStart = clean.indexOf('[');
+    const arrayEnd = clean.lastIndexOf(']');
+    if (arrayStart !== -1 && arrayEnd > arrayStart) {
+      return JSON.parse(clean.slice(arrayStart, arrayEnd + 1));
+    }
+
+    const objectStart = clean.indexOf('{');
+    const objectEnd = clean.lastIndexOf('}');
+    if (objectStart !== -1 && objectEnd > objectStart) {
+      return JSON.parse(clean.slice(objectStart, objectEnd + 1));
+    }
+
+    throw new Error('La respuesta del backend de tickets no tiene un formato reconocido.');
+  }
+}
+
+function normalizeTicketForConfirmation(raw) {
+  const value = raw || {};
+  const first = (keys) => {
+    for (const key of keys) {
+      const cell = value?.[key];
+      if (cell !== undefined && cell !== null && String(cell).trim() !== '') {
+        return String(cell).trim();
+      }
+    }
+    return '';
+  };
+
+  return {
+    id: first(['id', 'id_ticket', 'idTicket', 'ID TICKET', 'folio']),
+    tipo: first(['tipo', 'tipo_solicitud', 'tipoSolicitud', 'TIPO DE SOLICITUD']),
+    descripcion: first(['desc', 'descripcion', 'DESCRIPCIÓN']),
+    correo: first(['correo', 'email', 'correo_solicitante', 'correoSolicitante', 'CORREO SOLICITANTE']).toLowerCase(),
+    adjuntos: first([
+      'driveUrl',
+      'drive_url',
+      'adjuntos_urls',
+      'adjuntosUrls',
+      'archivos_adjuntos',
+      'ARCHIVOS ADJUNTOS'
+    ])
+  };
+}
+
+async function waitForTicketConfirmation({ email, beforeIds, tipo, descripcion, requireAttachments }) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    if (attempt > 0) await sleep(1200);
+
+    const tickets = await readTicketsForUser(normalizedEmail);
+    const match = tickets.find(ticket =>
+      ticket.id &&
+      !beforeIds.has(ticket.id) &&
+      (!ticket.correo || ticket.correo === normalizedEmail) &&
+      ticket.tipo === tipo &&
+      ticket.descripcion === descripcion
+    );
+
+    if (match && (!requireAttachments || match.adjuntos)) {
+      return match;
+    }
+  }
+
+  return null;
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 export const render = renderSolicitudesWidget;

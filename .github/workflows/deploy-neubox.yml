@@ -117,10 +117,10 @@ jobs:
 
           CODE="$(get "$BASE/?sha=$EXPECTED_SHA" /tmp/root.html || echo 000)"
           echo "root HTTP=$CODE"
-          if [ "$CODE" = "200" ] && grep -F 'src/main-v1782.js?v=17.10.1' /tmp/root.html >/dev/null; then
-            echo "OK: el sitio público usa el entrypoint v17.10.1."
+          if [ "$CODE" = "200" ] && grep -F 'src/main-v1782.js?v=17.10.2' /tmp/root.html >/dev/null; then
+            echo "OK: el sitio público usa el entrypoint v17.10.2."
           else
-            echo "ERROR: el sitio público NO usa el entrypoint v17.10.1."
+            echo "ERROR: el sitio público NO usa el entrypoint v17.10.2."
             ERRORS=1
           fi
 
@@ -140,10 +140,15 @@ jobs:
           echo "solicitudesWidget.js HTTP=$CODE"
           if [ "$CODE" = "200" ] && \
              grep -F 'solicitud-file-list' /tmp/solicitudes.js >/dev/null && \
-             grep -F 'formatFileSize' /tmp/solicitudes.js >/dev/null; then
-            echo "OK: adjuntos muestran nombre y tamaño."
+             grep -F 'formatFileSize' /tmp/solicitudes.js >/dev/null && \
+             grep -F "action: 'createTicket'" /tmp/solicitudes.js >/dev/null && \
+             grep -F 'nombre_solicitante' /tmp/solicitudes.js >/dev/null && \
+             grep -F 'base64Data' /tmp/solicitudes.js >/dev/null && \
+             grep -F 'waitForTicketConfirmation' /tmp/solicitudes.js >/dev/null && \
+             ! grep -F 'AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA' /tmp/solicitudes.js >/dev/null; then
+            echo "OK: Nueva Solicitud usa el backend correcto, payload canónico y confirmación de registro/adjuntos."
           else
-            echo "ERROR: la mejora de adjuntos no está publicada."
+            echo "ERROR: Nueva Solicitud no está sincronizada con BD - Sistema de Tickets."
             ERRORS=1
           fi
 

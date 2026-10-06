@@ -1,12 +1,12 @@
 /**
  * Portal CIARM - Router SPA y Guardián de Autenticación
- * Versión: 17.10.8
+ * Versión: 18.0.0
  */
 
-import { isLoggedIn, getUserSession, logout } from './services/authService.js';
+import { getAuthenticatedUser, logout } from './services/authService.js';
 import { renderLoginWidget } from './components/loginWidget.js';
 
-const APP_VERSION = '17.10.8';
+const APP_VERSION = '18.0.0';
 
 const routes = {
   '#inicio': () => import(`./components/dashboardWidget.js?v=${APP_VERSION}`),
@@ -31,23 +31,21 @@ async function router() {
   const sidebar = document.getElementById('main-sidebar');
   const userProfileHeader = document.getElementById('header-user-profile');
 
-  // GUARDIA DE SESIÓN: Si no hay sesión activa, muestra Login
-  if (!isLoggedIn()) {
+  const user = await getAuthenticatedUser();
+
+  if (!user) {
     if (sidebar) sidebar.style.display = 'none';
     if (userProfileHeader) {
       userProfileHeader.innerHTML = `<span class="login-header-tag">ACCESO INSTITUCIONAL</span>`;
     }
-    
+
     mainContainer.innerHTML = '';
-    renderLoginWidget(mainContainer, () => {
+    renderLoginWidget(mainContainer, async () => {
       window.location.hash = '#inicio';
-      router();
+      await router();
     });
     return;
   }
-
-  // SESIÓN ACTIVA: Mostrar Sidebar y Header
-  const user = getUserSession();
   if (sidebar) sidebar.style.display = 'block';
   if (userProfileHeader && user) {
     userProfileHeader.innerHTML = `

@@ -1,13 +1,14 @@
 # Configuración Apache cPanel / Neubox para ES6 Modules y SPA
 <IfModule mod_mime.c>
   AddType application/javascript .js
+  AddType application/javascript .mjs
   AddType application/json .json
 </IfModule>
 
 <IfModule mod_headers.c>
-  <FilesMatch "\.(js|css)$">
-    Header set Cache-Control "max-age=0, no-cache, no-store, must-revalidate"
-    Header set Pragma "no-cache"
-    Header set Expires "Wed, 11 Jan 1984 05:00:00 GMT"
+  <FilesMatch "\.(html|js|mjs|css|json)$">
+    Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+    Header always set Pragma "no-cache"
+    Header always set Expires "0"
   </FilesMatch>
 </IfModule>

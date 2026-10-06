@@ -31,10 +31,10 @@ jobs:
           set -u
           echo "=== FTP / ==="
           curl -sS --retry 4 --retry-delay 3 --retry-all-errors --connect-timeout 10 --max-time 30 \
-            --user "$FTP_USERNAME:$FTP_PASSWORD" --list-only "ftp://$FTP_SERVER/" || true
+            --ssl-reqd --user "$FTP_USERNAME:$FTP_PASSWORD" --list-only "ftp://$FTP_SERVER/" || true
           echo "=== FTP /portal2.ciarm.edu.mx/ ==="
           curl -sS --retry 4 --retry-delay 3 --retry-all-errors --connect-timeout 10 --max-time 30 \
-            --user "$FTP_USERNAME:$FTP_PASSWORD" --list-only "ftp://$FTP_SERVER/portal2.ciarm.edu.mx/" || true
+            --ssl-reqd --user "$FTP_USERNAME:$FTP_PASSWORD" --list-only "ftp://$FTP_SERVER/portal2.ciarm.edu.mx/" || true
 
       - name: Sincronizar archivos por FTP a Neubox — intento 1
         id: ftp_attempt_1
@@ -45,7 +45,8 @@ jobs:
           username: ${{ secrets.NEUBOX_FTP_USERNAME }}
           password: ${{ secrets.NEUBOX_FTP_PASSWORD }}
           server-dir: ./
-          protocol: ftp
+          port: 21
+          protocol: ftps
           dangerous-clean-slate: false
 
       - name: Esperar antes del reintento 2
@@ -62,7 +63,8 @@ jobs:
           username: ${{ secrets.NEUBOX_FTP_USERNAME }}
           password: ${{ secrets.NEUBOX_FTP_PASSWORD }}
           server-dir: ./
-          protocol: ftp
+          port: 21
+          protocol: ftps
           dangerous-clean-slate: false
 
       - name: Esperar antes del reintento 3
@@ -77,7 +79,8 @@ jobs:
           username: ${{ secrets.NEUBOX_FTP_USERNAME }}
           password: ${{ secrets.NEUBOX_FTP_PASSWORD }}
           server-dir: ./
-          protocol: ftp
+          port: 21
+          protocol: ftps
           dangerous-clean-slate: false
 
       - name: Validar que portal2 publica exactamente este commit

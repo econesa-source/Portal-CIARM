@@ -1,6 +1,6 @@
 /**
  * Componente Mis Solicitudes - Portal CIARM
- * Versión: 17.10.0
+ * Versión: 17.10.1
  *
  * Fuente: BD - Sistema de Tickets / hoja TICKETS.
  * El listado se solicita por el correo de la sesión institucional y,
@@ -8,7 +8,7 @@
  * filtrar del lado cliente como control adicional.
  */
 
-const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA/exec';
+const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec';
 
 export async function renderMisSolicitudesWidget(container, userSession) {
   if (!container) return;

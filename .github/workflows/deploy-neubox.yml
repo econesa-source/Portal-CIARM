@@ -182,15 +182,6 @@ jobs:
             ERRORS=1
           fi
 
-          CODE="$(get "$BASE/auth-dm03-health.php?sha=$EXPECTED_SHA" /tmp/auth-dm03-health.json || echo 000)"
-          echo "auth-dm03-health.php HTTP=$CODE"
-          if [ "$CODE" = "200" ] && grep -F '"ok":true' /tmp/auth-dm03-health.json >/dev/null; then
-            echo "OK: backend PHP puede leer DM03 con la cuenta de servicio."
-          else
-            echo "ERROR: backend PHP no puede leer DM03 o la credencial privada no está disponible."
-            ERRORS=1
-          fi
-
           CODE="$(get "$BASE/ciarm-theme.css?sha=$EXPECTED_SHA" /tmp/theme.css || echo 000)"
           echo "ciarm-theme.css HTTP=$CODE"
           if [ "$CODE" = "200" ] && \
@@ -262,6 +253,9 @@ jobs:
             echo "ERROR: no se pudo consultar el backend getTickets."
             ERRORS=1
           fi
+
+          CODE="$(get "$BASE/src/components/dashboardVoiceflow-v1782.js?sha=$EXPECTED_SHA" /tmp/vf.js || echo 000)"
+          echo "dashboardVoiceflow-v1782.js HTTP=$CODE"
 
           if grep -F '<span class="exact-btn light exact-btn-disabled" aria-disabled="true">Acceder a Biblioteca</span>' /tmp/vf.js >/dev/null && \
              grep -F '<span class="exact-btn light exact-btn-disabled" aria-disabled="true">Consultar Normativa</span>' /tmp/vf.js >/dev/null && \

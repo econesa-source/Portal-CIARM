@@ -1,0 +1,25 @@
+name: Despliegue Automático Portal CIARM a Neubox (FTP)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  web-deploy:
+    name: Desplegar en Neubox vía FTP
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del Repositorio
+        uses: actions/checkout@v4
+
+      - name: Sincronizar archivos por FTP a Neubox
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.NEUBOX_FTP_SERVER || 'portal2.ciarm.edu.mx' }}
+          username: ${{ secrets.NEUBOX_FTP_USERNAME }}
+          password: ${{ secrets.NEUBOX_FTP_PASSWORD }}
+          server-dir: ${{ secrets.NEUBOX_REMOTE_PATH || '/' }}
+          protocol: ftp
+          dangerous-clean-slate: false

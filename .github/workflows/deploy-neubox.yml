@@ -117,10 +117,10 @@ jobs:
 
           CODE="$(get "$BASE/?sha=$EXPECTED_SHA" /tmp/root.html || echo 000)"
           echo "root HTTP=$CODE"
-          if [ "$CODE" = "200" ] && grep -F 'src/main-v1782.js?v=17.9.0' /tmp/root.html >/dev/null; then
-            echo "OK: el sitio público usa el entrypoint v17.9.0."
+          if [ "$CODE" = "200" ] && grep -F 'src/main-v1782.js?v=17.10.0' /tmp/root.html >/dev/null; then
+            echo "OK: el sitio público usa el entrypoint v17.10.0."
           else
-            echo "ERROR: el sitio público NO usa el entrypoint v17.9.0."
+            echo "ERROR: el sitio público NO usa el entrypoint v17.10.0."
             ERRORS=1
           fi
 
@@ -151,7 +151,55 @@ jobs:
              grep -F '.voiceflow-embed-target::before' /tmp/theme.css >/dev/null; then
             echo "OK: ajustes de viewport y esquinas de Voiceflow están publicados."
           else
-            echo "ERROR: faltan ajustes visuales v17.9.0 en el CSS público."
+            echo "ERROR: faltan ajustes visuales v17.10.0 en el CSS público."
+            ERRORS=1
+          fi
+
+          CODE="$(get "$BASE/src/components/misSolicitudesWidget.js?sha=$EXPECTED_SHA" /tmp/mis-solicitudes.js || echo 000)"
+          echo "misSolicitudesWidget.js HTTP=$CODE"
+          if [ "$CODE" = "200" ] && \
+             grep -F 'action=getTickets' /tmp/mis-solicitudes.js >/dev/null && \
+             grep -F 'correo_solicitante' /tmp/mis-solicitudes.js >/dev/null && \
+             grep -F 'BD - Sistema de Tickets' /tmp/mis-solicitudes.js >/dev/null; then
+            echo "OK: Mis Solicitudes filtra por correo de sesión."
+          else
+            echo "ERROR: la vista Mis Solicitudes no está publicada correctamente."
+            ERRORS=1
+          fi
+
+          echo "=== VALIDACIÓN BACKEND DE TICKETS ==="
+          GAS_URL='https://script.google.com/macros/s/AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA/exec'
+          if curl -fsSL --retry 4 --retry-delay 3 --retry-all-errors \
+               "$GAS_URL?action=getTickets&email=econesa%40ciarm.edu.mx&_t=$(date +%s)" \
+               -o /tmp/tickets-api.json; then
+            python3 - <<'PY'
+import json, sys
+text = open('/tmp/tickets-api.json', encoding='utf-8').read().strip()
+try:
+    payload = json.loads(text)
+except Exception as exc:
+    print(f"ERROR: backend getTickets no devolvió JSON válido: {exc}")
+    sys.exit(1)
+
+if isinstance(payload, list):
+    tickets = payload
+elif isinstance(payload, dict) and isinstance(payload.get('data'), list):
+    tickets = payload['data']
+elif isinstance(payload, dict) and isinstance(payload.get('tickets'), list):
+    tickets = payload['tickets']
+else:
+    print("ERROR: backend getTickets no devolvió una lista reconocible.")
+    sys.exit(1)
+
+print(f"OK: backend getTickets respondió {len(tickets)} solicitud(es) para el correo de prueba.")
+if len(tickets) < 1:
+    sys.exit(1)
+PY
+            if [ "$?" -ne 0 ]; then
+              ERRORS=1
+            fi
+          else
+            echo "ERROR: no se pudo consultar el backend getTickets."
             ERRORS=1
           fi
 

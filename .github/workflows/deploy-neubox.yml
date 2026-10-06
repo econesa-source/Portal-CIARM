@@ -190,6 +190,21 @@ jobs:
             ERRORS=1
           fi
 
+          echo "=== DIAGNÓSTICO ENDPOINT ALTERNATIVO DE TICKETS ==="
+          ALT_GAS_URL='https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec'
+          if curl -fsSL --retry 4 --retry-delay 3 --retry-all-errors \
+               "$ALT_GAS_URL?action=getTickets&email=econesa%40ciarm.edu.mx&_t=$(date +%s)" \
+               -o /tmp/tickets-api-alt.json; then
+            ALT_TYPE="$(jq -r 'type' /tmp/tickets-api-alt.json 2>/dev/null || echo invalid)"
+            ALT_STATUS="$(jq -r 'if type=="object" then (.status // "") else "" end' /tmp/tickets-api-alt.json 2>/dev/null || true)"
+            ALT_MESSAGE="$(jq -r 'if type=="object" then (.message // "") else "" end' /tmp/tickets-api-alt.json 2>/dev/null || true)"
+            ALT_COUNT="$(jq -r 'if type=="array" then length elif ((.data? | type)=="array") then (.data | length) elif ((.tickets? | type)=="array") then (.tickets | length) else -1 end' /tmp/tickets-api-alt.json 2>/dev/null || echo -1)"
+            echo "Alternative backend shape: type=$ALT_TYPE status=$ALT_STATUS count=$ALT_COUNT"
+            if [ -n "$ALT_MESSAGE" ]; then echo "Alternative backend message: $ALT_MESSAGE"; fi
+          else
+            echo "Alternative backend unavailable."
+          fi
+
           CODE="$(get "$BASE/src/components/dashboardVoiceflow-v1782.js?sha=$EXPECTED_SHA" /tmp/vf.js || echo 000)"
           echo "dashboardVoiceflow-v1782.js HTTP=$CODE"
           if [ "$CODE" = "200" ] && \

@@ -117,18 +117,20 @@ jobs:
 
           CODE="$(get "$BASE/?sha=$EXPECTED_SHA" /tmp/root.html || echo 000)"
           echo "root HTTP=$CODE"
-          if [ "$CODE" = "200" ] && grep -F 'src/main-v1782.js?v=17.10.7' /tmp/root.html >/dev/null; then
-            echo "OK: el sitio público usa el entrypoint v17.10.7."
+          if [ "$CODE" = "200" ] && grep -F 'src/main-v1782.js?v=17.10.8' /tmp/root.html >/dev/null; then
+            echo "OK: el sitio público usa el entrypoint v17.10.8."
           else
-            echo "ERROR: el sitio público NO usa el entrypoint v17.10.7."
+            echo "ERROR: el sitio público NO usa el entrypoint v17.10.8."
             ERRORS=1
           fi
 
           if grep -F '<a class="nav-link nav-link-disabled" aria-disabled="true">≡ Normativa</a>' /tmp/root.html >/dev/null && \
-             ! grep -F 'href="#solicitudes" class="nav-link">≡ Normativa</a>' /tmp/root.html >/dev/null; then
-            echo "OK: Normativa del sidebar está visible pero sin navegación a Nueva Solicitud."
+             grep -F '<a class="nav-link nav-link-disabled" aria-disabled="true">✓ Mis obligaciones</a>' /tmp/root.html >/dev/null && \
+             ! grep -F 'href="#solicitudes" class="nav-link">≡ Normativa</a>' /tmp/root.html >/dev/null && \
+             ! grep -F 'href="#mis-solicitudes" class="nav-link">✓ Mis obligaciones</a>' /tmp/root.html >/dev/null; then
+            echo "OK: sidebar sin vínculos incorrectos; solo Inicio queda navegable entre esos accesos."
           else
-            echo "ERROR: Normativa del sidebar conserva un vínculo incorrecto."
+            echo "ERROR: el sidebar conserva vínculos semánticamente incorrectos."
             ERRORS=1
           fi
 
@@ -204,11 +206,15 @@ jobs:
             ERRORS=1
           fi
 
-          if grep -F '<span class="exact-btn light exact-btn-disabled" aria-disabled="true">Consultar Normativa</span>' /tmp/vf.js >/dev/null && \
-             ! grep -F 'href="#solicitudes" class="exact-btn light">Consultar Normativa</a>' /tmp/vf.js >/dev/null; then
-            echo "OK: tarjeta Normas y herramientas ya no apunta a Nueva Solicitud."
+          if grep -F '<span class="exact-btn light exact-btn-disabled" aria-disabled="true">Acceder a Biblioteca</span>' /tmp/vf.js >/dev/null && \
+             grep -F '<span class="exact-btn light exact-btn-disabled" aria-disabled="true">Consultar Normativa</span>' /tmp/vf.js >/dev/null && \
+             grep -F '<span class="exact-btn light exact-btn-disabled" aria-disabled="true">Ver Comunicados</span>' /tmp/vf.js >/dev/null && \
+             grep -F '<span class="exact-btn light exact-btn-disabled" aria-disabled="true">Gestión Administrativa</span>' /tmp/vf.js >/dev/null && \
+             grep -F '<span class="exact-btn light exact-btn-disabled" aria-disabled="true">Acceso Módulo IB</span>' /tmp/vf.js >/dev/null && \
+             ! grep -E 'href="#(inicio|solicitudes)" class="exact-btn light"' /tmp/vf.js >/dev/null; then
+            echo "OK: módulos no implementados visibles pero sin navegación falsa."
           else
-            echo "ERROR: la tarjeta Normas y herramientas conserva el vínculo incorrecto."
+            echo "ERROR: dashboard conserva uno o más vínculos placeholder incorrectos."
             ERRORS=1
           fi
 

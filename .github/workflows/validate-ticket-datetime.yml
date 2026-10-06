@@ -1,0 +1,28 @@
+name: Validate Ticket DateTime
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/validate-ticket-datetime.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validar fecha y hora devueltas por Apps Script
+        env:
+          API_URL: https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec
+        run: |
+          set -euo pipefail
+          curl -fsSL             --retry 3 --retry-delay 2 --retry-all-errors             --connect-timeout 10 --max-time 60             "$API_URL?action=getTickets&email=e.conesa%40ciarm.edu.mx&_t=$(date +%s)"             -o /tmp/tickets.json
+
+          jq -e '
+            type=="array" and
+            any(.[]; .id=="TKT-2026-00018" and
+                     (.fecha|type)=="string" and (.fecha|length)>0 and
+                     (.hora|type)=="string" and (.hora|length)>0)
+          ' /tmp/tickets.json >/dev/null
+
+          jq -r '.[] | select(.id=="TKT-2026-00018") | {id,fecha,hora,tipo,desc}' /tmp/tickets.json

@@ -1,6 +1,6 @@
 /**
  * Enrutador Principal SPA - Portal CIARM
- * Versión: 17.3.0 (Rompe-Caché Estricto v17.3.0 para cPanel)
+ * Versión: 18.0.0
  */
 
 export async function handleRouting(userSession) {
@@ -41,12 +41,4 @@ export async function handleRouting(userSession) {
   }
 }
 
-window.addEventListener('hashchange', () => {
-  const mockUser = { nombre: 'Ezequiel Conesa', correo: 'e.conesa@ciarm.edu.mx' };
-  handleRouting(mockUser);
-});
-
-window.addEventListener('DOMContentLoaded', () => {
-  const mockUser = { nombre: 'Ezequiel Conesa', correo: 'e.conesa@ciarm.edu.mx' };
-  handleRouting(mockUser);
-});
+// Router legado conservado solo como referencia. El entrypoint productivo\n// es src/main-v1782.js y obtiene la identidad desde la sesión server-side.\n

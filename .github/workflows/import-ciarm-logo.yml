@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'assets/source/logo-ciarm.pdf'
+      - '.github/workflows/import-ciarm-logo.yml'
 
 permissions:
   contents: write

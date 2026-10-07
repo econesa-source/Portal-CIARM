@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/import-ciarm-logo.yml'
+      - 'assets/source/logo-ciarm.pdf'
 
 permissions:
   contents: write
@@ -19,16 +19,13 @@ jobs:
           python-version: '3.12'
       - name: Descargar logo oficial y generar PNG horizontal transparente
         run: |
-          python -m pip install --quiet gdown pymupdf pillow
+          python -m pip install --quiet pymupdf pillow
           mkdir -p assets/images /tmp/ciarm-logo
           python - <<'PY'
-          import gdown, fitz
+          import pymupdf as fitz
           from PIL import Image
 
-          file_id = "12qpXIAU0FNYKRWry62EDsZa8UX-17mFU"
-          pdf = "/tmp/ciarm-logo/logo-ciarm.pdf"
-          gdown.download(id=file_id, output=pdf, quiet=False)
-
+          pdf = "assets/source/logo-ciarm.pdf"
           doc = fitz.open(pdf)
           page = doc[1]
           pix = page.get_pixmap(matrix=fitz.Matrix(3,3), alpha=False)

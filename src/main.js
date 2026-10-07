@@ -1,12 +1,12 @@
 /**
  * Portal CIARM - Router SPA y Guardián de Autenticación
- * Versión: 18.0.3
+ * Versión: 18.0.4
  */
 
 import { getAuthenticatedUser, logout } from './services/authService.js';
 import { renderLoginWidget } from './components/loginWidget.js';
 
-const APP_VERSION = '18.0.3';
+const APP_VERSION = '18.0.4';
 
 const routes = {
   '#inicio': () => import(`./components/dashboardWidget.js?v=${APP_VERSION}`),

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Portal CIARM - Hoja de Estilos Institucionales (v17.10.0)
+   Portal CIARM - Hoja de Estilos Institucionales (v18.0.2)
    ========================================================================== */
 
 :root {
@@ -46,6 +46,40 @@ body {
 
 .brand-text h1 {
   letter-spacing: 0.02em;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  min-width: 330px;
+}
+
+.brand-logo-wrap {
+  display: inline-flex;
+  align-items: center;
+  background: #FFFFFF;
+  padding: 4px 9px;
+  border-radius: 4px;
+  line-height: 0;
+}
+
+.brand-logo {
+  display: block;
+  width: auto;
+  height: 42px;
+  max-width: min(390px, 32vw);
+  object-fit: contain;
+}
+
+@media (max-width: 760px) {
+  .brand {
+    min-width: 0;
+  }
+
+  .brand-logo {
+    height: 34px;
+    max-width: 46vw;
+  }
 }
 
 .login-header-tag {

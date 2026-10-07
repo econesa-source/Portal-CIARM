@@ -118,19 +118,21 @@ jobs:
           CODE="$(get "$BASE/?sha=$EXPECTED_SHA" /tmp/root.html || echo 000)"
           echo "root HTTP=$CODE"
           if [ "$CODE" = "200" ] && \
-             grep -F 'src/main-v1782.js?v=18.0.4' /tmp/root.html >/dev/null && \
-             grep -F 'assets/images/ciarm-logo-header-v2.png?v=18.0.4' /tmp/root.html >/dev/null; then
-            echo "OK: el sitio público usa v18.0.2 y referencia el logo horizontal CIARM."
+             grep -F 'src/main-v1782.js?v=18.0.5' /tmp/root.html >/dev/null && \
+             grep -F 'assets/images/ciarm-logo-header-v2.png?v=18.0.5' /tmp/root.html >/dev/null; then
+            echo "OK: el sitio público usa v18.0.5 y referencia el logo CIARM."
           else
-            echo "ERROR: el sitio público NO usa el entrypoint v18.0.4."
+            echo "ERROR: el sitio público NO usa el entrypoint v18.0.5."
             ERRORS=1
           fi
 
-          if grep -F '<a class="nav-link nav-link-disabled" aria-disabled="true">≡ Normativa</a>' /tmp/root.html >/dev/null && \
-             grep -F '<a class="nav-link nav-link-disabled" aria-disabled="true">✓ Mis obligaciones</a>' /tmp/root.html >/dev/null && \
-             ! grep -F 'href="#solicitudes" class="nav-link">≡ Normativa</a>' /tmp/root.html >/dev/null && \
-             ! grep -F 'href="#mis-solicitudes" class="nav-link">✓ Mis obligaciones</a>' /tmp/root.html >/dev/null; then
-            echo "OK: sidebar sin vínculos incorrectos; solo Inicio queda navegable entre esos accesos."
+          if grep -F '<span class="nav-label">Normativa</span>' /tmp/root.html >/dev/null && \
+             grep -F '<span class="nav-label">Mis obligaciones</span>' /tmp/root.html >/dev/null && \
+             grep -F 'id="btn-sidebar-toggle"' /tmp/root.html >/dev/null && \
+             grep -F 'id="sidebar-backdrop"' /tmp/root.html >/dev/null && \
+             ! grep -F 'href="#solicitudes"' /tmp/root.html >/dev/null && \
+             ! grep -F 'href="#mis-solicitudes"' /tmp/root.html >/dev/null; then
+            echo "OK: sidebar conserva navegación válida y hamburguesa responsive."
           else
             echo "ERROR: el sidebar conserva vínculos semánticamente incorrectos."
             ERRORS=1
@@ -193,8 +195,11 @@ jobs:
              grep -F '.exact-card:hover' /tmp/theme.css >/dev/null && \
              grep -F '.logout-btn' /tmp/theme.css >/dev/null && \
              grep -F '.assistant-ai' /tmp/theme.css >/dev/null && \
-             grep -F '.voiceflow-embed-target.is-expanded' /tmp/theme.css >/dev/null; then
-            echo "OK: paleta CIARM y hover están publicados."
+             grep -F '.voiceflow-embed-target.is-expanded' /tmp/theme.css >/dev/null && \
+             grep -F '.app-layout.sidebar-open .sidebar' /tmp/theme.css >/dev/null && \
+             grep -F '.app-layout.sidebar-collapsed .sidebar' /tmp/theme.css >/dev/null && \
+             grep -F '.header-avatar-wrap' /tmp/theme.css >/dev/null; then
+            echo "OK: paleta CIARM, navegación responsive y hover están publicados."
           else
             echo "ERROR: los cambios estéticos CIARM no están publicados en el CSS público."
             ERRORS=1

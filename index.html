@@ -7,15 +7,16 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Portal CIARM - Colegio Internacional Alemán Riviera Maya</title>
-  <link rel="stylesheet" href="ciarm-theme.css?v=18.0.4">
+  <link rel="stylesheet" href="ciarm-theme.css?v=18.0.5">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <div class="app-layout">
     <header class="main-header">
+      <button id="btn-sidebar-toggle" class="menu-trigger" type="button" aria-label="Abrir o cerrar menú" aria-expanded="false" style="display:none;">☰</button>
       <div class="brand">
         <div class="brand-logo-wrap">
-          <img class="brand-logo" src="assets/images/ciarm-logo-header-v2.png?v=18.0.4" alt="Colegio Internacional Alemán Riviera Maya">
+          <img class="brand-logo" src="assets/images/ciarm-logo-header-v2.png?v=18.0.5" alt="Colegio Internacional Alemán Riviera Maya">
         </div>
       </div>
       <div class="header-title">
@@ -29,11 +30,12 @@
     <div class="content-wrapper">
       <aside class="sidebar" id="main-sidebar" style="display: none;">
         <nav class="sidebar-nav">
-          <a href="#inicio" class="nav-link">⌂ Inicio</a>
-          <a class="nav-link nav-link-disabled" aria-disabled="true">✓ Mis obligaciones</a>
-          <a class="nav-link nav-link-disabled" aria-disabled="true">≡ Normativa</a>
+          <a href="#inicio" class="nav-link"><span class="nav-icon">⌂</span><span class="nav-label">Inicio</span></a>
+          <a class="nav-link nav-link-disabled" aria-disabled="true"><span class="nav-icon">✓</span><span class="nav-label">Mis obligaciones</span></a>
+          <a class="nav-link nav-link-disabled" aria-disabled="true"><span class="nav-icon">≡</span><span class="nav-label">Normativa</span></a>
         </nav>
       </aside>
+      <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Cerrar menú"></button>
 
       <main id="main-content" class="main-body">
         <div class="loading-spinner">Cargando Portal CIARM...</div>
@@ -41,6 +43,6 @@
     </div>
   </div>
 
-  <script type="module" src="src/main.js?v=18.0.4"></script>
+  <script type="module" src="src/main.js?v=18.0.5"></script>
 </body>
 </html>

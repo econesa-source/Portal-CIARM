@@ -1,112 +1,334 @@
 /**
  * Módulo de Inicio - Dashboard Oficial CIARM
- * Versión: 18.0.3
+ * Versión: 18.1.0
+ * Asistente CIARM: interfaz propia del Portal, Voiceflow sólo como motor server-side.
  */
 
-const VOICEFLOW_PROJECT_ID = '6a81e72529695cfeb738ad6e';
-const VOICEFLOW_SCRIPT_ID = 'ciarm-voiceflow-widget-script';
-const VOICEFLOW_SCRIPT_SRC = 'https://cdn.voiceflow.com/widget-next/bundle.mjs';
-
-function loadVoiceflowScript() {
-  if (window.voiceflow?.chat) {
-    return Promise.resolve();
+function safeExternalUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+  } catch {
+    return '';
   }
-
-  return new Promise((resolve, reject) => {
-    const existing = document.getElementById(VOICEFLOW_SCRIPT_ID);
-
-    if (existing) {
-      existing.addEventListener('load', () => resolve(), { once: true });
-      existing.addEventListener('error', () => reject(new Error('No se pudo cargar Voiceflow.')), { once: true });
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.id = VOICEFLOW_SCRIPT_ID;
-    script.type = 'text/javascript';
-    script.src = VOICEFLOW_SCRIPT_SRC;
-
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('No se pudo cargar Voiceflow.'));
-
-    document.head.appendChild(script);
-  });
 }
 
-async function mountVoiceflowAssistant() {
-  const target = document.getElementById('voiceflow-chat');
+function cleanPlainText(value) {
+  return String(value || '')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .trimEnd();
+}
 
-  if (!target) return;
+function appendInlineMarkdown(parent, text) {
+  const pattern = /\[([^\]]+)]\(([^)]+)\)|\*\*([^*]+)\*\*/g;
+  let cursor = 0;
+  let match;
 
-  const expandAssistant = () => {
-    target.classList.add('is-expanded');
-    target.closest('.assistant-hero-card')?.classList.add('is-expanded');
-  };
-
-  // Igual que Portal 1: compacto al entrar y con más espacio al usarlo.
-  // Expandir sólo cuando el usuario realmente entra a usar el chat.
-  // No expandimos por hover: eso hacía que Portal 2 creciera apenas se movía
-  // el mouse sobre el widget.
-  target.addEventListener('focusin', expandAssistant, { once: true });
-  target.addEventListener('pointerdown', expandAssistant, { once: true, capture: true });
-
-  target.innerHTML = '<div class="voiceflow-loading">Cargando Asistente CIARM...</div>';
-
-  try {
-    await loadVoiceflowScript();
-
-    if (!window.voiceflow?.chat?.load) {
-      throw new Error('La API del widget de Voiceflow no está disponible.');
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > cursor) {
+      parent.append(document.createTextNode(cleanPlainText(text.slice(cursor, match.index))));
     }
 
-    target.innerHTML = '';
+    if (match[1] !== undefined) {
+      const href = safeExternalUrl(match[2]);
+      if (href) {
+        const link = document.createElement('a');
+        link.href = href;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = match[1];
+        parent.append(link);
+      } else {
+        parent.append(document.createTextNode(match[1]));
+      }
+    } else {
+      const strong = document.createElement('strong');
+      strong.textContent = match[3];
+      parent.append(strong);
+    }
 
-    await window.voiceflow.chat.load({
-      verify: { projectID: VOICEFLOW_PROJECT_ID },
-      url: 'https://general-runtime.voiceflow.com',
-      voice: {
-        url: 'https://runtime-api.voiceflow.com'
-      },
-      render: {
-        mode: 'embedded',
-        target
+    cursor = pattern.lastIndex;
+  }
+
+  if (cursor < text.length) {
+    parent.append(document.createTextNode(cleanPlainText(text.slice(cursor))));
+  }
+}
+
+function isTableDivider(line) {
+  const cells = line.trim().replace(/^\||\|$/g, '').split('|').map(cell => cell.trim());
+  return cells.length > 1 && cells.every(cell => /^:?-{3,}:?$/.test(cell));
+}
+
+function tableCells(line) {
+  return line.trim().replace(/^\||\|$/g, '').split('|').map(cell => cell.trim());
+}
+
+function renderMarkdown(markdown) {
+  const root = document.createElement('div');
+  root.className = 'sicpe-answer';
+
+  const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
+  let paragraph = [];
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    const value = paragraph.join('\n').trim();
+    paragraph = [];
+    if (!value) return;
+    const p = document.createElement('p');
+    appendInlineMarkdown(p, value);
+    root.append(p);
+  };
+
+  for (let index = 0; index < lines.length;) {
+    const line = lines[index];
+    const heading = line.match(/^\s*#{1,4}\s+(.+)$/);
+
+    if (heading) {
+      flushParagraph();
+      const h3 = document.createElement('h3');
+      appendInlineMarkdown(h3, heading[1]);
+      root.append(h3);
+      index += 1;
+      continue;
+    }
+
+    if (line.includes('|') && index + 1 < lines.length && isTableDivider(lines[index + 1])) {
+      flushParagraph();
+      const headers = tableCells(line);
+      index += 2;
+      const rows = [];
+      while (index < lines.length && lines[index].includes('|') && lines[index].trim()) {
+        rows.push(tableCells(lines[index]));
+        index += 1;
+      }
+
+      const wrap = document.createElement('div');
+      wrap.className = 'sicpe-table-wrap';
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const headRow = document.createElement('tr');
+
+      headers.forEach(cell => {
+        const th = document.createElement('th');
+        appendInlineMarkdown(th, cell);
+        headRow.append(th);
+      });
+
+      thead.append(headRow);
+      table.append(thead);
+
+      const tbody = document.createElement('tbody');
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        headers.forEach((_, cellIndex) => {
+          const td = document.createElement('td');
+          appendInlineMarkdown(td, row[cellIndex] || '');
+          tr.append(td);
+        });
+        tbody.append(tr);
+      });
+
+      table.append(tbody);
+      wrap.append(table);
+      root.append(wrap);
+      continue;
+    }
+
+    const listMatch = line.match(/^\s*(?:([-*+])|(\d+)[.)])\s+(.+)$/);
+    if (listMatch) {
+      flushParagraph();
+      const ordered = Boolean(listMatch[2]);
+      const list = document.createElement(ordered ? 'ol' : 'ul');
+
+      while (index < lines.length) {
+        const itemMatch = lines[index].match(/^\s*(?:([-*+])|(\d+)[.)])\s+(.+)$/);
+        if (!itemMatch || Boolean(itemMatch[2]) !== ordered) break;
+        const li = document.createElement('li');
+        appendInlineMarkdown(li, itemMatch[3]);
+        list.append(li);
+        index += 1;
+      }
+
+      root.append(list);
+      continue;
+    }
+
+    if (!line.trim()) flushParagraph();
+    else paragraph.push(line);
+    index += 1;
+  }
+
+  flushParagraph();
+  return root;
+}
+
+function randomConversationID() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return 'ciarm-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+}
+
+function mountAssistant() {
+  const assistant = document.getElementById('ciarm-assistant');
+  const form = document.getElementById('ciarm-chat-form');
+  const input = document.getElementById('ciarm-chat-input');
+  const button = document.getElementById('ciarm-chat-send');
+  const dialog = document.getElementById('ciarm-chat-dialog');
+
+  if (!assistant || !form || !input || !button || !dialog) return;
+
+  const state = {
+    messages: [],
+    busy: false,
+    error: '',
+    conversationID: ''
+  };
+
+  function isActive() {
+    return Boolean(input.value.trim() || state.messages.length || state.busy || state.error);
+  }
+
+  function syncActiveState() {
+    assistant.classList.toggle('ciarm-assistant--active', isActive());
+  }
+
+  function renderConversation() {
+    dialog.innerHTML = '';
+
+    state.messages.forEach(item => {
+      if (item.role === 'user') {
+        const message = document.createElement('div');
+        message.className = 'ciarm-chat-user';
+        message.textContent = item.content;
+        dialog.append(message);
+      } else {
+        const message = document.createElement('div');
+        message.className = 'ciarm-chat-assistant';
+        message.append(renderMarkdown(item.content));
+        dialog.append(message);
       }
     });
-  } catch (error) {
-    console.error('Error al inicializar Asistente CIARM:', error);
-    target.innerHTML = `
-      <div class="voiceflow-error">
-        No fue posible cargar el Asistente CIARM. Actualizá la página e intentá nuevamente.
-      </div>
-    `;
+
+    if (state.busy) {
+      const loading = document.createElement('div');
+      loading.className = 'ciarm-chat-assistant ciarm-chat-loading';
+      loading.textContent = 'Consultando…';
+      dialog.append(loading);
+    }
+
+    if (state.error) {
+      const error = document.createElement('div');
+      error.className = 'ciarm-chat-error';
+      error.setAttribute('role', 'alert');
+      error.textContent = state.error;
+      dialog.append(error);
+    }
+
+    const hasContent = state.messages.length > 0 || state.busy || state.error;
+    dialog.hidden = !hasContent;
+    button.disabled = state.busy || !input.value.trim();
+    input.disabled = state.busy;
+    syncActiveState();
+
+    requestAnimationFrame(() => {
+      dialog.scrollTop = dialog.scrollHeight;
+    });
   }
+
+  input.addEventListener('input', () => {
+    button.disabled = state.busy || !input.value.trim();
+    syncActiveState();
+  });
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const message = input.value.trim();
+    if (!message || state.busy) return;
+
+    if (!state.conversationID) state.conversationID = randomConversationID();
+    const launch = state.messages.length === 0;
+
+    input.value = '';
+    state.error = '';
+    state.messages.push({ role: 'user', content: message });
+    state.busy = true;
+    renderConversation();
+
+    try {
+      const response = await fetch('/voiceflow.php', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          conversationID: state.conversationID,
+          launch
+        })
+      });
+
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error('Voiceflow devolvió una respuesta inválida.');
+      }
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'Voiceflow no pudo responder.');
+      }
+
+      const replies = Array.isArray(data?.messages)
+        ? data.messages.filter(value => typeof value === 'string' && value.trim())
+        : [];
+
+      if (!replies.length) {
+        throw new Error('El asistente no devolvió una respuesta.');
+      }
+
+      replies.forEach(content => {
+        state.messages.push({ role: 'assistant', content });
+      });
+    } catch (error) {
+      state.error = error instanceof Error ? error.message : 'Voiceflow no pudo responder.';
+    } finally {
+      state.busy = false;
+      renderConversation();
+      input.focus();
+    }
+  });
+
+  renderConversation();
 }
 
 export function render(container, userSession) {
   if (!container) return;
 
   container.innerHTML = `
-    <div style="width: 100%; box-sizing: border-box;">
-      
-      <!-- HERO CARD: Asistente CIARM -->
-      <div class="assistant-hero-card">
-        <div class="assistant-hero-header">
+    <div class="home-content portal-home-content">
+
+      <section class="sicpe-search">
+        <div class="sicpe-heading">
           <div>
-            <h2 class="assistant-title">Asistente C<span class="assistant-ai">IA</span>RM</h2>
-            <p class="assistant-subtitle">Consulta normativa, procesos y herramientas del colegio.</p>
+            <div class="sicpe-title">
+              <h1>Asistente <span class="ciarm-word">C<span class="ai-accent">IA</span>RM</span></h1>
+            </div>
+            <p>Consulta normativa, procesos y herramientas del colegio.</p>
           </div>
-          <span class="assistant-tag">CONSULTA INSTITUCIONAL</span>
+          <span>CONSULTA INSTITUCIONAL</span>
         </div>
 
-        <div class="assistant-chat-box">
-          <div id="voiceflow-chat" class="voiceflow-embed-target" aria-label="Asistente CIARM"></div>
+        <div id="ciarm-assistant" aria-label="Asistente CIARM">
+          <div id="ciarm-chat-dialog" class="ciarm-chat-dialog" aria-live="polite" hidden></div>
+          <form id="ciarm-chat-form" class="ciarm-chat-form">
+            <input id="ciarm-chat-input" autocomplete="off" placeholder="Mensaje…" aria-label="Mensaje para el Asistente CIARM">
+            <button id="ciarm-chat-send" type="submit" aria-label="Enviar mensaje" disabled>↑</button>
+          </form>
         </div>
-      </div>
+      </section>
 
-      <!-- GRID DE 6 TARJETAS EXACTAS (2 FILAS X 3 COLUMNAS) -->
       <div class="dashboard-grid-exact">
-        
-        <!-- Tarjeta 1: Solicitudes internas -->
         <div class="exact-card">
           <span class="exact-card-category">SERVICIOS INTERNOS</span>
           <h3 class="exact-card-title">Solicitudes internas</h3>
@@ -117,7 +339,6 @@ export function render(container, userSession) {
           </div>
         </div>
 
-        <!-- Tarjeta 2: Libros y Papers -->
         <div class="exact-card">
           <span class="exact-card-category">BIBLIOTECA CIARM</span>
           <h3 class="exact-card-title">Libros y Papers</h3>
@@ -125,15 +346,13 @@ export function render(container, userSession) {
           <span class="exact-btn light exact-btn-disabled" aria-disabled="true">Acceder a Biblioteca</span>
         </div>
 
-        <!-- Tarjeta 3: Normas y herramientas -->
         <div class="exact-card">
-          <span class="exact-card-category">FICHE - SISTEMA INTEGRAL DE CUMPLIMIENTO</span>
+          <span class="exact-card-category">SICPE · SISTEMA INTEGRAL DE CUMPLIMIENTO</span>
           <h3 class="exact-card-title">Normas y herramientas</h3>
           <p class="exact-card-desc">Consulta normativa aplicable, protocolos, formatos, hojas de registro y genera informes.</p>
           <span class="exact-btn light exact-btn-disabled" aria-disabled="true">Consultar Normativa</span>
         </div>
 
-        <!-- Tarjeta 4: Comunicados -->
         <div class="exact-card">
           <span class="exact-card-category">COMUNICACIÓN INSTITUCIONAL</span>
           <h3 class="exact-card-title">Comunicados</h3>
@@ -141,28 +360,24 @@ export function render(container, userSession) {
           <span class="exact-btn light exact-btn-disabled" aria-disabled="true">Ver Comunicados</span>
         </div>
 
-        <!-- Tarjeta 5: Administración -->
         <div class="exact-card">
-          <span class="exact-card-category">SIGCOE - SISTEMA DE CONTROL DE GESTIÓN</span>
+          <span class="exact-card-category">SCGRC · SISTEMA DE CONTROL DE GESTIÓN</span>
           <h3 class="exact-card-title">Administración</h3>
           <p class="exact-card-desc">Órdenes de compra, reportes y herramientas administrativas habilitadas para tu perfil.</p>
           <span class="exact-btn light exact-btn-disabled" aria-disabled="true">Gestión Administrativa</span>
         </div>
 
-        <!-- Tarjeta 6: IB -->
         <div class="exact-card">
           <span class="exact-card-category">BACHILLERATO INTERNACIONAL</span>
           <h3 class="exact-card-title">IB</h3>
           <p class="exact-card-desc">Accede a documentación, programas, recursos y herramientas correspondientes a tu función.</p>
           <span class="exact-btn light exact-btn-disabled" aria-disabled="true">Acceso Módulo IB</span>
         </div>
-
       </div>
-
     </div>
   `;
 
-  mountVoiceflowAssistant();
+  mountAssistant();
 }
 
 export const renderDashboardWidget = render;

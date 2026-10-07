@@ -118,11 +118,11 @@ jobs:
           CODE="$(get "$BASE/?sha=$EXPECTED_SHA" /tmp/root.html || echo 000)"
           echo "root HTTP=$CODE"
           if [ "$CODE" = "200" ] && \
-             grep -F 'src/main-v1782.js?v=18.0.5' /tmp/root.html >/dev/null && \
-             grep -F 'assets/images/ciarm-logo-header-v2.png?v=18.0.5' /tmp/root.html >/dev/null; then
-            echo "OK: el sitio público usa v18.0.5 y referencia el logo CIARM."
+             grep -F 'src/main-v1782.js?v=18.1.0' /tmp/root.html >/dev/null && \
+             grep -F 'assets/images/ciarm-logo-header-v2.png?v=18.1.0' /tmp/root.html >/dev/null; then
+            echo "OK: el sitio público usa v18.1.0 y referencia el logo CIARM."
           else
-            echo "ERROR: el sitio público NO usa el entrypoint v18.0.5."
+            echo "ERROR: el sitio público NO usa el entrypoint v18.1.0."
             ERRORS=1
           fi
 
@@ -207,7 +207,8 @@ jobs:
              grep -F '.exact-card:hover' /tmp/theme.css >/dev/null && \
              grep -F '.logout-btn' /tmp/theme.css >/dev/null && \
              grep -F '.assistant-ai' /tmp/theme.css >/dev/null && \
-             grep -F '.voiceflow-embed-target.is-expanded' /tmp/theme.css >/dev/null && \
+             grep -F '#ciarm-assistant.ciarm-assistant--active' /tmp/theme.css >/dev/null && \
+             grep -F '.ciarm-chat-dialog' /tmp/theme.css >/dev/null && \
              grep -F '.app-layout.sidebar-open .sidebar' /tmp/theme.css >/dev/null && \
              grep -F '.app-layout.sidebar-collapsed .sidebar' /tmp/theme.css >/dev/null && \
              grep -F '.header-avatar-wrap' /tmp/theme.css >/dev/null; then
@@ -295,12 +296,17 @@ jobs:
           CODE="$(get "$BASE/src/components/dashboardVoiceflow-v1782.js?sha=$EXPECTED_SHA" /tmp/vf.js || echo 000)"
           echo "dashboardVoiceflow-v1782.js HTTP=$CODE"
           if [ "$CODE" = "200" ] && \
-             grep -F '6a81e72529695cfeb738ad6e' /tmp/vf.js >/dev/null && \
-             grep -F "mode: 'embedded'" /tmp/vf.js >/dev/null && \
+             grep -F "fetch('/voiceflow.php'" /tmp/vf.js >/dev/null && \
+             grep -F 'id="ciarm-assistant"' /tmp/vf.js >/dev/null && \
+             grep -F 'id="ciarm-chat-input"' /tmp/vf.js >/dev/null && \
+             grep -F 'Consultando…' /tmp/vf.js >/dev/null && \
+             grep -F 'renderMarkdown' /tmp/vf.js >/dev/null && \
+             ! grep -F "mode: 'embedded'" /tmp/vf.js >/dev/null && \
+             ! grep -F 'cdn.voiceflow.com' /tmp/vf.js >/dev/null && \
              ! grep -F 'alert(' /tmp/vf.js >/dev/null; then
-            echo "OK: módulo Voiceflow nuevo está publicado."
+            echo "OK: Asistente CIARM nativo está publicado; Voiceflow queda sólo como motor server-side."
           else
-            echo "ERROR: el módulo Voiceflow nuevo no está publicado correctamente."
+            echo "ERROR: el dashboard no corresponde a la implementación nativa del Asistente CIARM."
             ERRORS=1
           fi
 
@@ -315,4 +321,4 @@ jobs:
             exit 1
           fi
 
-          echo "VALIDACIÓN OK: portal2.ciarm.edu.mx publica este commit, la paleta CIARM y Voiceflow embebido."
+          echo "VALIDACIÓN OK: portal2.ciarm.edu.mx publica este commit, autenticación real y Asistente CIARM nativo."

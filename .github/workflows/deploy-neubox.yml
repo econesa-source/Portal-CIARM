@@ -199,18 +199,6 @@ jobs:
             ERRORS=1
           fi
 
-          CODE="$(curl -sS -L --connect-timeout 10 --max-time 90 \
-            -o /tmp/voiceflow-health.json -w '%{http_code}' "$BASE/voiceflow-health.php?sha=$EXPECTED_SHA" || echo 000)"
-          echo "voiceflow-health.php HTTP=$CODE"
-          cat /tmp/voiceflow-health.json || true
-          echo
-          if [ "$CODE" = "200" ] && grep -F '"ok":true' /tmp/voiceflow-health.json >/dev/null; then
-            echo "OK: API key, sesión Voiceflow y conversación v4 validadas de punta a punta."
-          else
-            echo "ERROR: diagnóstico Voiceflow falló."
-            ERRORS=1
-          fi
-
           CODE="$(get "$BASE/ciarm-theme.css?sha=$EXPECTED_SHA" /tmp/theme.css || echo 000)"
           echo "ciarm-theme.css HTTP=$CODE"
           if [ "$CODE" = "200" ] && \

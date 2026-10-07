@@ -1,6 +1,6 @@
 /**
  * Módulo de Inicio - Dashboard Oficial CIARM
- * Versión: 17.10.8
+ * Versión: 18.0.3
  */
 
 const VOICEFLOW_PROJECT_ID = '6a81e72529695cfeb738ad6e';
@@ -37,6 +37,16 @@ async function mountVoiceflowAssistant() {
   const target = document.getElementById('voiceflow-chat');
 
   if (!target) return;
+
+  const expandAssistant = () => {
+    target.classList.add('is-expanded');
+    target.closest('.assistant-hero-card')?.classList.add('is-expanded');
+  };
+
+  // Igual que Portal 1: compacto al entrar y con más espacio al usarlo.
+  target.addEventListener('pointerenter', expandAssistant, { once: true });
+  target.addEventListener('focusin', expandAssistant, { once: true });
+  target.addEventListener('pointerdown', expandAssistant, { once: true });
 
   target.innerHTML = '<div class="voiceflow-loading">Cargando Asistente CIARM...</div>';
 
@@ -80,7 +90,7 @@ export function render(container, userSession) {
       <div class="assistant-hero-card">
         <div class="assistant-hero-header">
           <div>
-            <h2 class="assistant-title">Asistente CIARM</h2>
+            <h2 class="assistant-title">Asistente C<span class="assistant-ai">IA</span>RM</h2>
             <p class="assistant-subtitle">Consulta normativa, procesos y herramientas del colegio.</p>
           </div>
           <span class="assistant-tag">CONSULTA INSTITUCIONAL</span>

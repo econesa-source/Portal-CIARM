@@ -1,18 +1,66 @@
 /**
  * Portal CIARM - Router SPA y Guardián de Autenticación
- * Versión: 18.0.4
+ * Versión: 18.0.5
  */
 
 import { getAuthenticatedUser, logout } from './services/authService.js';
 import { renderLoginWidget } from './components/loginWidget.js';
 
-const APP_VERSION = '18.0.4';
+const APP_VERSION = '18.0.5';
 
 const routes = {
   '#inicio': () => import(`./components/dashboardWidget.js?v=${APP_VERSION}`),
   '#solicitudes': () => import(`./components/solicitudesWidget.js?v=${APP_VERSION}`),
   '#mis-solicitudes': () => import(`./components/misSolicitudesWidget.js?v=${APP_VERSION}`)
 };
+
+function isMobileViewport() {
+  return window.matchMedia('(max-width: 760px)').matches;
+}
+
+function setSidebarOpen(open) {
+  const app = document.querySelector('.app-layout');
+  const toggle = document.getElementById('btn-sidebar-toggle');
+  if (!app) return;
+  app.classList.toggle('sidebar-open', Boolean(open));
+  toggle?.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function closeMobileSidebar() {
+  if (isMobileViewport()) setSidebarOpen(false);
+}
+
+function setupSidebarControls() {
+  const app = document.querySelector('.app-layout');
+  const toggle = document.getElementById('btn-sidebar-toggle');
+  const backdrop = document.getElementById('sidebar-backdrop');
+  if (!app || !toggle || toggle.dataset.bound === 'true') return;
+
+  toggle.dataset.bound = 'true';
+  toggle.addEventListener('click', () => {
+    if (isMobileViewport()) {
+      setSidebarOpen(!app.classList.contains('sidebar-open'));
+      return;
+    }
+    app.classList.toggle('sidebar-collapsed');
+  });
+
+  backdrop?.addEventListener('click', () => setSidebarOpen(false));
+  window.addEventListener('resize', () => {
+    if (!isMobileViewport()) setSidebarOpen(false);
+  });
+}
+
+function initials(name) {
+  return String(name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part.charAt(0))
+    .join('')
+    .toUpperCase() || 'CI';
+}
 
 function getTargetContainer() {
   let container = document.getElementById('main-content');
@@ -30,11 +78,15 @@ async function router() {
   const mainContainer = getTargetContainer();
   const sidebar = document.getElementById('main-sidebar');
   const userProfileHeader = document.getElementById('header-user-profile');
+  const sidebarToggle = document.getElementById('btn-sidebar-toggle');
+  setupSidebarControls();
 
   const user = await getAuthenticatedUser();
 
   if (!user) {
     if (sidebar) sidebar.style.display = 'none';
+    if (sidebarToggle) sidebarToggle.style.display = 'none';
+    setSidebarOpen(false);
     if (userProfileHeader) {
       userProfileHeader.innerHTML = `<span class="login-header-tag">ACCESO INSTITUCIONAL</span>`;
     }
@@ -47,21 +99,26 @@ async function router() {
     return;
   }
   if (sidebar) sidebar.style.display = 'block';
+  if (sidebarToggle) sidebarToggle.style.display = 'inline-flex';
   if (userProfileHeader && user) {
     userProfileHeader.innerHTML = `
-      <div style="display:flex; align-items:center; gap:12px;">
-        <div style="text-align:right;">
-          <span style="display:block; font-weight:600; font-size:0.85rem; color:#fff;">${user.nombre}</span>
-          <span style="font-size:0.75rem; color:#CBD5E1;">${user.correo}</span>
+      <div class="header-user-wrap">
+        <div class="user-copy">
+          <span class="user-name">${user.nombre}</span>
+          <span class="user-email">${user.correo}</span>
+        </div>
+        <div class="header-avatar-wrap" aria-hidden="true">
+          <span class="header-avatar">${initials(user.nombre)}</span>
+          <span class="header-missing-badge">5</span>
         </div>
         <button id="btn-logout-header" class="logout-btn">Cerrar sesión</button>
       </div>
     `;
-
     document.getElementById('btn-logout-header')?.addEventListener('click', logout);
   }
 
   const hash = window.location.hash || '#inicio';
+  closeMobileSidebar();
 
   // Actualizar clase active en el Sidebar
   document.querySelectorAll('.sidebar-nav a').forEach(link => {

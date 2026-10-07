@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Portal CIARM - Hoja de Estilos Institucionales (v18.0.2)
+   Portal CIARM - Hoja de Estilos Institucionales (v18.0.3)
    ========================================================================== */
 
 :root {
@@ -57,17 +57,17 @@ body {
 .brand-logo-wrap {
   display: inline-flex;
   align-items: center;
-  background: #FFFFFF;
-  padding: 4px 9px;
-  border-radius: 4px;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
   line-height: 0;
 }
 
 .brand-logo {
   display: block;
   width: auto;
-  height: 42px;
-  max-width: min(390px, 32vw);
+  height: 38px;
+  max-width: min(330px, 30vw);
   object-fit: contain;
 }
 
@@ -77,8 +77,8 @@ body {
   }
 
   .brand-logo {
-    height: 34px;
-    max-width: 46vw;
+    height: 32px;
+    max-width: 48vw;
   }
 }
 
@@ -88,6 +88,24 @@ body {
   color: #E2E8F0;
   letter-spacing: 1px;
   text-transform: uppercase;
+}
+
+.logout-btn {
+  background: #D92D20;
+  color: #FFFFFF;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 0.75rem;
+  transition: background-color 0.18s ease, transform 0.18s ease;
+}
+
+.logout-btn:hover {
+  background: #B42318;
+  transform: translateY(-1px);
 }
 
 /* Layout Principal */
@@ -228,9 +246,14 @@ body {
 
 .assistant-title {
   margin: 0 0 4px 0;
-  font-size: 1.4rem;
+  font-size: 1.85rem;
+  line-height: 1.05;
   font-weight: 700;
   color: #FFFFFF;
+}
+
+.assistant-ai {
+  color: var(--gold-color);
 }
 
 .assistant-subtitle {
@@ -300,13 +323,20 @@ body {
 .voiceflow-embed-target {
   position: relative;
   width: 100%;
-  height: clamp(340px, calc(100dvh - 500px), 520px);
-  min-height: 340px;
-  max-height: 520px;
+  height: 138px;
+  min-height: 138px;
+  max-height: 138px;
   background: #4277C7;
   border-radius: 12px;
   overflow: hidden;
   clip-path: inset(0 round 12px);
+  transition: height 0.28s ease, min-height 0.28s ease, max-height 0.28s ease;
+}
+
+.voiceflow-embed-target.is-expanded {
+  height: clamp(360px, calc(100dvh - 470px), 500px);
+  min-height: 360px;
+  max-height: 500px;
 }
 
 .voiceflow-embed-target::before {
@@ -334,7 +364,7 @@ body {
 
 .voiceflow-loading,
 .voiceflow-error {
-  min-height: 340px;
+  min-height: 138px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -350,11 +380,21 @@ body {
 }
 
 @media (max-width: 900px) {
-  .voiceflow-embed-target,
+  .voiceflow-embed-target {
+    height: 132px;
+    min-height: 132px;
+    max-height: 132px;
+  }
+
+  .voiceflow-embed-target.is-expanded {
+    height: min(62dvh, 500px);
+    min-height: 360px;
+    max-height: 500px;
+  }
+
   .voiceflow-loading,
   .voiceflow-error {
-    height: min(62dvh, 520px);
-    min-height: 380px;
+    min-height: 132px;
   }
 }
 

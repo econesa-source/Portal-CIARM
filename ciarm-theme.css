@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Portal CIARM - Hoja de Estilos Institucionales (v18.0.5)
+   Portal CIARM - Hoja de Estilos Institucionales (v18.1.0)
    ========================================================================== */
 
 :root {
@@ -1098,5 +1098,340 @@ body {
     width: 100%;
     min-width: 0;
     padding: 16px;
+  }
+}
+
+
+/* ==========================================================================
+   Asistente CIARM nativo — paridad funcional/visual con Portal 1 (v18.1.0)
+   ========================================================================== */
+
+.portal-home-content {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 40px 36px 64px;
+}
+
+.sicpe-search {
+  background: var(--primary-color);
+  color: #FFFFFF;
+  border-top: 7px solid var(--gold-color);
+  padding: 28px 36px 32px;
+  box-shadow: 0 12px 24px rgba(38,72,127,.12);
+}
+
+.sicpe-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 25px;
+}
+
+.sicpe-title {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  margin-bottom: 8px;
+}
+
+.sicpe-heading h1 {
+  font: 400 44px/1 Kefa, Georgia, "Times New Roman", serif;
+  margin: 0;
+  color: #FFFFFF;
+}
+
+.ciarm-word {
+  white-space: nowrap;
+  color: #FFFFFF;
+}
+
+.ai-accent {
+  color: #E1C976;
+}
+
+.sicpe-heading p {
+  font-size: 14px;
+  color: #D9E0EC;
+  margin: 0;
+}
+
+.sicpe-heading > span {
+  color: #E1C976;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  margin-top: 13px;
+}
+
+#ciarm-assistant {
+  width: 100%;
+  height: 106px;
+  min-height: 106px;
+  max-height: 60dvh;
+  margin-top: 22px;
+  overflow: hidden;
+  background: #FFFFFF;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  transition: height .22s ease;
+}
+
+#ciarm-assistant.ciarm-assistant--active {
+  height: clamp(180px,42dvh,380px);
+}
+
+.ciarm-chat-dialog {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-gutter: stable;
+}
+
+.ciarm-chat-dialog[hidden] {
+  display: none;
+}
+
+.ciarm-chat-user {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #4072C6;
+  color: #FFFFFF;
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.ciarm-chat-assistant {
+  align-self: flex-start;
+  max-width: 92%;
+  color: #262626;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.ciarm-chat-assistant .sicpe-answer {
+  font-size: 14px;
+}
+
+.ciarm-chat-loading {
+  color: #687487;
+}
+
+.ciarm-chat-error {
+  padding: 10px 12px;
+  border-left: 4px solid #D62626;
+  background: #FFF2F2;
+  color: #9B2020;
+  font-size: 13px;
+}
+
+.sicpe-search .ciarm-chat-form {
+  height: 58px;
+  min-height: 58px;
+  margin-top: auto;
+  border-top: 1px solid #E2E4E5;
+  background: #FFFFFF;
+  display: flex;
+  align-items: center;
+}
+
+.sicpe-search .ciarm-chat-form input {
+  height: 100%;
+  border: 0;
+  outline: 0;
+  min-width: 0;
+  flex: 1;
+  color: #262626;
+  padding: 0 20px;
+  background: #FFFFFF;
+}
+
+.sicpe-search .ciarm-chat-form button {
+  align-self: auto;
+  width: 34px;
+  height: 34px;
+  margin-right: 8px;
+  border: 0;
+  border-radius: 50%;
+  background: #4072C6;
+  color: #FFFFFF;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 400;
+  padding: 0;
+}
+
+.sicpe-search .ciarm-chat-form button:disabled,
+.sicpe-search .ciarm-chat-form input:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+.sicpe-answer {
+  font-size: 14px;
+  line-height: 1.62;
+  color: #262626;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sicpe-answer p {
+  margin: 0 0 13px;
+  white-space: pre-wrap;
+}
+
+.sicpe-answer p:last-child,
+.sicpe-answer ul:last-child,
+.sicpe-answer ol:last-child {
+  margin-bottom: 0;
+}
+
+.sicpe-answer h3 {
+  margin: 18px 0 8px;
+  color: var(--primary-color);
+  font-family: "Century Gothic", CenturyGothic, AppleGothic, Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.sicpe-answer h3:first-child {
+  margin-top: 0;
+}
+
+.sicpe-answer ul,
+.sicpe-answer ol {
+  margin: 8px 0 14px;
+  padding-left: 25px;
+}
+
+.sicpe-answer li {
+  padding-left: 3px;
+  margin: 5px 0;
+}
+
+.sicpe-answer strong {
+  font-weight: 800;
+}
+
+.sicpe-answer a {
+  color: #175EA8;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.sicpe-answer a:hover {
+  color: var(--primary-color);
+  text-decoration-thickness: 2px;
+}
+
+.sicpe-table-wrap {
+  width: 100%;
+  margin: 12px 0 16px;
+  overflow-x: auto;
+  border: 1px solid #DFE3E8;
+}
+
+.sicpe-table-wrap table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  background: #FFFFFF;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.sicpe-table-wrap th {
+  padding: 10px 12px;
+  background: #EDF2F8;
+  color: var(--primary-color);
+  text-align: left;
+  font-weight: 800;
+  border-right: 1px solid #DFE3E8;
+}
+
+.sicpe-table-wrap td {
+  padding: 10px 12px;
+  vertical-align: top;
+  color: #262626;
+  border-top: 1px solid #DFE3E8;
+  border-right: 1px solid #DFE3E8;
+}
+
+.sicpe-table-wrap th:last-child,
+.sicpe-table-wrap td:last-child {
+  border-right: 0;
+}
+
+.sicpe-table-wrap tbody tr:nth-child(even) {
+  background: #F8FAFC;
+}
+
+/* Portal 1 usa dos columnas de módulos en escritorio. */
+.dashboard-grid-exact {
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 28px;
+}
+
+.exact-card {
+  min-height: 154px;
+}
+
+@media (max-width: 760px) {
+  .portal-home-content {
+    padding: 24px 16px 48px;
+  }
+
+  .sicpe-search {
+    padding: 24px 20px;
+  }
+
+  .sicpe-heading {
+    display: block;
+  }
+
+  .sicpe-heading h1 {
+    font-size: 36px;
+    line-height: 1.08;
+  }
+
+  .sicpe-heading > span {
+    display: block;
+    margin-top: 16px;
+  }
+
+  #ciarm-assistant {
+    height: 100px;
+    min-height: 100px;
+    max-height: 65dvh;
+  }
+
+  #ciarm-assistant.ciarm-assistant--active {
+    height: clamp(180px,55dvh,380px);
+  }
+
+  .ciarm-chat-dialog {
+    padding: 14px 16px;
+  }
+
+  .ciarm-chat-user {
+    max-width: 92%;
+  }
+
+  .dashboard-grid-exact {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin-top: 20px;
   }
 }

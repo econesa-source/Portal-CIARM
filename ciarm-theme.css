@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Portal CIARM - Hoja de Estilos Institucionales (v18.0.3)
+   Portal CIARM - Hoja de Estilos Institucionales (v18.0.5)
    ========================================================================== */
 
 :root {
@@ -29,14 +29,17 @@ body {
 
 /* Header Institucional */
 .main-header {
+  height: 88px;
   background-color: var(--primary-color) !important;
   color: #FFFFFF !important;
-  padding: 12px 24px;
+  padding: 0 24px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 16px;
   border-bottom: 3px solid var(--gold-color) !important;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  position: relative;
+  z-index: 40;
 }
 
 .brand-text h1,
@@ -51,7 +54,8 @@ body {
 .brand {
   display: flex;
   align-items: center;
-  min-width: 330px;
+  width: 250px;
+  min-width: 250px;
 }
 
 .brand-logo-wrap {
@@ -65,21 +69,10 @@ body {
 
 .brand-logo {
   display: block;
-  width: auto;
-  height: 38px;
-  max-width: min(330px, 30vw);
+  width: 230px;
+  height: auto;
+  max-width: 100%;
   object-fit: contain;
-}
-
-@media (max-width: 760px) {
-  .brand {
-    min-width: 0;
-  }
-
-  .brand-logo {
-    height: 32px;
-    max-width: 48vw;
-  }
 }
 
 .login-header-tag {
@@ -112,32 +105,134 @@ body {
 .content-wrapper {
   display: flex;
   flex: 1;
-  min-height: calc(100vh - 65px);
+  min-height: calc(100vh - 88px);
 }
 
 /* Sidebar Lateral */
 .sidebar {
-  width: 240px;
+  width: 280px;
+  min-height: calc(100vh - 88px);
   background-color: var(--primary-color) !important;
-  border-right: 3px solid var(--gold-color) !important;
-  padding: 20px 10px;
+  border-right: 6px solid var(--gold-color) !important;
+  padding: 48px 24px 28px;
   flex-shrink: 0;
+  overflow: hidden;
+  transition: width .2s ease, padding .2s ease, transform .2s ease;
+}
+
+.menu-trigger {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: #FFFFFF;
+  font-size: 22px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+
+.header-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.header-user-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-copy {
+  display: flex;
+  flex-direction: column;
+  text-align: right;
+}
+
+.user-name {
+  display: block;
+  font-weight: 700;
+  font-size: .85rem;
+  color: #FFFFFF;
+}
+
+.user-email {
+  margin-top: 3px;
+  font-size: .72rem;
+  color: #CBD5E1;
+}
+
+.header-avatar-wrap {
+  display: none;
+  position: relative;
+}
+
+.header-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--gold-color);
+  color: var(--primary-color);
+  font-weight: 800;
+}
+
+.header-missing-badge {
+  position: absolute;
+  right: -7px;
+  bottom: -6px;
+  width: 22px;
+  height: 22px;
+  border: 2px solid #FFFFFF;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #D92D20;
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.sidebar-backdrop {
+  display: none;
 }
 
 .sidebar-nav a {
-  display: block;
-  color: #E2E8F0;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #FFFFFF;
   text-decoration: none;
-  padding: 12px 16px;
-  border-radius: 6px;
-  margin-bottom: 8px;
+  padding: 0 18px;
+  margin-bottom: 10px;
   font-weight: 500;
   font-size: 0.9rem;
+  white-space: nowrap;
 }
 
-.sidebar-nav a.active,
-.sidebar-nav a:hover {
-  background-color: #1F3A66;
+.nav-icon {
+  width: 22px;
+  flex: 0 0 22px;
+  text-align: center;
+  font-size: 1.1rem;
+}
+
+.nav-label {
+  overflow: hidden;
+}
+
+.sidebar-nav a.active {
+  background-color: #FFFFFF;
+  color: var(--primary-color);
+}
+
+.sidebar-nav a:not(.nav-link-disabled):hover {
+  background-color: rgba(255,255,255,.10);
   color: #FFFFFF;
 }
 
@@ -148,7 +243,21 @@ body {
 
 .sidebar-nav a.nav-link-disabled:hover {
   background-color: transparent;
-  color: #E2E8F0;
+  color: #FFFFFF;
+}
+
+.app-layout.sidebar-collapsed .sidebar {
+  width: 74px;
+  padding-left: 9px;
+  padding-right: 9px;
+}
+
+.app-layout.sidebar-collapsed .sidebar-nav a {
+  padding: 0 15px;
+}
+
+.app-layout.sidebar-collapsed .nav-label {
+  display: none;
 }
 
 /* Contenido Principal */
@@ -908,3 +1017,86 @@ body {
   }
 }
 
+
+
+/* Portal 1 shell parity: navegación responsive */
+@media (max-width: 760px) {
+  .main-header {
+    height: 72px;
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .brand {
+    width: 145px;
+    min-width: 145px;
+  }
+
+  .brand-logo {
+    width: 140px;
+    height: auto;
+  }
+
+  .header-title {
+    display: none;
+  }
+
+  .user-profile {
+    margin-left: auto;
+  }
+
+  .user-copy,
+  .logout-btn {
+    display: none;
+  }
+
+  .header-avatar-wrap {
+    display: block;
+  }
+
+  .content-wrapper {
+    display: block;
+    min-height: calc(100vh - 72px);
+  }
+
+  .sidebar,
+  .app-layout.sidebar-collapsed .sidebar {
+    position: fixed;
+    z-index: 35;
+    left: 0;
+    top: 72px;
+    bottom: 0;
+    width: min(82vw, 310px);
+    min-height: 0;
+    padding: 34px 20px;
+    border-right-width: 6px !important;
+    transform: translateX(-102%);
+  }
+
+  .app-layout.sidebar-open .sidebar {
+    transform: translateX(0);
+  }
+
+  .app-layout.sidebar-collapsed .nav-label {
+    display: inline;
+  }
+
+  .sidebar-backdrop {
+    display: none;
+    position: fixed;
+    z-index: 30;
+    inset: 72px 0 0;
+    border: 0;
+    background: rgba(0,0,0,.28);
+  }
+
+  .app-layout.sidebar-open .sidebar-backdrop {
+    display: block;
+  }
+
+  .main-body {
+    width: 100%;
+    min-width: 0;
+    padding: 16px;
+  }
+}

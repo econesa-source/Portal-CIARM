@@ -44,9 +44,11 @@ async function mountVoiceflowAssistant() {
   };
 
   // Igual que Portal 1: compacto al entrar y con más espacio al usarlo.
-  target.addEventListener('pointerenter', expandAssistant, { once: true });
+  // Expandir sólo cuando el usuario realmente entra a usar el chat.
+  // No expandimos por hover: eso hacía que Portal 2 creciera apenas se movía
+  // el mouse sobre el widget.
   target.addEventListener('focusin', expandAssistant, { once: true });
-  target.addEventListener('pointerdown', expandAssistant, { once: true });
+  target.addEventListener('pointerdown', expandAssistant, { once: true, capture: true });
 
   target.innerHTML = '<div class="voiceflow-loading">Cargando Asistente CIARM...</div>';
 

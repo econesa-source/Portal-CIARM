@@ -3,13 +3,15 @@ declare(strict_types=1);
 
 /**
  * Portal CIARM — proxy server-side para Asistente CIARM / Voiceflow.
- * Mantiene el token fuera del navegador y reutiliza la sesión PHP real de Portal 2.
+ * Voiceflow queda oculto detrás de la interfaz propia del Portal.
+ * Conversaciones API v4: API key -> sessionKey -> interact.
  */
 
 require_once __DIR__ . '/auth-lib.php';
 
-const CIARM_VOICEFLOW_BASE = 'https://realtime-api.voiceflow.com/v1/stable';
+const CIARM_VOICEFLOW_BASE = 'https://general-runtime.voiceflow.com';
 const CIARM_VOICEFLOW_PROJECT_ID = '6a81e72529695cfeb738ad6e';
+const CIARM_VOICEFLOW_ENVIRONMENT = 'main';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     ciarm_json_response(405, ['error' => 'method_not_allowed']);
@@ -41,31 +43,26 @@ if ($message === '' || $conversationID === '') {
     ciarm_json_response(400, ['error' => 'Escribí un mensaje para el Asistente CIARM.']);
 }
 
-function ciarm_voiceflow_interact(string $token, string $userID, array $action): array {
-    $url = CIARM_VOICEFLOW_BASE
-        . '/conversation/' . rawurlencode($userID)
-        . '?projectID=' . rawurlencode(CIARM_VOICEFLOW_PROJECT_ID)
-        . '&environmentAlias=main';
-
+function ciarm_voiceflow_post(string $url, string $authorization, array $payload): array {
     $ch = curl_init($url);
     if ($ch === false) {
         throw new RuntimeException('voiceflow_curl_init_failed');
     }
 
     curl_setopt_array($ch, [
-        CURLOPT_CUSTOMREQUEST => 'PUT',
+        CURLOPT_POST => true,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_TIMEOUT => 45,
         CURLOPT_HTTPHEADER => [
-            'Authorization: Bearer ' . $token,
+            'authorization: ' . $authorization,
             'Content-Type: application/json',
             'Accept: application/json',
         ],
-        CURLOPT_POSTFIELDS => json_encode([
-            'action' => $action,
-            'version' => 'published',
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        CURLOPT_POSTFIELDS => json_encode(
+            $payload,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+        ),
     ]);
 
     $body = curl_exec($ch);
@@ -73,29 +70,79 @@ function ciarm_voiceflow_interact(string $token, string $userID, array $action):
     $error = curl_error($ch);
     curl_close($ch);
 
-    if ($body === false || $error !== '' || $status < 200 || $status >= 300) {
-        throw new RuntimeException('voiceflow_upstream_failed');
+    if ($body === false || $error !== '') {
+        throw new RuntimeException('voiceflow_upstream_unreachable');
     }
 
     $cleaned = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', (string)$body) ?? '';
     $decoded = json_decode($cleaned, true);
 
+    if ($status < 200 || $status >= 300) {
+        error_log('Portal CIARM Voiceflow HTTP ' . $status . ': ' . substr($cleaned, 0, 500));
+        throw new RuntimeException('voiceflow_http_' . $status);
+    }
+
     if (!is_array($decoded)) {
         throw new RuntimeException('voiceflow_invalid_json');
     }
 
-    $traces = $decoded['traces'] ?? [];
+    return $decoded;
+}
+
+function ciarm_voiceflow_start_session(string $token, string $userID): string {
+    $url = CIARM_VOICEFLOW_BASE
+        . '/v4/project/' . rawurlencode(CIARM_VOICEFLOW_PROJECT_ID)
+        . '/environment/' . rawurlencode(CIARM_VOICEFLOW_ENVIRONMENT)
+        . '/session';
+
+    $response = ciarm_voiceflow_post($url, $token, [
+        'userID' => $userID,
+    ]);
+
+    $sessionKey = trim((string)($response['sessionKey'] ?? ''));
+    if ($sessionKey === '') {
+        throw new RuntimeException('voiceflow_missing_session_key');
+    }
+
+    return $sessionKey;
+}
+
+function ciarm_voiceflow_interact(string $sessionKey, array $action): array {
+    $response = ciarm_voiceflow_post(
+        CIARM_VOICEFLOW_BASE . '/v4/interact',
+        $sessionKey,
+        [
+            'action' => $action,
+            'config' => [
+                'userTimezone' => 'America/Cancun',
+            ],
+        ]
+    );
+
+    $traces = $response['traces'] ?? [];
     return is_array($traces) ? $traces : [];
 }
 
 $userID = 'portal-' . $conversationID;
 
 try {
-    if ($launch) {
-        ciarm_voiceflow_interact($token, $userID, ['type' => 'launch']);
+    if (!isset($_SESSION['ciarm_voiceflow_sessions']) || !is_array($_SESSION['ciarm_voiceflow_sessions'])) {
+        $_SESSION['ciarm_voiceflow_sessions'] = [];
     }
 
-    $traces = ciarm_voiceflow_interact($token, $userID, [
+    $sessionKey = trim((string)($_SESSION['ciarm_voiceflow_sessions'][$conversationID] ?? ''));
+
+    if ($launch || $sessionKey === '') {
+        $sessionKey = ciarm_voiceflow_start_session($token, $userID);
+        $_SESSION['ciarm_voiceflow_sessions'][$conversationID] = $sessionKey;
+
+        if ($launch) {
+            // Portal 1 inicia la conversación y descarta la respuesta de launch.
+            ciarm_voiceflow_interact($sessionKey, ['type' => 'launch']);
+        }
+    }
+
+    $traces = ciarm_voiceflow_interact($sessionKey, [
         'type' => 'text',
         'payload' => $message,
     ]);

@@ -187,6 +187,18 @@ jobs:
             ERRORS=1
           fi
 
+          CODE="$(curl -sS -L --connect-timeout 10 --max-time 30 \
+            -H 'Content-Type: application/json' \
+            -d '{"message":"smoke","conversationID":"ciarm-smoke","launch":true}' \
+            -o /tmp/voiceflow-session.json -w '%{http_code}' "$BASE/voiceflow.php?sha=$EXPECTED_SHA" || echo 000)"
+          echo "voiceflow.php without session HTTP=$CODE"
+          if [ "$CODE" = "401" ] && grep -F 'La sesión institucional no es válida' /tmp/voiceflow-session.json >/dev/null; then
+            echo "OK: proxy Voiceflow existe y exige sesión institucional."
+          else
+            echo "ERROR: voiceflow.php no está protegiendo el endpoint con la sesión real."
+            ERRORS=1
+          fi
+
           CODE="$(get "$BASE/ciarm-theme.css?sha=$EXPECTED_SHA" /tmp/theme.css || echo 000)"
           echo "ciarm-theme.css HTTP=$CODE"
           if [ "$CODE" = "200" ] && \

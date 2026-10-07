@@ -1116,6 +1116,8 @@ body {
   background: var(--primary-color);
   color: #FFFFFF;
   border-top: 7px solid var(--gold-color);
+  border-radius: 8px;
+  overflow: hidden;
   padding: 28px 36px 32px;
   box-shadow: 0 12px 24px rgba(38,72,127,.12);
 }

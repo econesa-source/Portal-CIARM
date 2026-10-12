@@ -69,6 +69,7 @@ function normalizeTicket(raw) {
   return {
     id: firstValue(value, ['id', 'id_ticket', 'idTicket', 'ID TICKET', 'folio']),
     fecha: firstValue(value, ['fecha', 'fecha_solicitud', 'fechaSolicitud', 'FECHA SOLICITUD']),
+    fechaAsignacion: firstValue(value, ['fechaAsignacion', 'FECHA ASIGNACIÓN']),
     hora: firstValue(value, ['hora', 'hora_solicitud', 'horaSolicitud', 'HORA SOLICITUD']),
     tipo: firstValue(value, ['tipo', 'tipo_solicitud', 'tipoSolicitud', 'TIPO DE SOLICITUD']),
     descripcion: firstValue(value, ['desc', 'descripcion', 'DESCRIPCIÓN']),
@@ -133,6 +134,7 @@ function renderTable(container, tickets, userEmail) {
               ${escapeHtml(ticket.fecha || '—')}
               ${ticket.hora ? `<small class="ticket-time">${escapeHtml(ticket.hora)}</small>` : ''}
             </td>
+            <td class="col-fecha">${escapeHtml(ticket.fechaAsignacion || 'Sin registro')}</td>
             <td class="col-tipo">${escapeHtml(ticket.tipo || '—')}</td>
             <td class="col-desc">${escapeHtml(ticket.descripcion || '—')}</td>
             <td class="col-estado">
@@ -145,7 +147,7 @@ function renderTable(container, tickets, userEmail) {
       }).join('')
     : `
       <tr>
-        <td colspan="6" class="tickets-empty">
+        <td colspan="7" class="tickets-empty">
           No hay solicitudes registradas para <strong>${escapeHtml(userEmail)}</strong>.
         </td>
       </tr>
@@ -171,7 +173,8 @@ function renderTable(container, tickets, userEmail) {
           <thead>
             <tr>
               <th class="col-id">ID Ticket</th>
-              <th class="col-fecha">Fecha</th>
+              <th class="col-fecha">Fecha de solicitud</th>
+              <th class="col-fecha">Fecha de asignación</th>
               <th class="col-tipo">Tipo / Área</th>
               <th class="col-desc">Descripción</th>
               <th class="col-estado">Estado</th>

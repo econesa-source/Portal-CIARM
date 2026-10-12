@@ -23,7 +23,7 @@ export async function render(container) {
  const stateOf=t=>String(t.estado||'').trim().toUpperCase()||'SIN ESTADO';
  const isPending=t=>stateOf(t)==='NUEVO'||(!['RESUELTO','CERRADO','CANCELADO'].includes(stateOf(t))&&['','SIN ASIGNAR'].includes(String(t.responsable||'').trim().toUpperCase()));
  const groupValue=(t,key)=>String(t[key]||'').trim()||({responsable:'Sin responsable',prioridad:'Sin prioridad',tipo:'Sin tipo',area:'Sin área'})[key];
- const columns='<tr><th scope="col">Solicitud</th><th scope="col">Fecha</th><th scope="col">Solicitante</th><th scope="col">Estado</th><th scope="col">Urgencia solicitada</th><th scope="col">Prioridad asignada</th><th scope="col">Responsable</th><th scope="col">Compromiso</th></tr>';
+ const columns='<tr><th scope="col">Solicitud</th><th scope="col">Fecha de solicitud</th><th scope="col">Fecha de asignación</th><th scope="col">Solicitante</th><th scope="col">Estado</th><th scope="col">Urgencia solicitada</th><th scope="col">Prioridad asignada</th><th scope="col">Responsable</th><th scope="col">Fecha de compromiso</th></tr>';
  container.innerHTML=`<section class="ticket-admin">
   <header class="ticket-executive-heading"><div><h1>Administrar solicitudes internas</h1><p>Estado general y solicitudes que requieren atención.</p></div></header><p id="ticket-notice" class="ticket-notice" role="status" aria-live="polite"></p>
   <section id="ticket-dashboard" class="ticket-panel" aria-labelledby="ticket-dashboard-title">
@@ -38,7 +38,7 @@ export async function render(container) {
   </section>
   <section id="ticket-pending" class="ticket-panel ticket-pending" aria-labelledby="ticket-pending-title">
    <div class="ticket-panel-heading"><div><h2 id="ticket-pending-title">Nuevas solicitudes por asignar</h2><p>Solicitudes que requieren responsable, prioridad y fecha de compromiso.</p></div><span id="ticket-pending-count" class="ticket-counter" role="status"></span></div>
-   <div class="ticket-table-wrap"><table class="ticket-table"><caption class="ticket-sr-only">Solicitudes pendientes de asignación</caption><thead><tr><th scope="col">Solicitud / fecha</th><th scope="col">Solicitante</th><th scope="col">Solicitud</th><th scope="col">Urgencia</th><th scope="col">Acción</th></tr></thead><tbody id="ticket-pending-body"></tbody></table></div>
+   <div class="ticket-table-wrap"><table class="ticket-table"><caption class="ticket-sr-only">Solicitudes pendientes de asignación</caption><thead><tr><th scope="col">Solicitud / fecha de solicitud</th><th scope="col">Solicitante</th><th scope="col">Solicitud</th><th scope="col">Urgencia</th><th scope="col">Acción</th></tr></thead><tbody id="ticket-pending-body"></tbody></table></div>
   </section>
   <dialog id="ticket-modal" class="ticket-modal" aria-labelledby="ticket-modal-heading">
    <header class="ticket-modal-header"><h2 id="ticket-modal-heading">Detalle y asignación de solicitud</h2><button type="button" id="ticket-modal-close" class="ticket-secondary" aria-label="Cerrar ventana de solicitud">Cerrar</button></header>
@@ -57,8 +57,8 @@ export async function render(container) {
   target?.focus();
  });
  function ticketRows(found,pending=false){return found.map(t=>pending?
-  `<tr><td>${esc(t.id)}<span>${esc(t.fecha)}</span></td><td>${esc(t.solicitante)}<span>${esc(t.area)}</span></td><td><div class="ticket-pending-description">${esc(t.descripcion)}</div><span>${esc(t.tipo)}</span></td><td>${esc(t.urgencia)}</td><td><button type="button" data-id="${esc(t.id)}" aria-label="Asignar solicitud ${esc(t.id)}">Asignar</button></td></tr>`:
-  `<tr><td><button type="button" class="ticket-open" data-id="${esc(t.id)}">${esc(t.id)}</button><span>${esc(t.tipo)}</span></td><td>${esc(t.fecha)}</td><td>${esc(t.solicitante)}<span>${esc(t.area)}</span></td><td>${esc(t.estado)}</td><td>${esc(t.urgencia)}</td><td>${esc(t.prioridad)}</td><td>${esc(t.responsable||'Sin responsable')}</td><td>${esc(t.fechaCompromiso||'Sin fecha')}</td></tr>`).join('');}
+  `<tr><td>${esc(t.id)}<span>${esc(t.fecha)} ${esc(t.hora||'')}</span></td><td>${esc(t.solicitante)}<span>${esc(t.area)}</span></td><td><div class="ticket-pending-description">${esc(t.descripcion)}</div><span>${esc(t.tipo)}</span></td><td>${esc(t.urgencia)}</td><td><button type="button" data-id="${esc(t.id)}" aria-label="Asignar solicitud ${esc(t.id)}">Asignar</button></td></tr>`:
+  `<tr><td><button type="button" class="ticket-open" data-id="${esc(t.id)}">${esc(t.id)}</button><span>${esc(t.tipo)}</span></td><td>${esc(t.fecha)}<span>${esc(t.hora||'')}</span></td><td>${esc(t.fechaAsignacion||'Sin registro')}</td><td>${esc(t.solicitante)}<span>${esc(t.area)}</span></td><td>${esc(t.estado)}</td><td>${esc(t.urgencia)}</td><td>${esc(t.prioridad)}</td><td>${esc(t.responsable||'Sin responsable')}</td><td>${esc(t.fechaCompromiso||'Sin fecha')}</td></tr>`).join('');}
  function paint(){
   container.querySelector('#ticket-total').textContent=`${tickets.length} solicitudes`;
   const states=[...new Set([...knownStates,...tickets.map(stateOf)])];
@@ -75,7 +75,7 @@ export async function render(container) {
   const found=filterTickets(subset,filters);
   container.querySelector('#ticket-subset-title').textContent=grouping?`${dimensionLabels[grouping.key]} · ${stateLabels[grouping.value]||grouping.value}`:'Todas las solicitudes';
   container.querySelector('#ticket-count').textContent=`${found.length} de ${tickets.length} solicitudes`;
-  body.innerHTML=found.length?ticketRows(found):'<tr><td colspan="8">No hay solicitudes que coincidan con los filtros.</td></tr>';
+  body.innerHTML=found.length?ticketRows(found):'<tr><td colspan="9">No hay solicitudes que coincidan con los filtros.</td></tr>';
  }
  function resetFilters(){Object.keys(filters).forEach(key=>delete filters[key]);container.querySelector('#ticket-query').value='';container.querySelectorAll('[data-filter]').forEach(select=>select.value='');}
  paint();

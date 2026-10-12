@@ -89,3 +89,4 @@ test('compact assignment places request summary beside all editable fields',asyn
  assert.equal(layout.querySelector('textarea').rows,2);
  s.dom.window.close();
 });
+test('lists distinguish request and assignment dates and include time',async()=>{const s=setup();s.ticket.estado='ASIGNADO';s.ticket.responsable='Daniel Lara';s.ticket.fechaAsignacion='2026-10-07 11:12:13';await render(s.root);s.root.querySelector('[data-state="ASIGNADO"]').click();const table=s.root.querySelector('#ticket-subset table');assert.match(table.textContent,/Fecha de solicitud/);assert.match(table.textContent,/Fecha de asignación/);assert.match(table.textContent,/10:00:00/);assert.match(table.textContent,/11:12:13/);s.dom.window.close();});

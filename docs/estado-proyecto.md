@@ -44,3 +44,9 @@ No borrar solicitudes de prueba ni modificar tickets operativos para crear evide
 ## Protección: implementación en rama, aceptación pendiente
 
 El usuario aprobó el diseño de protección el 2026-10-12. El plan técnico está en docs/superpowers/plans/2026-10-12-proteccion-solicitudes.md, con contratos, pruebas, límites de adjuntos y cambio coordinado. La ejecución fue autorizada. La rama implementation/proteccion-solicitudes incorpora backend firmado, creación recuperable, folios de rango completo, PHP con archivos individuales y frontend 18.4.0. Pruebas locales: 84 Node y ambas suites PHP. Revisión independiente terminada y correcciones verificadas. Registro: docs/backend/proteccion-solicitudes-review.md. No se ha retirado aún el acceso histórico ni publicado la migración; staging, verificación visual y aceptación real siguen pendientes. Procedimiento: docs/backend/proteccion-solicitudes-deployment.md.
+
+## Aceptación reportada — 2026-10-12
+
+El usuario confirmó que TKT-2026-00023 se registró y cambió de estado correctamente al asignarse. Esto acredita creación y movimiento observados por el usuario; no acredita por sí solo adjuntos, bitácora, revocación ni concurrencia. Frontend 18.4.0 y PHP publicados; el usuario confirmó capabilities y el workflow acreditó rechazo de lectura histórica pública.
+
+Ajuste 18.4.1 preparado: distinguir fecha de solicitud y fecha de asignación, mostrar hora de solicitud y devolver fecha/hora de asignación ya existente en la fuente. No modifica datos ni reglas de asignación. Requiere actualizar el bundle Apps Script antes de publicar frontend.

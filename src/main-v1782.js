@@ -5,7 +5,6 @@
 
 import { getAuthenticatedUser, logout } from './services/authService.js';
 import { renderLoginWidget } from './components/loginWidget.js';
-import { getAdminContext } from './services/ticketsAdminService.js';
 
 const APP_VERSION = '18.2.0';
 
@@ -108,15 +107,6 @@ async function router() {
   // SESIÓN ACTIVA: Mostrar Sidebar y Header
   if (sidebar) sidebar.style.display = 'block';
   if (sidebarToggle) sidebarToggle.style.display = 'inline-flex';
-  const adminLink = document.getElementById('admin-solicitudes-link');
-  if (adminLink) {
-    adminLink.hidden = true;
-    try {
-      const context = await getAdminContext();
-      if (navigationId !== latestNavigation) return;
-      adminLink.hidden = !context.canAdmin;
-    } catch (_) { /* El servidor protege también la ruta directa. */ }
-  }
   if (userProfileHeader && user) {
     userProfileHeader.innerHTML = `
       <div class="header-user-wrap">

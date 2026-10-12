@@ -1473,3 +1473,15 @@ body {
 .ticket-admin legend { font-weight: 600; padding: 0 0 12px; }
 #ticket-refresh { background: white; color: #285f69; }
 @media (max-width: 1000px) { .ticket-admin-layout { grid-template-columns: 1fr; } .ticket-admin { padding: 16px; } }
+
+/* Acceso de administración dentro de la tarjeta de solicitudes internas. */
+.ticket-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.ticket-card-header .exact-card-category { margin-bottom: 0; }
+.ticket-card-header .exact-btn { width: auto; margin-left: auto; }

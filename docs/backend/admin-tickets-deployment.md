@@ -1,6 +1,6 @@
 # Administración de solicitudes internas: publicación coordinada
 
-Fecha: 2026-10-07. Estado al 2026-10-12: backend y permisos configurados por el usuario; consultas context/catalogs/list confirmadas por el usuario. Menú/router/estilos pendientes de publicación, asignación end-to-end pendiente.
+Fecha: 2026-10-07. Estado al 2026-10-12: backend y permisos configurados por el usuario; consultas context/catalogs/list confirmadas por el usuario. Botón de administración en tarjeta/router/estilos pendientes de publicación, asignación end-to-end pendiente.
 
 ## Resultado preparado
 

@@ -22,7 +22,7 @@ Usar columna Sistema de tickets de DM03 con valor Administrador para las dos cue
 La interfaz oculta el acceso si no corresponde, pero el backend debe negar igualmente solicitudes directas no autorizadas.
 
 ### Interfaz
-Acceso Administración de solicitudes internas. Bandeja con folio, fecha, solicitante, tipo, urgencia solicitada, prioridad asignada, responsable, fecha compromiso y estado.
+Decisión de interfaz del 2026-10-12: botón «Administrar» en la esquina superior derecha de la tarjeta «Solicitudes internas», con las mismas clases y colores que «Crear Solicitud». Sólo se añade cuando el servidor confirma `canAdmin: true`; ante rechazo o error no aparece. No se incluye una entrada de administración en el menú lateral. La ruta directa conserva su comprobación de autorización. Bandeja con folio, fecha, solicitante, tipo, urgencia solicitada, prioridad asignada, responsable, fecha compromiso y estado.
 Filtros por estado, tipo, responsable y urgencia; búsqueda por folio, solicitante y descripción.
 Detalle con datos originales y adjuntos. Panel de asignación con responsable, prioridad, fecha compromiso y observación opcional. Datos originales de recepción no editables en esta entrega.
 Responsables salen del catálogo existente; no inferir asignaciones automáticas. Permitir selección manual del catálogo mientras se concilian tipos.

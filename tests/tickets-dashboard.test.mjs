@@ -35,6 +35,13 @@ test('dashboard includes every real state, including historical values',async()=
  assert.equal(s.root.querySelector('#ticket-total').textContent,'5 solicitudes');
  s.dom.window.close();
 });
+test('administrator opens with only pending assignments and no expanded subset',async()=>{
+ const s=setup();await render(s.root);
+ assert.ok(s.root.querySelector('#ticket-subset').hidden);
+ assert.equal(s.root.querySelectorAll('#ticket-subset-body [data-id]').length,0);
+ assert.deepEqual([...s.root.querySelectorAll('#ticket-pending-body [data-id]')].map(e=>e.dataset.id),['NEW','WAIT']);
+ s.dom.window.close();
+});
 test('state selection filters subset but keeps pending assignments visible',async()=>{
  const s=setup();await render(s.root);
  s.root.querySelector('[data-state="EN PROCESO"]').click();
@@ -50,12 +57,15 @@ test('distribution grouping filters tickets and never interprets labels as marku
  historical.click();
  assert.deepEqual([...s.root.querySelectorAll('#ticket-subset-body [data-id]')].map(e=>e.dataset.id),['HISTORY']);
  assert.equal(s.root.querySelector('img'),null);
- s.root.querySelector('#ticket-show-all').click();
- assert.equal(s.root.querySelectorAll('#ticket-subset-body [data-id]').length,5);
+ s.root.querySelector('#ticket-clear-group').click();
+ assert.equal(s.root.querySelectorAll('#ticket-subset-body [data-id]').length,0);
+ assert.ok(s.root.querySelector('#ticket-subset').hidden);
+ assert.ok(s.root.ownerDocument.activeElement.matches('[data-state]'));
  s.dom.window.close();
 });
 test('ordinary filters do not hide pending assignments',async()=>{
  const s=setup();await render(s.root);
+ s.root.querySelector('[data-state="EN PROCESO"]').click();
  const query=s.root.querySelector('#ticket-query');query.value='nonexistent';query.dispatchEvent(new s.dom.window.Event('input'));
  assert.equal(s.root.querySelectorAll('#ticket-subset-body [data-id]').length,0);
  assert.equal(s.root.querySelectorAll('#ticket-pending-body [data-id]').length,2);
@@ -90,6 +100,7 @@ test('delayed save refreshes dashboard while another ticket detail remains open'
  s.root.querySelector('[name=fechaCompromiso]').value='2026-10-15';
  s.root.querySelector('form').dispatchEvent(new s.dom.window.Event('submit',{bubbles:true,cancelable:true}));
  await s.flush();
+ s.root.querySelector('[data-state="EN PROCESO"]').click();
  s.root.querySelector('#ticket-subset-body [data-id="WORK"]').click();await s.flush();
  confirm();await s.flush();
  assert.equal(s.root.querySelector('#ticket-pending-body [data-id="NEW"]'),null);

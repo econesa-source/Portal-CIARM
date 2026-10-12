@@ -13,5 +13,7 @@ jobs:
           node-version: '22'
       - run: npm ci && npm test
       - run: php tests/tickets-auth.php
+      - run: php tests/tickets-portal-auth.php
+      - run: php -l tickets-portal-lib.php && php -l auth-lib.php
       - run: php -l tickets-lib.php && php -l tickets-api.php
       - run: node apps-script/build.mjs && git diff --exit-code apps-script/tickets-backend.gs

@@ -80,3 +80,12 @@ test('leaving route closes modal and aborts pending requests',async()=>{
  assert.ok(s.calls.every(call=>call.options.signal.aborted));
  s.dom.window.close();
 });
+test('compact assignment places request summary beside all editable fields',async()=>{
+ const s=setup('TKT-2026-00013');await s.detail();
+ const layout=s.root.querySelector('.ticket-assignment-layout');assert.ok(layout);
+ assert.ok(layout.querySelector('.ticket-summary'));
+ assert.ok(layout.querySelector('#ticket-assignment'));
+ for(const name of ['responsable','prioridad','fechaCompromiso','observacion'])assert.ok(layout.querySelector(`[name=${name}]`));
+ assert.equal(layout.querySelector('textarea').rows,2);
+ s.dom.window.close();
+});

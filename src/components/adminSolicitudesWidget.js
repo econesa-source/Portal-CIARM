@@ -35,8 +35,8 @@ export async function render(container) {
    <div class="ticket-panel-heading"><div><h2 id="ticket-pending-title">Nuevas solicitudes por asignar</h2><p>Siempre visibles, independientemente de la agrupación seleccionada.</p></div><span id="ticket-pending-count" class="ticket-counter" role="status"></span></div>
    <div class="ticket-table-wrap"><table class="ticket-table"><caption class="ticket-sr-only">Solicitudes pendientes de asignación</caption><thead><tr><th scope="col">Solicitud / fecha</th><th scope="col">Solicitante</th><th scope="col">Solicitud</th><th scope="col">Urgencia</th><th scope="col">Acción</th></tr></thead><tbody id="ticket-pending-body"></tbody></table></div>
   </section>
-  <section class="ticket-panel" aria-labelledby="ticket-subset-title">
-   <div class="ticket-panel-heading"><div><h2 id="ticket-subset-title">Todas las solicitudes</h2><p id="ticket-count" role="status"></p></div><button type="button" id="ticket-show-all" class="ticket-secondary">Ver todas</button></div>
+  <section id="ticket-subset" class="ticket-panel" aria-labelledby="ticket-subset-title" hidden>
+   <div class="ticket-panel-heading"><div><h2 id="ticket-subset-title">Todas las solicitudes</h2><p id="ticket-count" role="status"></p></div><button type="button" id="ticket-clear-group" class="ticket-secondary">Cerrar agrupación</button></div>
    <div class="ticket-filters"><label>Buscar<input id="ticket-query" type="search" placeholder="Folio, solicitante o descripción"></label>${['estado','prioridad','urgencia','responsable','tipo','area'].map(key=>`<label>${dimensionLabels[key]}<select data-filter="${key}"><option value="">Todos</option>${[...new Set(tickets.map(t=>t[key]).filter(Boolean))].sort().map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select></label>`).join('')}</div>
    <div class="ticket-table-wrap"><table class="ticket-table"><caption class="ticket-sr-only">Subconjunto de solicitudes internas</caption><thead>${columns}</thead><tbody id="ticket-subset-body"></tbody></table></div>
   </section>
@@ -69,7 +69,8 @@ export async function render(container) {
   const pending=tickets.filter(isPending);
   container.querySelector('#ticket-pending-count').textContent=`${pending.length} pendientes`;
   container.querySelector('#ticket-pending-body').innerHTML=pending.length?ticketRows(pending,true):'<tr><td colspan="5">No hay solicitudes pendientes de asignación.</td></tr>';
-  const subset=grouping?tickets.filter(t=>(grouping.key==='estado'?stateOf(t):groupValue(t,grouping.key))===grouping.value):tickets;
+  container.querySelector('#ticket-subset').hidden=!grouping;
+  const subset=grouping?tickets.filter(t=>(grouping.key==='estado'?stateOf(t):groupValue(t,grouping.key))===grouping.value):[];
   const found=filterTickets(subset,filters);
   container.querySelector('#ticket-subset-title').textContent=grouping?`${dimensionLabels[grouping.key]} · ${stateLabels[grouping.value]||grouping.value}`:'Todas las solicitudes';
   container.querySelector('#ticket-count').textContent=`${found.length} de ${tickets.length} solicitudes`;
@@ -80,7 +81,7 @@ export async function render(container) {
  container.querySelector('#ticket-group').addEventListener('change',paint);
  container.querySelector('#ticket-query').addEventListener('input',e=>{filters.query=e.target.value;paint();});
  container.querySelectorAll('[data-filter]').forEach(select=>select.addEventListener('change',()=>{filters[select.dataset.filter]=select.value;paint();}));
- container.querySelector('#ticket-show-all').addEventListener('click',()=>{grouping=null;resetFilters();paint();});
+ container.querySelector('#ticket-clear-group').addEventListener('click',()=>{grouping=null;resetFilters();paint();container.querySelector('[data-state]')?.focus();});
  container.querySelector('.ticket-admin').addEventListener('click',e=>{
   const button=e.target.closest('[data-id]');if(button){openTicket(button.dataset.id);return;}
   const state=e.target.closest('[data-state]');const group=e.target.closest('[data-group-value]');
@@ -98,7 +99,27 @@ export async function render(container) {
   if(ticket.pendingOperation)pendingOperations.set(ticket.id,ticket.pendingOperation);
   const previous=pendingOperations.get(ticket.id);const edits=previous?.changes||{responsable:ticket.responsable,prioridad:ticket.prioridad,fechaCompromiso:ticket.fechaCompromiso,observacion:ticket.observaciones};
   const date=/^\d{4}-\d{2}-\d{2}$/.test(edits.fechaCompromiso)?edits.fechaCompromiso:'';
-  detail.innerHTML=`<h2>${esc(ticket.id)}</h2><dl><dt>Solicitante</dt><dd>${esc(ticket.solicitante)} · ${esc(ticket.correo)}</dd><dt>Área y tipo</dt><dd>${esc(ticket.area)} · ${esc(ticket.tipo)}</dd><dt>Fecha de solicitud</dt><dd>${esc(ticket.fecha)} ${esc(ticket.hora)}</dd><dt>Descripción original</dt><dd class="ticket-description">${esc(ticket.descripcion)}</dd><dt>Urgencia solicitada</dt><dd>${esc(ticket.urgencia||'Sin dato')}</dd><dt>Plazo solicitado</dt><dd>${esc(ticket.plazo||'Sin dato')}</dd><dt>Estado actual</dt><dd>${esc(ticket.estado)}</dd></dl>${links?`<h3>Adjuntos</h3><ul>${links}</ul>`:''}<form id="ticket-assignment"><fieldset ${terminal?'disabled':''}><legend>Asignación</legend><label>Responsable<select name="responsable" required><option value="">Selecciona responsable</option>${catalogs.responsables.map(v=>`<option value="${esc(v)}" ${v===edits.responsable?'selected':''}>${esc(v)}</option>`).join('')}</select></label><label>Prioridad asignada<select name="prioridad" required><option value="">Selecciona prioridad</option>${catalogs.prioridades.map(v=>`<option value="${esc(v)}" ${v===edits.prioridad?'selected':''}>${esc(v)}</option>`).join('')}</select></label><label>Fecha de compromiso<input name="fechaCompromiso" type="date" value="${esc(date)}" required></label><label>Observaciones<textarea name="observacion" maxlength="4000" rows="4">${esc(edits.observacion)}</textarea></label><button type="submit">Guardar asignación</button></fieldset></form><p id="ticket-feedback" role="status" aria-live="polite">${terminal?'Esta solicitud está terminada y no permite asignación.':''}</p><button type="button" id="ticket-refresh">Cargar versión actual y descartar edición</button>`;
+  detail.innerHTML=`<h2>${esc(ticket.id)}</h2><div class="ticket-assignment-layout">
+   <section class="ticket-summary" aria-label="Resumen de la solicitud">
+    <dl class="ticket-summary-grid">
+     <div class="ticket-summary-wide"><dt>Solicitante</dt><dd>${esc(ticket.solicitante)}<span class="ticket-summary-email">${esc(ticket.correo)}</span></dd></div>
+     <div><dt>Área</dt><dd>${esc(ticket.area)}</dd></div><div><dt>Tipo</dt><dd>${esc(ticket.tipo)}</dd></div>
+     <div><dt>Fecha de solicitud</dt><dd>${esc(ticket.fecha)} ${esc(ticket.hora||'')}</dd></div><div><dt>Estado</dt><dd>${esc(ticket.estado)}</dd></div>
+     <div><dt>Urgencia solicitada</dt><dd>${esc(ticket.urgencia||'Sin dato')}</dd></div><div><dt>Plazo solicitado</dt><dd>${esc(ticket.plazo||'Sin dato')}</dd></div>
+    </dl>
+    <h3>Descripción original</h3><p class="ticket-description">${esc(ticket.descripcion)}</p>
+    ${links?`<h3>Adjuntos</h3><ul class="ticket-attachment-list">${links}</ul>`:''}
+   </section>
+   <div class="ticket-form-column"><form id="ticket-assignment"><fieldset ${terminal?'disabled':''}><legend>Asignación</legend>
+    <label class="ticket-field-wide">Responsable<select name="responsable" required><option value="">Selecciona responsable</option>${catalogs.responsables.map(v=>`<option value="${esc(v)}" ${v===edits.responsable?'selected':''}>${esc(v)}</option>`).join('')}</select></label>
+    <label>Prioridad asignada<select name="prioridad" required><option value="">Selecciona prioridad</option>${catalogs.prioridades.map(v=>`<option value="${esc(v)}" ${v===edits.prioridad?'selected':''}>${esc(v)}</option>`).join('')}</select></label>
+    <label>Fecha de compromiso<input name="fechaCompromiso" type="date" value="${esc(date)}" required></label>
+    <label class="ticket-field-wide">Observaciones<textarea name="observacion" maxlength="4000" rows="2">${esc(edits.observacion)}</textarea></label>
+    <button type="submit" class="ticket-field-wide">Guardar asignación</button>
+   </fieldset></form>
+   <p id="ticket-feedback" role="status" aria-live="polite">${terminal?'Esta solicitud está terminada y no permite asignación.':''}</p>
+   <button type="button" id="ticket-refresh">Cargar versión actual y descartar edición</button></div>
+  </div>`;
   const form=detail.querySelector('form');const fieldset=form.querySelector('fieldset');const feedback=detail.querySelector('#ticket-feedback');const refresh=detail.querySelector('#ticket-refresh');let saving=false;
   if(previous){feedback.textContent='Hay un guardado sin confirmar. Reintenta con los mismos datos.';form.querySelectorAll('input,select,textarea').forEach(input=>input.disabled=true);refresh.disabled=true;}
   refresh.addEventListener('click',()=>{if(saving)return;pendingOperations.delete(ticket.id);openTicket(ticket.id);});

@@ -1518,8 +1518,15 @@ body {
 .ticket-group[aria-pressed="true"] .ticket-group-fill { background: #2eb1a0; }
 .ticket-pending { border-top: 3px solid var(--gold-color); }
 .ticket-pending-description { min-width: 160px; max-width: 400px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
-.ticket-detail-panel { background: #f8fafd; border: 1px solid #e2e7ef; border-radius: 6px; padding: 18px; margin-top: 18px; }
-.ticket-detail-panel > p { margin: 0; }
+.ticket-notice:empty { display: none; }
+.ticket-notice { padding: 12px 16px; background: #eaf5f1; color: #235f4c; border-radius: 6px; margin: 0 0 20px; }
+.ticket-modal { width: min(760px,calc(100% - 32px)); max-width: none; max-height: calc(100dvh - 48px); box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; padding: 24px; border: 1px solid #dce4ef; border-radius: 10px; background: white; color: var(--text-main, #262626); box-shadow: 0 20px 70px #15233b40; }
+.ticket-modal::backdrop { background: #14243b80; }
+.ticket-modal-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 16px; border-bottom: 1px solid #e2e7ef; margin-bottom: 18px; }
+.ticket-modal-header h2 { margin: 0; }
+.ticket-modal #ticket-detail > h2 { margin-top: 0; }
+.ticket-modal .ticket-description { overflow-wrap: anywhere; }
+.ticket-modal dd { overflow-wrap: anywhere; }
 .ticket-admin .ticket-secondary { color: var(--primary-color); background: white; border-color: #ccd6e5; }
 .ticket-panel .ticket-filters { margin-top: 0; }
 .ticket-panel .ticket-table th { background: #f8f9fc; color: #64748b; }
@@ -1528,5 +1535,7 @@ body {
   .ticket-state-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .ticket-group-grid { grid-template-columns: 1fr; }
   .ticket-panel { padding: 14px; }
-  .ticket-detail-panel { padding: 14px; }
+  .ticket-modal { padding: 16px; width: calc(100% - 24px); max-height: calc(100dvh - 24px); }
+  .ticket-modal-header { gap: 10px; }
+  .ticket-modal-header h2 { font-size: 1.05rem; }
 }

@@ -12,9 +12,9 @@ La administración debe empezar con una vista ejecutiva de la distribución de s
 - La pantalla abre con cantidades por estado. Se incluyen los siete estados conocidos y cualquier valor histórico presente en la fuente.
 - La distribución puede agruparse por responsable, prioridad asignada, tipo y área solicitante. Cada agrupación abre su subconjunto; los filtros refinan ese subconjunto y Ver todas restablece la vista.
 - Debajo del dashboard aparece siempre la bandeja de pendientes, independiente de la agrupación y los filtros. Incluye NUEVO y solicitudes no terminadas cuyo responsable esté vacío o sea SIN ASIGNAR. RESUELTO, CERRADO y CANCELADO no se incorporan por ausencia de responsable.
-- Seleccionar una solicitud abre su detalle y el formulario de asignación existente. Una asignación confirmada y una consulta del detalle actualizan los indicadores, la bandeja y el subconjunto.
+- Actualización aprobada del 2026-10-12: seleccionar una solicitud abre su detalle y asignación en una ventana modal sobre el dashboard, en lugar de un bloque debajo de la lista. La ventana se cierra sólo al confirmar el guardado; errores y conflictos conservan los datos para corregir o reintentar. Durante el guardado se bloquean el cierre y Escape. Al cerrar se restituye el foco a la lista o al dashboard. Una asignación confirmada y una consulta del detalle actualizan los indicadores, la bandeja y el subconjunto.
 - El resumen usa las solicitudes de la API existente, derivadas de la hoja oficial del sistema de tickets. No crea otra base de datos, estados ni reglas de ejecución.
-- Conserva colores y estilo del Portal. La versión de los entrypoints y del CSS cambia a 18.3.0 para renovar la caché.
+- Conserva colores y estilo del Portal. La versión de los entrypoints y del CSS cambia a 18.3.1 para renovar la caché.
 
 ## Consecuencias y validación
 

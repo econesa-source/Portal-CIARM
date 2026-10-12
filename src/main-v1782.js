@@ -1,17 +1,19 @@
 /**
  * Portal CIARM - Router SPA y Guardián de Autenticación
- * Versión: 18.1.0
+ * Versión: 18.2.0
  */
 
 import { getAuthenticatedUser, logout } from './services/authService.js';
 import { renderLoginWidget } from './components/loginWidget.js';
+import { getAdminContext } from './services/ticketsAdminService.js';
 
-const APP_VERSION = '18.1.0';
+const APP_VERSION = '18.2.0';
 
 const routes = {
   '#inicio': () => import(`./components/dashboardVoiceflow-v1782.js?v=${APP_VERSION}`),
   '#solicitudes': () => import(`./components/solicitudesWidget.js?v=${APP_VERSION}`),
-  '#mis-solicitudes': () => import(`./components/misSolicitudesWidget.js?v=${APP_VERSION}`)
+  '#mis-solicitudes': () => import(`./components/misSolicitudesWidget.js?v=${APP_VERSION}`),
+  '#admin-solicitudes': () => import(`./components/adminSolicitudesWidget.js?v=${APP_VERSION}`)
 };
 
 function isMobileViewport() {
@@ -76,6 +78,7 @@ function getTargetContainer() {
 }
 
 async function router() {
+  const navigationId = ++latestNavigation;
   const mainContainer = getTargetContainer();
   const sidebar = document.getElementById('main-sidebar');
   const userProfileHeader = document.getElementById('header-user-profile');
@@ -84,6 +87,7 @@ async function router() {
 
   // GUARDIA DE SESIÓN REAL: la cookie HttpOnly del servidor es la fuente de verdad.
   const user = await getAuthenticatedUser();
+  if (navigationId !== latestNavigation) return;
 
   if (!user) {
     if (sidebar) sidebar.style.display = 'none';
@@ -104,6 +108,15 @@ async function router() {
   // SESIÓN ACTIVA: Mostrar Sidebar y Header
   if (sidebar) sidebar.style.display = 'block';
   if (sidebarToggle) sidebarToggle.style.display = 'inline-flex';
+  const adminLink = document.getElementById('admin-solicitudes-link');
+  if (adminLink) {
+    adminLink.hidden = true;
+    try {
+      const context = await getAdminContext();
+      if (navigationId !== latestNavigation) return;
+      adminLink.hidden = !context.canAdmin;
+    } catch (_) { /* El servidor protege también la ruta directa. */ }
+  }
   if (userProfileHeader && user) {
     userProfileHeader.innerHTML = `
       <div class="header-user-wrap">
@@ -140,6 +153,7 @@ async function router() {
   if (routes[hash]) {
     try {
       const module = await routes[hash]();
+      if (navigationId !== latestNavigation) return;
       mainContainer.innerHTML = '';
       
       if (typeof module.renderMisSolicitudesWidget === 'function') {
@@ -155,6 +169,8 @@ async function router() {
     window.location.hash = '#inicio';
   }
 }
+
+let latestNavigation = 0;
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', router);

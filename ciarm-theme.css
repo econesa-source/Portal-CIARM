@@ -1485,3 +1485,48 @@ body {
 }
 .ticket-card-header .exact-card-category { margin-bottom: 0; }
 .ticket-card-header .exact-btn { width: auto; margin-left: auto; }
+
+/* Dashboard ejecutivo de solicitudes internas. */
+.ticket-admin { color: var(--text-main, #262626); }
+.ticket-admin h1, .ticket-admin h2, .ticket-admin h3 { color: var(--primary-color); }
+.ticket-admin button { background: var(--primary-color); border-color: var(--primary-color); }
+.ticket-admin .ticket-open { color: var(--primary-color); }
+.ticket-executive-heading { margin-bottom: 24px; }
+.ticket-executive-heading h1 { margin-bottom: 6px; }
+.ticket-executive-heading p, .ticket-panel-heading p { color: #64748b; font-size: .85rem; margin: 6px 0 0; }
+.ticket-panel { padding: 20px; background: white; border: 1px solid #e2e7ef; border-radius: 8px; margin-bottom: 20px; min-width: 0; }
+.ticket-panel-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; }
+.ticket-panel-heading h2 { margin: 0; }
+.ticket-counter { padding: 6px 10px; border-radius: 24px; background: #eef2f8; color: var(--primary-color); font-size: .8rem; white-space: nowrap; }
+.ticket-state-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; }
+.ticket-admin .ticket-state { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 14px; min-height: 90px; background: white; color: var(--primary-color); border: 1px solid #dce4ef; text-align: left; overflow-wrap: anywhere; }
+.ticket-state span { font-size: .8rem; }
+.ticket-state strong { font-size: 1.8rem; font-variant-numeric: tabular-nums; }
+.ticket-admin .ticket-state:first-child { border-top: 3px solid var(--gold-color); }
+.ticket-admin .ticket-state:hover { background: #f3f6fc; }
+.ticket-admin .ticket-state[aria-pressed="true"] { background: #eaf0f9; border-color: var(--primary-color); box-shadow: inset 0 0 0 1px var(--primary-color); }
+.ticket-distribution { border-top: 1px solid #e2e7ef; padding-top: 18px; margin-top: 20px; }
+.ticket-distribution > label { max-width: 280px; font-size: .85rem; }
+.ticket-group-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px 24px; margin-top: 12px; }
+.ticket-admin .ticket-group { background: transparent; color: var(--text-main, #262626); border: none; padding: 8px 0; text-align: left; min-width: 0; }
+.ticket-group-label { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: .85rem; margin-bottom: 7px; }
+.ticket-group-label > span:first-child { overflow-wrap: anywhere; }
+.ticket-group-label > span:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ticket-group-track { display: block; height: 8px; background: #edf1f6; border-radius: 4px; overflow: hidden; }
+.ticket-group-fill { display: block; height: 100%; background: var(--primary-color); border-radius: 4px; }
+.ticket-group[aria-pressed="true"] .ticket-group-label { color: var(--primary-color); font-weight: 600; }
+.ticket-group[aria-pressed="true"] .ticket-group-fill { background: #2eb1a0; }
+.ticket-pending { border-top: 3px solid var(--gold-color); }
+.ticket-pending-description { min-width: 160px; max-width: 400px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ticket-detail-panel { background: #f8fafd; border: 1px solid #e2e7ef; border-radius: 6px; padding: 18px; margin-top: 18px; }
+.ticket-detail-panel > p { margin: 0; }
+.ticket-admin .ticket-secondary { color: var(--primary-color); background: white; border-color: #ccd6e5; }
+.ticket-panel .ticket-filters { margin-top: 0; }
+.ticket-panel .ticket-table th { background: #f8f9fc; color: #64748b; }
+.ticket-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+@media (max-width: 640px) {
+  .ticket-state-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .ticket-group-grid { grid-template-columns: 1fr; }
+  .ticket-panel { padding: 14px; }
+  .ticket-detail-panel { padding: 14px; }
+}

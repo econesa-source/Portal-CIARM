@@ -1,3 +1,11 @@
+# Estado actualizado — 2026-10-12
+
+La primera entrega de administración y sus ajustes visuales están publicados en main 4ec6cbf, Portal 18.3.3. Las PR #1 a #5 se integraron y los despliegues de NEUBOX y GitHub Pages terminaron correctamente. El CI pasó 53 pruebas Node y sus verificaciones PHP/build.
+
+La evidencia anterior del usuario acredita configuración y lectura administrativa. La escritura real, la bitácora confirmada, la revocación y la concurrencia en producción permanecen pendientes de verificación (#6). Los flujos históricos de alta y lectura propia todavía requieren la migración de seguridad (#7) y la corrección de folios (#8).
+
+Estado y tareas vigentes: docs/estado-proyecto.md. Los apartados siguientes conservan el historial del relevamiento; las frases de bloqueo o publicación pendiente anteriores no describen el estado actual del frontend.
+
 # Verificación aportada el 2026-10-12
 
 El usuario confirmó el ID completo del despliegue activo: `AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA`. Las capturas muestran el proyecto «Portal CIARM Update tickets», con Código.gs, cuya URL difiere del proyecto inicialmente suministrado. El código completo adjuntado nuevamente coincide con tickets-original.gs al normalizar el formato Markdown.
@@ -6,7 +14,7 @@ El usuario reemplazó Código.gs, configuró la propiedad TICKETS_ADMIN_SECRET y
 
 El usuario confirmó que context devolvió ok=true y canAdmin=true desde su sesión; posteriormente aportó la respuesta catalogs con las cinco prioridades y tres responsables correctos y confirmó list con los tickets en data. Esto acredita lectura administrativa mediante el puente PHP y el despliegue suministrado. No acredita aún una asignación real, la bitácora en producción ni pruebas de revocación y concurrencia en vivo.
 
-El usuario informó la carga de los dos módulos JS; resta publicar menú/router/estilos. El 2026-10-12 autorizó explícitamente publicar el código del adjunto y detalles de permisos en el repositorio público econesa-source/Portal-CIARM, exclusivamente en la rama de implementación indicada. No se interpreta como autorización adicional para fusionar a main en este paso.
+En ese momento el usuario informó la carga de los dos módulos JS y restaba publicar el frontend; esa publicación se completó luego mediante las PR #1 a #5. El 2026-10-12 autorizó explícitamente publicar el código del adjunto y detalles de permisos en el repositorio público econesa-source/Portal-CIARM, exclusivamente en la rama de implementación indicada. No se interpreta como autorización adicional para fusionar a main en este paso.
 
 # Fuente y despliegue de tickets — verificación 2026-10-06
 Estado: conciliación bloqueada por falta de referencia al proyecto Apps Script vigente.

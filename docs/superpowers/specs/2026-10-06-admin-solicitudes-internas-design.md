@@ -1,16 +1,16 @@
 # Administración de solicitudes internas
 Fecha: 2026-10-06 (America/Cancun)
-Estado: diseño propuesto para revisión. No implementado ni desplegado.
+Estado actualizado al 2026-10-12: primera entrega implementada y publicada en Portal 18.3.3. La interfaz vigente y sus cambios están en ADMIN-SOL-002; este documento conserva el diseño inicial y los hallazgos históricos. La validación integral real sigue pendiente (#6).
 
 ## Objetivo y alcance aprobado
 Dany (Daniel Lara, d.lara@ciarm.edu.mx) y Ezequiel Conesa (e.conesa@ciarm.edu.mx) administran todas las solicitudes internas. Primera entrega: bandeja, detalle y asignación de responsable, prioridad y fecha compromiso. El solicitante mantiene acceso a sus propias solicitudes. Seguimiento y cierre se incorporan después, con reglas explícitas.
 
-## Fuentes verificadas
+## Fuentes del relevamiento inicial (2026-10-06)
 - GitHub main, commit 5bb7c07da7864ebf9a8ce6730e1a5a5715869f5c.
 - BD - Sistema de Tickets: 1o33Gw6xWsH64SXmaxaN7EDlSsW0fUExDjPE4cGpnPbs.
 - TICKETS conserva estado actual; CATALOGOS conserva prioridades y estados; RESPONSABLES relaciona tipo y nombre.
 - REGISTRO SOLICITUDES contiene recepción y notificación; no es historial de modificaciones.
-- DM03: 1h14cqmHseHSN3FzrEtK_AwVimzDGkz9qx8LcGBCQuDY, hoja Permisos de usuario. Ambos usuarios activos. Columna Sistema de tickets vacía para ambos.
+- DM03: 1h14cqmHseHSN3FzrEtK_AwVimzDGkz9qx8LcGBCQuDY, hoja Permisos de usuario. Ambos usuarios activos. Columna Sistema de tickets vacía para ambos en ese relevamiento; el usuario configuró Administrador para ambos el 2026-10-12.
 - Ezequiel tiene Portal=Administrador. Daniel Lara no tiene rol Portal cargado. El permiso de tickets debe ser independiente del rol global.
 - Estados existentes: NUEVO, ASIGNADO, EN PROCESO, EN ESPERA, RESUELTO, CERRADO, CANCELADO.
 - Prioridades: CRITICA, URGENTE, ALTA, MEDIA, BAJA, POR DEFINIR.
@@ -49,7 +49,7 @@ No enviar nuevos correos como parte de esta primera entrega.
 3. CATALOGOS incluye Compras; el antecedente del Portal la excluye de solicitudes internas. No habilitar Compras desde la nueva pantalla.
 4. Tipos actuales del formulario (Soporte Tecnológico / TI, Mantenimiento de Instalaciones, Intendencia, RRHH / Admin) difieren del catálogo. Mostrar los originales y conciliar reglas antes de automatizar asignación.
 5. Hay registros identificados explícitamente como pruebas técnicas; preservarlos y permitir identificarlos, sin eliminarlos ni contarlos como solicitudes operativas mediante una inferencia general.
-6. No se encontró copia completa y verificable del script de tickets en la búsqueda de Drive realizada. Falta comprobar fuente y despliegue vigente. No atribuir el código GitHub a producción.
+6. En el relevamiento inicial no se encontró la fuente completa en Drive. El usuario aportó posteriormente Código.gs, confirmó el deploymentId y cargó el bundle administrativo. docs/backend/tickets-source.md diferencia esa evidencia de las verificaciones reales todavía pendientes.
 
 ## Verificación de aceptación
 - Dany y Ezequiel ven la bandeja y pueden asignar; otro colaborador recibe denegación desde backend.
@@ -69,4 +69,4 @@ Decisión propuesta: conservar TICKETS como fuente, permisos específicos en DM0
 Consecuencias: requiere puente PHP↔Apps Script y despliegue coordinado; evita duplicar base y permite atribuir cambios. Código/fecha final del ADR se concilian con el catálogo institucional antes de incorporarlo.
 
 ## Próximo paso
-Revisar este diseño y confirmar la fuente completa del Apps Script desplegado. Después elaborar el plan de implementación con archivos, secuencia, pruebas y despliegue.
+Completar la validación real (#6) y revisar el diseño de protección de creación y lectura (#7), junto con la corrección de folios (#8). El diseño inicial ya fue implementado; no repetir su etapa de aprobación como si siguiera pendiente.

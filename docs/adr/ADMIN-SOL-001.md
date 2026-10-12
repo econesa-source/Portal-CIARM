@@ -1,6 +1,6 @@
 # ADMIN-SOL-001: administración de solicitudes internas
 
-Fecha: 2026-10-07. Estado: implementación en rama; publicación pendiente. Código provisional pendiente de conciliación con catálogo institucional de ADR.
+Fecha: 2026-10-07. Actualizado: 2026-10-12. Estado: primera entrega publicada en Portal 18.3.3; validación integral de producción pendiente (#6). Código provisional pendiente de conciliación con catálogo institucional de ADR.
 
 ## Contexto
 

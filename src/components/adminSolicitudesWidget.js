@@ -31,14 +31,14 @@ export async function render(container) {
    <div id="ticket-states" class="ticket-state-grid"></div>
    <div class="ticket-distribution"><label>Distribución<select id="ticket-group">${['responsable','prioridad','tipo','area'].map(key=>`<option value="${key}">Por ${dimensionLabels[key].toLocaleLowerCase('es')}</option>`).join('')}</select></label><div id="ticket-groups" class="ticket-group-grid"></div></div>
   </section>
-  <section id="ticket-pending" class="ticket-panel ticket-pending" aria-labelledby="ticket-pending-title">
-   <div class="ticket-panel-heading"><div><h2 id="ticket-pending-title">Nuevas solicitudes por asignar</h2><p>Siempre visibles, independientemente de la agrupación seleccionada.</p></div><span id="ticket-pending-count" class="ticket-counter" role="status"></span></div>
-   <div class="ticket-table-wrap"><table class="ticket-table"><caption class="ticket-sr-only">Solicitudes pendientes de asignación</caption><thead><tr><th scope="col">Solicitud / fecha</th><th scope="col">Solicitante</th><th scope="col">Solicitud</th><th scope="col">Urgencia</th><th scope="col">Acción</th></tr></thead><tbody id="ticket-pending-body"></tbody></table></div>
-  </section>
   <section id="ticket-subset" class="ticket-panel" aria-labelledby="ticket-subset-title" hidden>
    <div class="ticket-panel-heading"><div><h2 id="ticket-subset-title">Todas las solicitudes</h2><p id="ticket-count" role="status"></p></div><button type="button" id="ticket-clear-group" class="ticket-secondary">Cerrar agrupación</button></div>
    <div class="ticket-filters"><label>Buscar<input id="ticket-query" type="search" placeholder="Folio, solicitante o descripción"></label>${['estado','prioridad','urgencia','responsable','tipo','area'].map(key=>`<label>${dimensionLabels[key]}<select data-filter="${key}"><option value="">Todos</option>${[...new Set(tickets.map(t=>t[key]).filter(Boolean))].sort().map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select></label>`).join('')}</div>
    <div class="ticket-table-wrap"><table class="ticket-table"><caption class="ticket-sr-only">Subconjunto de solicitudes internas</caption><thead>${columns}</thead><tbody id="ticket-subset-body"></tbody></table></div>
+  </section>
+  <section id="ticket-pending" class="ticket-panel ticket-pending" aria-labelledby="ticket-pending-title">
+   <div class="ticket-panel-heading"><div><h2 id="ticket-pending-title">Nuevas solicitudes por asignar</h2><p>Solicitudes que requieren responsable, prioridad y fecha de compromiso.</p></div><span id="ticket-pending-count" class="ticket-counter" role="status"></span></div>
+   <div class="ticket-table-wrap"><table class="ticket-table"><caption class="ticket-sr-only">Solicitudes pendientes de asignación</caption><thead><tr><th scope="col">Solicitud / fecha</th><th scope="col">Solicitante</th><th scope="col">Solicitud</th><th scope="col">Urgencia</th><th scope="col">Acción</th></tr></thead><tbody id="ticket-pending-body"></tbody></table></div>
   </section>
   <dialog id="ticket-modal" class="ticket-modal" aria-labelledby="ticket-modal-heading">
    <header class="ticket-modal-header"><h2 id="ticket-modal-heading">Detalle y asignación de solicitud</h2><button type="button" id="ticket-modal-close" class="ticket-secondary" aria-label="Cerrar ventana de solicitud">Cerrar</button></header>
@@ -53,7 +53,7 @@ export async function render(container) {
  modal.addEventListener('close',()=>{
   ++selection;
   if(!current())return;
-  const target=[...container.querySelectorAll('[data-id]')].find(button=>button.dataset.id===returnId)||container.querySelector('[data-state]');
+  const target=[...container.querySelectorAll('[data-id]')].find(button=>button.dataset.id===returnId&&!button.closest('[hidden]'))||container.querySelector('[data-state]');
   target?.focus();
  });
  function ticketRows(found,pending=false){return found.map(t=>pending?
@@ -69,6 +69,7 @@ export async function render(container) {
   const pending=tickets.filter(isPending);
   container.querySelector('#ticket-pending-count').textContent=`${pending.length} pendientes`;
   container.querySelector('#ticket-pending-body').innerHTML=pending.length?ticketRows(pending,true):'<tr><td colspan="5">No hay solicitudes pendientes de asignación.</td></tr>';
+  container.querySelector('#ticket-pending').hidden=Boolean(grouping);
   container.querySelector('#ticket-subset').hidden=!grouping;
   const subset=grouping?tickets.filter(t=>(grouping.key==='estado'?stateOf(t):groupValue(t,grouping.key))===grouping.value):[];
   const found=filterTickets(subset,filters);

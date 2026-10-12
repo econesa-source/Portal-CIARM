@@ -38,16 +38,18 @@ test('dashboard includes every real state, including historical values',async()=
 test('administrator opens with only pending assignments and no expanded subset',async()=>{
  const s=setup();await render(s.root);
  assert.ok(s.root.querySelector('#ticket-subset').hidden);
+ assert.equal(s.root.querySelector('#ticket-pending').hidden,false);
  assert.equal(s.root.querySelectorAll('#ticket-subset-body [data-id]').length,0);
  assert.deepEqual([...s.root.querySelectorAll('#ticket-pending-body [data-id]')].map(e=>e.dataset.id),['NEW','WAIT']);
  s.dom.window.close();
 });
-test('state selection filters subset but keeps pending assignments visible',async()=>{
+test('state selection replaces pending list immediately below dashboard',async()=>{
  const s=setup();await render(s.root);
  s.root.querySelector('[data-state="EN PROCESO"]').click();
  assert.deepEqual([...s.root.querySelectorAll('#ticket-subset-body [data-id]')].map(e=>e.dataset.id),['WORK']);
- assert.deepEqual([...s.root.querySelectorAll('#ticket-pending-body [data-id]')].map(e=>e.dataset.id),['NEW','WAIT']);
- assert.ok(s.root.querySelector('#ticket-dashboard').compareDocumentPosition(s.root.querySelector('#ticket-pending'))&s.dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+ assert.ok(s.root.querySelector('#ticket-pending').hidden);
+ assert.equal(s.root.querySelector('#ticket-dashboard').nextElementSibling,s.root.querySelector('#ticket-subset'));
+ assert.equal(s.root.querySelector('#ticket-subset').hidden,false);
  s.dom.window.close();
 });
 test('distribution grouping filters tickets and never interprets labels as markup',async()=>{
@@ -57,18 +59,29 @@ test('distribution grouping filters tickets and never interprets labels as marku
  historical.click();
  assert.deepEqual([...s.root.querySelectorAll('#ticket-subset-body [data-id]')].map(e=>e.dataset.id),['HISTORY']);
  assert.equal(s.root.querySelector('img'),null);
+ assert.ok(s.root.querySelector('#ticket-pending').hidden);
  s.root.querySelector('#ticket-clear-group').click();
  assert.equal(s.root.querySelectorAll('#ticket-subset-body [data-id]').length,0);
  assert.ok(s.root.querySelector('#ticket-subset').hidden);
+ assert.equal(s.root.querySelector('#ticket-pending').hidden,false);
  assert.ok(s.root.ownerDocument.activeElement.matches('[data-state]'));
  s.dom.window.close();
 });
-test('ordinary filters do not hide pending assignments',async()=>{
+test('ordinary filters refine selected grouping without restoring pending list',async()=>{
  const s=setup();await render(s.root);
  s.root.querySelector('[data-state="EN PROCESO"]').click();
  const query=s.root.querySelector('#ticket-query');query.value='nonexistent';query.dispatchEvent(new s.dom.window.Event('input'));
  assert.equal(s.root.querySelectorAll('#ticket-subset-body [data-id]').length,0);
- assert.equal(s.root.querySelectorAll('#ticket-pending-body [data-id]').length,2);
+ assert.ok(s.root.querySelector('#ticket-pending').hidden);
+ assert.equal(s.root.querySelector('#ticket-subset').hidden,false);
+ s.dom.window.close();
+});
+test('closing a grouped ticket restores focus to its visible list',async()=>{
+ const s=setup();await render(s.root);
+ s.root.querySelector('[data-state="NUEVO"]').click();
+ s.root.querySelector('#ticket-subset-body [data-id="NEW"]').click();await s.flush();
+ s.root.querySelector('#ticket-modal-close').click();
+ assert.equal(s.root.ownerDocument.activeElement,s.root.querySelector('#ticket-subset-body [data-id="NEW"]'));
  s.dom.window.close();
 });
 test('saving assignment updates dashboard and removes the assigned pending ticket',async()=>{

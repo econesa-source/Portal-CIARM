@@ -38,3 +38,7 @@ No se cambió el archivo XLSX adjunto ni el libro original. No se envían correo
 `npm ci && npm test` ejecuta pruebas de autorización de GAS, recuperación, coerción de Sheets, fórmulas, dispatcher, transporte y DOM de la bandeja. `php tests/tickets-auth.php`, `php -l tickets-lib.php` y `php -l tickets-api.php` validan el puente. La lectura administrativa PHP→Apps Script fue confirmada por el usuario. El despliegue productivo fue validado por el workflow. Siguen pendientes la escritura y bitácora reales, revocación, concurrencia e inspección visual en móvil/escritorio (#6).
 
 Rollback: retirar el permiso de tickets en las dos celdas respaldadas, volver el despliegue Apps Script a la versión anterior y restaurar PHP/frontend coordinadamente. Conservar TICKETS y BITACORA TICKETS; las asignaciones confirmadas no se revierten automáticamente ni se borra su evidencia.
+
+## Migración de protección preparada — 2026-10-12
+
+La rama pendiente incorpora creación y lectura propia mediante sesión, recuperación y folios sin rango fijo. El bundle actual de esa rama deniega entradas sin firma salvo compatibilidad explícita. No sustituirlo en producción siguiendo solamente las instrucciones históricas: usar `docs/backend/proteccion-solicitudes-deployment.md`, que conserva temporalmente el frontend vigente y exige aceptación antes de integrar 18.4.0. La migración todavía no está publicada.

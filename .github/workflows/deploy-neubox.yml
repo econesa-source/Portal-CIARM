@@ -118,11 +118,11 @@ jobs:
           CODE="$(get "$BASE/?sha=$EXPECTED_SHA" /tmp/root.html || echo 000)"
           echo "root HTTP=$CODE"
           if [ "$CODE" = "200" ] && \
-             grep -E 'src/main(-v1782)?\.js\?v=18\.3\.3' /tmp/root.html >/dev/null && \
+             grep -E 'src/main(-v1782)?\.js\?v=18\.4\.0' /tmp/root.html >/dev/null && \
              grep -F 'assets/images/ciarm-logo-header-v2.png?v=18.1.0' /tmp/root.html >/dev/null; then
-            echo "OK: el sitio público usa v18.3.3 y referencia el logo CIARM."
+            echo "OK: el sitio público usa v18.4.0 y referencia el logo CIARM."
           else
-            echo "ERROR: el sitio público NO usa el entrypoint v18.3.3."
+            echo "ERROR: el sitio público NO usa el entrypoint v18.4.0."
             ERRORS=1
           fi
 
@@ -223,13 +223,11 @@ jobs:
           if [ "$CODE" = "200" ] && \
              grep -F 'solicitud-file-list' /tmp/solicitudes.js >/dev/null && \
              grep -F 'formatFileSize' /tmp/solicitudes.js >/dev/null && \
-             grep -F "solicitante: user.nombre" /tmp/solicitudes.js >/dev/null && \
-             grep -F 'correo: user.correo' /tmp/solicitudes.js >/dev/null && \
-             grep -F 'base64: base64Data' /tmp/solicitudes.js >/dev/null && \
-             grep -F 'waitForTicketConfirmation' /tmp/solicitudes.js >/dev/null && \
+             grep -F 'completeCreationDraft' /tmp/solicitudes.js >/dev/null && \
+             grep -F 'ticketsPortalService.js' /tmp/solicitudes.js >/dev/null && \
              ! grep -F 'fetchUserContextAPI' /tmp/solicitudes.js >/dev/null && \
              ! grep -F 'AKfycbwFQW8HyJsjfWQnJLrE6XAxW0_UFFPYn59Xa90ZB38X1kmdCWlxZM4wkTunr9UN-GxUrA' /tmp/solicitudes.js >/dev/null; then
-            echo "OK: Nueva Solicitud usa contrato legacy validado y confirmación de registro/adjuntos."
+            echo "OK: Nueva Solicitud usa transporte autenticado y confirmación recuperable."
           else
             echo "ERROR: Nueva Solicitud no está sincronizada con BD - Sistema de Tickets."
             ERRORS=1
@@ -246,12 +244,18 @@ jobs:
           CODE="$(get "$BASE/src/components/misSolicitudesWidget.js?sha=$EXPECTED_SHA" /tmp/mis-solicitudes.js || echo 000)"
           echo "misSolicitudesWidget.js HTTP=$CODE"
           if [ "$CODE" = "200" ] && \
-             grep -F 'action=getTickets' /tmp/mis-solicitudes.js >/dev/null && \
+             grep -F 'listMyTickets' /tmp/mis-solicitudes.js >/dev/null && \
              grep -F 'correo_solicitante' /tmp/mis-solicitudes.js >/dev/null && \
              grep -F 'BD - Sistema de Tickets' /tmp/mis-solicitudes.js >/dev/null; then
-            echo "OK: Mis Solicitudes filtra por correo de sesión."
+            echo "OK: Mis Solicitudes consulta mediante sesión del servidor."
           else
             echo "ERROR: la vista Mis Solicitudes no está publicada correctamente."
+            ERRORS=1
+          fi
+
+          CODE="$(get "$BASE/src/services/ticketsPortalService.js?sha=$EXPECTED_SHA" /tmp/tickets-portal-service.js || echo 000)"
+          if [ "$CODE" != "200" ] || ! grep -F '/tickets-api.php?action=' /tmp/tickets-portal-service.js >/dev/null; then
+            echo "ERROR: transporte autenticado de solicitudes no publicado."
             ERRORS=1
           fi
 
@@ -260,17 +264,10 @@ jobs:
           if curl -fsSL --retry 4 --retry-delay 3 --retry-all-errors \
                "$GAS_URL?action=getTickets&email=e.conesa%40ciarm.edu.mx&_t=$(date +%s)" \
                -o /tmp/tickets-api.json; then
-            TYPE="$(jq -r 'type' /tmp/tickets-api.json 2>/dev/null || echo invalid)"
-            STATUS="$(jq -r 'if type=="object" then (.status // "") else "" end' /tmp/tickets-api.json 2>/dev/null || true)"
-            MESSAGE="$(jq -r 'if type=="object" then (.message // "") else "" end' /tmp/tickets-api.json 2>/dev/null || true)"
-            KEYS="$(jq -r 'if type=="object" then (keys | join(",")) else "" end' /tmp/tickets-api.json 2>/dev/null || true)"
-            echo "Backend shape: type=$TYPE status=$STATUS keys=$KEYS"
-            if [ -n "$MESSAGE" ]; then echo "Backend message: $MESSAGE"; fi
-            COUNT="$(jq -r 'if type=="array" then length elif ((.data? | type)=="array") then (.data | length) elif ((.tickets? | type)=="array") then (.tickets | length) else -1 end' /tmp/tickets-api.json 2>/dev/null || echo -1)"
-            if [ "$COUNT" -gt 0 ] 2>/dev/null; then
-              echo "OK: backend getTickets respondió $COUNT solicitud(es) para el correo de prueba."
+            if jq -e '.ok == false and .code == "FORBIDDEN"' /tmp/tickets-api.json >/dev/null; then
+              echo "OK: backend rechaza la lectura pública histórica."
             else
-              echo "ERROR: backend getTickets no devolvió una lista con solicitudes."
+              echo "ERROR: el backend aún permite acceso histórico o no confirma la denegación."
               ERRORS=1
             fi
           else

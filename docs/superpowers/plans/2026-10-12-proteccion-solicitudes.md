@@ -150,4 +150,4 @@ Autorrevisión: contratos mine/beginCreate/uploadAttachment/finalizeCreate/creat
 
 Método recomendado: ejecución directa en esta sesión mediante superpowers:executing-plans, con revisión independiente de la rama antes de integración. Los contratos de creación, journal y transporte dependen entre sí; dividir implementadores por cada tarea aporta más traspasos. Alternativa: ejecución por agentes, si el usuario la elige.
 
-Estado: plan preparado para revisión del usuario. Diseño aprobado; implementación y publicación de la migración todavía pendientes.
+Estado: ejecución autorizada; Tasks 1–6 implementadas y revisión independiente corregida (84 pruebas Node y suites PHP). Task 7: publicación de rama/bundle preparada; staging, aceptación real y cambio productivo pendientes.

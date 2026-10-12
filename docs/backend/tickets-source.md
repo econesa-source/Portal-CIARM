@@ -49,3 +49,7 @@ El libro del adjunto coincide con CONFIG y los encabezados TICKETS A:X. CATALOGO
 El 2026-10-07 se intentó nuevamente el editor suministrado, scriptId `1Yj231qwivY0ZkUpmXP5CRuw1FV0sunhhSGd5Eeb4V-kce6c0H6eHeMos`. Redirigió a «Necesitas acceso» bajo r.valencia@ciarm.edu.mx. El acceso de e.conesa@ciarm.edu.mx no quedó confirmado en esta sesión. Por tanto, no se leyó el panel de implementaciones, no se verificó la asociación scriptId→deploymentId y no se modificó Apps Script ni DM03 en vivo.
 
 Se incorporó main `193b00c03cebf6f6165819fde3f585901ab17d26` a la rama de implementación para preservar navegación responsive y asistente. Entradas de esta entrega: index.html→src/main.js y el alias index-v1782.html→src/main-v1782.js, versión 18.2.0.
+
+## Migración de protección preparada — 2026-10-12
+
+La rama pendiente incorpora creación y lectura propia mediante sesión, recuperación y folios sin rango fijo. El bundle actual de esa rama deniega entradas sin firma salvo compatibilidad explícita. No sustituirlo en producción siguiendo solamente las instrucciones históricas: usar `docs/backend/proteccion-solicitudes-deployment.md`, que conserva temporalmente el frontend vigente y exige aceptación antes de integrar 18.4.0. La migración todavía no está publicada.

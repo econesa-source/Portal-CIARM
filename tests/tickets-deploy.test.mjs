@@ -1,0 +1,2 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
+test('deployment verifies authenticated transport and public denial',()=>{const y=fs.readFileSync('.github/workflows/deploy-neubox.yml','utf8');assert.ok(!y.includes("grep -F 'waitForTicketConfirmation'"));assert.ok(!y.includes('COUNT="$(jq'));assert.ok(y.includes('ticketsPortalService.js'));assert.ok(y.includes('FORBIDDEN'));});

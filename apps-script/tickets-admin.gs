@@ -55,12 +55,12 @@ function handleAdminEnvelope(envelope,signature) {
 }
 function adminTicketTable(book) { return adminTable(book,'TICKETS',ADMIN_TICKET_HEADERS); }
 function adminPurchase(row,headers) { return String(row[headers.indexOf('TIPO DE SOLICITUD')]||'').trim().toLowerCase()==='compras'; }
-function adminFindTicket(book,id) {
+function adminFindTicket(book,id,allowPendingCreation) {
  if(typeof id!=='string'||!/^TKT-\d{4}-\d+$/.test(id))adminFail('VALIDATION');
  var table=adminTicketTable(book);var matches=[];
  table.rows.slice(1).forEach(function(row,i){if(String(row[table.headers.indexOf('ID TICKET')]).trim()===id)matches.push({row:row,formulas:table.formulas[i+1],rowNumber:i+2,table:table});});
  if(matches.length===0)adminFail('NOT_FOUND');if(matches.length!==1)adminFail('DUPLICATE_ID');
- if(adminPurchase(matches[0].row,table.headers))adminFail('NOT_FOUND');return matches[0];
+ if(adminPurchase(matches[0].row,table.headers))adminFail('NOT_FOUND');if(!allowPendingCreation&&typeof portalPendingCreation==='function'&&portalPendingCreation(book,id))adminFail('PENDING_OPERATION');return matches[0];
 }
 function adminCellValue(value,header) {
  if(value instanceof Date) { var format=header==='HORA SOLICITUD'?'HH:mm:ss':(['FECHA ASIGNACIÓN','ÚLTIMA ACTUALIZACIÓN'].indexOf(header)>=0?'yyyy-MM-dd HH:mm:ss':'yyyy-MM-dd');return Utilities.formatDate(value,'America/Cancun',format); }
@@ -73,19 +73,19 @@ function adminCellValue(value,header) {
 function adminSnapshot(ticket) { return ticket.row.map(function(value,i){return ticket.formulas&&ticket.formulas[i]?{formula:ticket.formulas[i]}:adminCellValue(value,ticket.table.headers[i]);}); }
 function adminTicketView(ticket) {
  var row=ticket.row;var headers=ticket.table.headers;
- function get(h){return String(adminCellValue(row[headers.indexOf(h)],h)).replace(/^\u200B(?=[=+@-])/,'');}
+ function get(h){return String(adminCellValue(row[headers.indexOf(h)],h)).replace(/^\u200B(?=[=+@'-])/,'');}
  return {id:get('ID TICKET'),fecha:get('FECHA SOLICITUD'),hora:get('HORA SOLICITUD'),solicitante:get('SOLICITANTE'),correo:get('CORREO SOLICITANTE'),area:get('ÁREA SOLICITANTE'),tipo:get('TIPO DE SOLICITUD'),descripcion:get('DESCRIPCIÓN'),urgencia:get('PRIORIDAD SOLICITADA'),plazo:get('PLAZO SOLICITADO'),prioridad:get('PRIORIDAD'),responsable:get('RESPONSABLE'),fechaCompromiso:get('FECHA COMPROMISO'),estado:get('ESTADO'),observaciones:get('OBSERVACIONES'),adjuntos:get('ARCHIVOS ADJUNTOS'),version:adminHash(adminSnapshot(ticket))};
 }
 function adminTicketList(book) {
- var table=adminTicketTable(book);
- return table.rows.slice(1).map(function(row,i){return {row:row,table:table,formulas:table.formulas[i+1]};}).filter(function(ticket){return /^TKT-\d{4}-\d+$/.test(String(ticket.row[table.headers.indexOf('ID TICKET')]))&&!adminPurchase(ticket.row,table.headers);}).map(adminTicketView);
+ var table=adminTicketTable(book),pending=typeof portalPendingCreationIds==='function'?portalPendingCreationIds(book):{};
+ return table.rows.slice(1).map(function(row,i){return {row:row,table:table,formulas:table.formulas[i+1]};}).filter(function(ticket){return /^TKT-\d{4}-\d+$/.test(String(ticket.row[table.headers.indexOf('ID TICKET')]))&&!adminPurchase(ticket.row,table.headers)&&!pending[String(ticket.row[table.headers.indexOf('ID TICKET')])];}).map(adminTicketView);
 }
 function adminCatalogs(book) {
  var priorities=adminTable(book,'CATALOGOS',['PRIORIDADES']);var people=adminTable(book,'RESPONSABLES',['RESPONSABLE']);
  function unique(table,h){var seen={};return table.rows.slice(1).map(function(row){return String(row[table.headers.indexOf(h)]||'').trim();}).filter(function(v){if(!v||seen[v])return false;seen[v]=true;return true;});}
  return {prioridades:unique(priorities,'PRIORIDADES').filter(function(p){return ['CRITICA','URGENTE','ALTA','MEDIA','BAJA'].indexOf(p)>=0;}),responsables:unique(people,'RESPONSABLE')};
 }
-function adminLiteral(value) { return /^[=+@-]/.test(value)?'\u200B'+value:value; }
+function adminLiteral(value) { return /^[=+@'-]/.test(value)?'\u200B'+value:value; }
 function adminAssignmentChanges(book,payload,ticket) {
  var changes=payload.changes;var catalogs=adminCatalogs(book);
  if(!changes||Object.keys(changes).some(function(k){return ['responsable','prioridad','fechaCompromiso','observacion'].indexOf(k)<0;}))adminFail('VALIDATION');
@@ -109,7 +109,7 @@ function adminJournalTable(book) {
 }
 function adminPendingOperation(book,id,actor) {
  if(!book.getSheetByName('BITACORA TICKETS'))return null;
- var table=adminJournalTable(book);var rows=table.rows.slice(1).filter(function(row){return row[1]==='PENDIENTE'&&row[2]===actor&&row[4]===id;});
+ var table=adminJournalTable(book);var rows=table.rows.slice(1).filter(function(row){return (!row[9]||row[9]==='ASIGNAR')&&row[1]==='PENDIENTE'&&row[2]===actor&&row[4]===id;});
  if(rows.length>1)adminFail('PENDING_OPERATION');
  return rows.length===1?JSON.parse(rows[0][8]):null;
 }
@@ -120,7 +120,7 @@ function adminAssign(book,actor,payload) {
  var events=journal?journal.rows.slice(1).map(function(row,i){return {row:row,rowNumber:i+2};}).filter(function(e){return e.row[0]===payload.operationId;}):[];
  if(events.length>1)adminFail('OPERATION_REUSED');
  if(events.length===1) {
-  var event=events[0];if(event.row[2]!==actor||event.row[3]!==hash)adminFail('OPERATION_REUSED');
+  var event=events[0];if((event.row[9]&&event.row[9]!=='ASIGNAR')||event.row[2]!==actor||event.row[3]!==hash)adminFail('OPERATION_REUSED');
   if(event.row[1]==='CONFIRMADO')return {ticket:adminTicketView(ticket),operationId:payload.operationId};
   var before=JSON.parse(event.row[5]);var after=JSON.parse(event.row[6]);
   var snapshot=adminSnapshot(ticket);var current=adminHash(snapshot);

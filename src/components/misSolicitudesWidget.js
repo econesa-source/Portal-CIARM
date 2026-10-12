@@ -8,7 +8,7 @@
  * filtrar del lado cliente como control adicional.
  */
 
-const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec';
+import {listMyTickets} from '../services/ticketsPortalService.js';
 
 export async function renderMisSolicitudesWidget(container, userSession) {
   if (!container) return;
@@ -39,81 +39,28 @@ export async function renderMisSolicitudesWidget(container, userSession) {
     </div>
   `;
 
+  const controller=new AbortController();
+  const leave=()=>controller.abort();
+  window.addEventListener("hashchange",leave,{once:true});
   try {
-    const tickets = await fetchTicketsForUser(userEmail);
+    const tickets = await fetchTicketsForUser(userEmail,controller.signal);
+    if(controller.signal.aborted)return;
     renderTable(container, tickets, userEmail);
   } catch (error) {
+    if(controller.signal.aborted)return;
     console.error('Error consultando Mis Solicitudes:', error);
     renderError(
       container,
       'No fue posible consultar BD - Sistema de Tickets en este momento.',
       userEmail
     );
-  }
+  } finally {window.removeEventListener("hashchange",leave);}
 }
 
-async function fetchTicketsForUser(userEmail) {
-  const requestUrl =
-    `${GAS_WEBAPP_URL}?action=getTickets&email=${encodeURIComponent(userEmail)}&_t=${Date.now()}`;
-
-  const response = await fetch(requestUrl, {
-    method: 'GET',
-    mode: 'cors',
-    redirect: 'follow',
-    cache: 'no-store'
-  });
-
-  if (!response.ok) {
-    throw new Error(`Respuesta HTTP ${response.status}`);
-  }
-
-  const text = await response.text();
-  const payload = parsePayload(text);
-
-  if (payload && payload.status === 'error') {
-    throw new Error(payload.message || 'El backend devolvió un error.');
-  }
-
-  let rawTickets = [];
-
-  if (Array.isArray(payload)) {
-    rawTickets = payload;
-  } else if (Array.isArray(payload?.data)) {
-    rawTickets = payload.data;
-  } else if (Array.isArray(payload?.tickets)) {
-    rawTickets = payload.tickets;
-  }
-
-  return rawTickets
-    .map(normalizeTicket)
-    .filter(ticket => !ticket.correo || ticket.correo === userEmail)
-    .sort(sortTicketsNewestFirst);
-}
-
-function parsePayload(text) {
-  const clean = String(text || '').trim();
-
-  if (!clean) return [];
-
-  try {
-    return JSON.parse(clean);
-  } catch (_) {
-    // Compatibilidad con respuestas históricas que envolvían el JSON
-    // en una asignación JavaScript.
-    const arrayStart = clean.indexOf('[');
-    const arrayEnd = clean.lastIndexOf(']');
-    if (arrayStart !== -1 && arrayEnd > arrayStart) {
-      return JSON.parse(clean.slice(arrayStart, arrayEnd + 1));
-    }
-
-    const objectStart = clean.indexOf('{');
-    const objectEnd = clean.lastIndexOf('}');
-    if (objectStart !== -1 && objectEnd > objectStart) {
-      return JSON.parse(clean.slice(objectStart, objectEnd + 1));
-    }
-
-    throw new Error('Formato de respuesta no reconocido.');
-  }
+async function fetchTicketsForUser(userEmail,signal) {
+  const rows=await listMyTickets(signal);
+  if(!Array.isArray(rows))throw new Error('Respuesta inválida');
+  return rows.map(normalizeTicket).filter(ticket=>ticket.correo===userEmail).sort(sortTicketsNewestFirst);
 }
 
 function normalizeTicket(raw) {
@@ -126,7 +73,7 @@ function normalizeTicket(raw) {
     tipo: firstValue(value, ['tipo', 'tipo_solicitud', 'tipoSolicitud', 'TIPO DE SOLICITUD']),
     descripcion: firstValue(value, ['desc', 'descripcion', 'DESCRIPCIÓN']),
     estado: firstValue(value, ['estado', 'ESTADO']) || 'NUEVO',
-    prioridad: firstValue(value, ['prioridad_solicitada', 'prioridadSolicitada', 'PRIORIDAD SOLICITADA', 'prioridad']),
+    prioridad: firstValue(value, ['urgencia', 'prioridad_solicitada', 'prioridadSolicitada', 'PRIORIDAD SOLICITADA', 'prioridad']),
     correo: String(firstValue(value, [
       'correo',
       'email',
@@ -150,6 +97,7 @@ function firstValue(obj, keys) {
 
 function extractAttachmentLinks(value) {
   const raw = firstValue(value, [
+    'adjuntos',
     'driveUrl',
     'drive_url',
     'adjuntos_urls',
@@ -161,7 +109,7 @@ function extractAttachmentLinks(value) {
   if (!raw) return [];
 
   const urls = raw.match(/https?:\/\/[^\s,]+/g) || [];
-  return [...new Set(urls)];
+  return [...new Set(urls)].filter(url=>{try{return new URL(url).protocol==='https:';}catch{return false;}});
 }
 
 function sortTicketsNewestFirst(a, b) {

@@ -5,8 +5,8 @@ const messages={FORBIDDEN:'No tienes permiso para administrar solicitudes intern
 function errorMessage(error){return messages[error.code]||'No se pudo confirmar la operación. Reintenta en unos segundos.';}
 
 export async function render(container) {
- const controller=new AbortController();const {signal}=controller;
- window.addEventListener('hashchange',()=>controller.abort(),{once:true});
+ const controller=new AbortController();const {signal}=controller;let modal;
+ window.addEventListener('hashchange',()=>{controller.abort();modal?.close();},{once:true});
  const current=()=>!signal.aborted&&container.isConnected;
  async function handleSession(error){if(error.status===401){const {getAuthenticatedUser}=await import('../services/authService.js');await getAuthenticatedUser(true);window.location.hash='#inicio';return true;}return false;}
  container.innerHTML='<section class="ticket-admin"><h1>Administrar solicitudes internas</h1><p role="status">Consultando permisos…</p></section>';
@@ -25,7 +25,7 @@ export async function render(container) {
  const groupValue=(t,key)=>String(t[key]||'').trim()||({responsable:'Sin responsable',prioridad:'Sin prioridad',tipo:'Sin tipo',area:'Sin área'})[key];
  const columns='<tr><th scope="col">Solicitud</th><th scope="col">Fecha</th><th scope="col">Solicitante</th><th scope="col">Estado</th><th scope="col">Urgencia solicitada</th><th scope="col">Prioridad asignada</th><th scope="col">Responsable</th><th scope="col">Compromiso</th></tr>';
  container.innerHTML=`<section class="ticket-admin">
-  <header class="ticket-executive-heading"><div><h1>Administrar solicitudes internas</h1><p>Estado general y solicitudes que requieren atención.</p></div></header>
+  <header class="ticket-executive-heading"><div><h1>Administrar solicitudes internas</h1><p>Estado general y solicitudes que requieren atención.</p></div></header><p id="ticket-notice" class="ticket-notice" role="status" aria-live="polite"></p>
   <section id="ticket-dashboard" class="ticket-panel" aria-labelledby="ticket-dashboard-title">
    <div class="ticket-panel-heading"><h2 id="ticket-dashboard-title">Estado de las solicitudes</h2><span id="ticket-total" class="ticket-counter"></span></div>
    <div id="ticket-states" class="ticket-state-grid"></div>
@@ -34,15 +34,28 @@ export async function render(container) {
   <section id="ticket-pending" class="ticket-panel ticket-pending" aria-labelledby="ticket-pending-title">
    <div class="ticket-panel-heading"><div><h2 id="ticket-pending-title">Nuevas solicitudes por asignar</h2><p>Siempre visibles, independientemente de la agrupación seleccionada.</p></div><span id="ticket-pending-count" class="ticket-counter" role="status"></span></div>
    <div class="ticket-table-wrap"><table class="ticket-table"><caption class="ticket-sr-only">Solicitudes pendientes de asignación</caption><thead><tr><th scope="col">Solicitud / fecha</th><th scope="col">Solicitante</th><th scope="col">Solicitud</th><th scope="col">Urgencia</th><th scope="col">Acción</th></tr></thead><tbody id="ticket-pending-body"></tbody></table></div>
-   <section id="ticket-detail" class="ticket-detail-panel" aria-label="Detalle de la solicitud"><p>Selecciona una solicitud para ver su detalle y asignación.</p></section>
   </section>
   <section class="ticket-panel" aria-labelledby="ticket-subset-title">
    <div class="ticket-panel-heading"><div><h2 id="ticket-subset-title">Todas las solicitudes</h2><p id="ticket-count" role="status"></p></div><button type="button" id="ticket-show-all" class="ticket-secondary">Ver todas</button></div>
    <div class="ticket-filters"><label>Buscar<input id="ticket-query" type="search" placeholder="Folio, solicitante o descripción"></label>${['estado','prioridad','urgencia','responsable','tipo','area'].map(key=>`<label>${dimensionLabels[key]}<select data-filter="${key}"><option value="">Todos</option>${[...new Set(tickets.map(t=>t[key]).filter(Boolean))].sort().map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select></label>`).join('')}</div>
    <div class="ticket-table-wrap"><table class="ticket-table"><caption class="ticket-sr-only">Subconjunto de solicitudes internas</caption><thead>${columns}</thead><tbody id="ticket-subset-body"></tbody></table></div>
   </section>
+  <dialog id="ticket-modal" class="ticket-modal" aria-labelledby="ticket-modal-heading">
+   <header class="ticket-modal-header"><h2 id="ticket-modal-heading">Detalle y asignación de solicitud</h2><button type="button" id="ticket-modal-close" class="ticket-secondary" aria-label="Cerrar ventana de solicitud">Cerrar</button></header>
+   <section id="ticket-detail" aria-label="Detalle de la solicitud"></section>
+  </dialog>
  </section>`;
- const body=container.querySelector('#ticket-subset-body');const detail=container.querySelector('#ticket-detail');let selection=0;
+ const body=container.querySelector('#ticket-subset-body');const detail=container.querySelector('#ticket-detail');let selection=0;let savingModal=false;let returnId;
+ modal=container.querySelector('#ticket-modal');
+ const closeButton=container.querySelector('#ticket-modal-close');
+ closeButton.addEventListener('click',()=>{if(!savingModal)modal.close();});
+ modal.addEventListener('cancel',event=>{if(savingModal)event.preventDefault();});
+ modal.addEventListener('close',()=>{
+  ++selection;
+  if(!current())return;
+  const target=[...container.querySelectorAll('[data-id]')].find(button=>button.dataset.id===returnId)||container.querySelector('[data-state]');
+  target?.focus();
+ });
  function ticketRows(found,pending=false){return found.map(t=>pending?
   `<tr><td>${esc(t.id)}<span>${esc(t.fecha)}</span></td><td>${esc(t.solicitante)}<span>${esc(t.area)}</span></td><td><div class="ticket-pending-description">${esc(t.descripcion)}</div><span>${esc(t.tipo)}</span></td><td>${esc(t.urgencia)}</td><td><button type="button" data-id="${esc(t.id)}" aria-label="Asignar solicitud ${esc(t.id)}">Asignar</button></td></tr>`:
   `<tr><td><button type="button" class="ticket-open" data-id="${esc(t.id)}">${esc(t.id)}</button><span>${esc(t.tipo)}</span></td><td>${esc(t.fecha)}</td><td>${esc(t.solicitante)}<span>${esc(t.area)}</span></td><td>${esc(t.estado)}</td><td>${esc(t.urgencia)}</td><td>${esc(t.prioridad)}</td><td>${esc(t.responsable||'Sin responsable')}</td><td>${esc(t.fechaCompromiso||'Sin fecha')}</td></tr>`).join('');}
@@ -74,8 +87,10 @@ export async function render(container) {
   if(state||group){grouping=state?{key:'estado',value:state.dataset.state}:{key:container.querySelector('#ticket-group').value,value:group.dataset.groupValue};resetFilters();paint();}
  });
  async function openTicket(id){
-  const request=++selection;detail.innerHTML='<p role="status">Cargando detalle…</p>';
-  try{const ticket=await getAdminTicket(id,signal);if(current()&&request===selection){const index=tickets.findIndex(t=>t.id===id);if(index>=0)tickets[index]=ticket;paint();paintDetail(ticket);detail.scrollIntoView?.({block:'nearest',behavior:'smooth'});}}catch(error){if(signal.aborted)return;if(await handleSession(error))return;if(request===selection)detail.innerHTML=`<p role="alert">${esc(errorMessage(error))}</p>`;}
+  const request=++selection;returnId=id;detail.innerHTML='<p role="status">Cargando detalle…</p>';
+  container.querySelector('#ticket-notice').textContent='';
+  if(!modal.open)modal.showModal();
+  try{const ticket=await getAdminTicket(id,signal);if(current()&&request===selection&&modal.open){const index=tickets.findIndex(t=>t.id===id);if(index>=0)tickets[index]=ticket;paint();paintDetail(ticket);detail.querySelector('[name=responsable]')?.focus();}}catch(error){if(signal.aborted)return;if(await handleSession(error))return;if(current()&&request===selection&&modal.open)detail.innerHTML=`<p role="alert">${esc(errorMessage(error))}</p>`;}
  }
  function paintDetail(ticket){
   const links=String(ticket.adjuntos||'').split(/\s+/).filter(Boolean).map(value=>{const safe=safeAttachmentUrl(value);return safe?`<li><a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">Abrir adjunto en Google Drive</a></li>`:`<li>${esc(value)}</li>`;}).join('');
@@ -91,13 +106,14 @@ export async function render(container) {
    event.preventDefault();if(saving||terminal)return;
    const values=Object.fromEntries(new FormData(form));
    const operation=pendingOperations.get(ticket.id)||{operationId:crypto.randomUUID(),ticketId:ticket.id,expectedVersion:ticket.version,changes:values};
-   pendingOperations.set(ticket.id,operation);saving=true;fieldset.disabled=true;refresh.disabled=true;feedback.textContent='Guardando asignación…';
+   pendingOperations.set(ticket.id,operation);saving=true;savingModal=true;closeButton.disabled=true;fieldset.disabled=true;refresh.disabled=true;feedback.textContent='Guardando asignación…';
    try{
     const result=await assignAdminTicket(operation,context.csrfToken,signal);pendingOperations.delete(ticket.id);
     if(!current())return;
     const index=tickets.findIndex(t=>t.id===ticket.id);if(index>=0)tickets[index]=result.ticket;paint();
     if(selection!==requestSelection)return;
-    paintDetail(result.ticket);detail.querySelector('#ticket-feedback').textContent='Asignación guardada y registrada en la bitácora.';
+    container.querySelector('#ticket-notice').textContent=`Solicitud ${ticket.id}: asignación guardada y registrada en la bitácora.`;
+    savingModal=false;closeButton.disabled=false;modal.close();
    }catch(error){
     if(signal.aborted)return;if(await handleSession(error))return;
     if(selection!==requestSelection)return;
@@ -105,7 +121,7 @@ export async function render(container) {
     if(known){pendingOperations.delete(ticket.id);form.querySelectorAll('input,select,textarea').forEach(input=>input.disabled=false);refresh.disabled=false;}
     else{form.querySelectorAll('input,select,textarea').forEach(input=>input.disabled=true);feedback.textContent='No se pudo confirmar el guardado. Reintenta con los mismos datos.';}
     if(known)feedback.textContent=errorMessage(error);
-   }finally{saving=false;if(current()&&selection===requestSelection)fieldset.disabled=terminal;}
+   }finally{saving=false;savingModal=false;closeButton.disabled=false;if(current()&&selection===requestSelection)fieldset.disabled=terminal;}
   });
   const requestSelection=selection;
  }

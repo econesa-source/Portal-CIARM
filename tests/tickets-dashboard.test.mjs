@@ -2,9 +2,11 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
 import {render} from '../src/components/adminSolicitudesWidget.js';
+import {installDialog} from './dialog-fixture.mjs';
 
 function setup(empty=false,beforePost) {
  const dom=new JSDOM('<main></main>',{url:'https://portal2.ciarm.edu.mx/#admin-solicitudes'});
+ installDialog(dom);
  Object.assign(globalThis,{window:dom.window,document:dom.window.document,FormData:dom.window.FormData});
  const base={fecha:'2026-10-12',solicitante:'Persona',area:'Primaria',tipo:'Mantenimiento',descripcion:'Reparar equipo',urgencia:'ALTA',prioridad:'ALTA',fechaCompromiso:'2026-10-15',version:'v1',observaciones:''};
  const tickets=empty?[]:[
@@ -68,7 +70,7 @@ test('saving assignment updates dashboard and removes the assigned pending ticke
  s.root.querySelector('form').dispatchEvent(new s.dom.window.Event('submit',{bubbles:true,cancelable:true}));await s.flush();
  assert.equal(s.root.querySelector('#ticket-pending-body [data-id="NEW"]'),null);
  assert.equal(s.root.querySelector('[data-state="ASIGNADO"] [data-count]').textContent,'1');
- assert.match(s.root.querySelector('#ticket-feedback').textContent,/guardada y registrada/);
+ assert.match(s.root.querySelector('#ticket-notice').textContent,/guardada y registrada/);
  s.dom.window.close();
 });
 test('empty source has zero indicators and actionable empty messages',async()=>{

@@ -1,6 +1,6 @@
 # Protección de creación y consulta de solicitudes internas
 
-Fecha: 2026-10-12. Estado: diseño técnico preparado para revisión; código de esta migración todavía no implementado ni publicado.
+Fecha: 2026-10-12. Estado: diseño aprobado por el usuario el 2026-10-12; plan de implementación preparado para revisión. Código de esta migración todavía no implementado ni publicado.
 
 ## Propósito y alcance
 
@@ -65,4 +65,4 @@ La integración en main se realiza cuando el backend real acepte y confirme las 
 
 ## Resultado de esta revisión
 
-El alcance funcional de protección fue autorizado por el usuario. Esta especificación concreta el contrato, la conservación de adjuntos y el despliegue; requiere revisión del usuario antes de elaborar y ejecutar el plan técnico. Los issues #7 y #8 siguen abiertos hasta implementación y verificación real.
+El alcance funcional de protección fue autorizado por el usuario. Esta especificación concreta el contrato, la conservación de adjuntos y el despliegue; fue aprobada por el usuario. El plan técnico está en docs/superpowers/plans/2026-10-12-proteccion-solicitudes.md y requiere su revisión antes de implementar. Los issues #7 y #8 siguen abiertos hasta implementación y verificación real.

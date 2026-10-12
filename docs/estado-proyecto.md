@@ -40,3 +40,7 @@ Las pruebas con fixtures y el despliegue acreditan código y publicación. No ac
 - Inspección visual del formulario compacto en una pantalla real. El entorno de comprobación local impidió iniciar el navegador; no hay una medición acreditada de altura sin desplazamiento.
 
 No borrar solicitudes de prueba ni modificar tickets operativos para crear evidencia. No registrar correos nuevos ni habilitar acciones de ejecución dentro de esta etapa.
+
+## Protección: diseño aprobado y plan preparado
+
+El usuario aprobó el diseño de protección el 2026-10-12. El plan técnico está en docs/superpowers/plans/2026-10-12-proteccion-solicitudes.md, con contratos, pruebas, límites de adjuntos y cambio coordinado. Sigue pendiente su revisión y ejecución; no se ha retirado aún el acceso histórico ni publicado la migración.

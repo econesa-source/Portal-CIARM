@@ -1443,3 +1443,45 @@ body {
     margin-top: 20px;
   }
 }
+
+/* Administración de solicitudes internas */
+#admin-solicitudes-link[hidden] { display: none; }
+.ticket-admin { max-width: 1600px; margin: auto; padding: 24px; color: #18323b; }
+.ticket-admin h1 { font-size: 1.6rem; }
+.ticket-admin h2 { font-size: 1.25rem; }
+.ticket-admin h3 { font-size: 1rem; }
+.ticket-filters { display: flex; flex-wrap: wrap; gap: 12px; margin: 24px 0 12px; }
+.ticket-admin label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; }
+.ticket-filters label { flex: 1 1 150px; }
+.ticket-admin input, .ticket-admin select, .ticket-admin textarea { width: 100%; min-height: 42px; padding: 8px; border: 1px solid #889b9f; border-radius: 6px; background: white; color: #18323b; font: inherit; box-sizing: border-box; }
+.ticket-admin button { padding: 10px 14px; min-height: 42px; border: 1px solid #35666e; border-radius: 6px; background: #35666e; color: white; font: inherit; cursor: pointer; }
+.ticket-admin button:disabled { opacity: .6; cursor: wait; }
+.ticket-admin :focus-visible { outline: 3px solid #a88731; outline-offset: 3px; }
+.ticket-admin-layout { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(300px,1fr); gap: 24px; align-items: start; }
+.ticket-table-wrap { overflow: auto; border: 1px solid #d2dcdc; border-radius: 8px; }
+.ticket-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.ticket-table caption { text-align: left; padding: 12px; font-weight: 600; }
+.ticket-table th, .ticket-table td { padding: 12px; border-bottom: 1px solid #d2dcdc; text-align: left; vertical-align: top; }
+.ticket-table th { background: #e9f0ee; }
+.ticket-table td span { display: block; margin-top: 6px; font-size: .8rem; }
+.ticket-table .ticket-open { background: transparent; color: #285f69; padding: 4px; text-decoration: underline; border: none; text-align: left; }
+#ticket-detail { padding: 20px; background: white; border: 1px solid #d2dcdc; border-radius: 8px; overflow-wrap: anywhere; }
+.ticket-admin dt { margin-top: 12px; font-weight: 600; }
+.ticket-admin dd { margin: 4px 0 0; }
+.ticket-description { white-space: pre-wrap; }
+.ticket-admin fieldset { border: 0; padding: 0; display: grid; gap: 14px; margin-top: 24px; }
+.ticket-admin legend { font-weight: 600; padding: 0 0 12px; }
+#ticket-refresh { background: white; color: #285f69; }
+@media (max-width: 1000px) { .ticket-admin-layout { grid-template-columns: 1fr; } .ticket-admin { padding: 16px; } }
+
+/* Acceso de administración dentro de la tarjeta de solicitudes internas. */
+.ticket-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.ticket-card-header .exact-card-category { margin-bottom: 0; }
+.ticket-card-header .exact-btn { width: auto; margin-left: auto; }

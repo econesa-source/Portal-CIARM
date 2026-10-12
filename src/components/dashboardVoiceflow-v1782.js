@@ -1,3 +1,5 @@
+import { getAdminContext } from '../services/ticketsAdminService.js';
+
 /**
  * Módulo de Inicio - Dashboard Oficial CIARM
  * Versión: 18.1.0
@@ -330,7 +332,9 @@ export function render(container, userSession) {
 
       <div class="dashboard-grid-exact">
         <div class="exact-card">
-          <span class="exact-card-category">SERVICIOS INTERNOS</span>
+          <div class="ticket-card-header">
+            <span class="exact-card-category">SERVICIOS INTERNOS</span>
+          </div>
           <h3 class="exact-card-title">Solicitudes internas</h3>
           <p class="exact-card-desc">Realiza solicitudes de Operaciones, Mantenimiento y otros servicios internos.</p>
           <div class="exact-card-btn-group">
@@ -378,6 +382,16 @@ export function render(container, userSession) {
   `;
 
   mountAssistant();
+  const header = container.querySelector('.ticket-card-header');
+  getAdminContext().then(context => {
+    if (context.canAdmin !== true || !header?.isConnected || !container.contains(header)) return;
+    const link = document.createElement('a');
+    link.href = '#admin-solicitudes';
+    link.className = 'exact-btn dark';
+    link.textContent = 'Administrar';
+    link.setAttribute('aria-label', 'Administrar solicitudes internas');
+    header.append(link);
+  }).catch(() => { /* Ante un error de permisos, el acceso permanece ausente. */ });
 }
 
 export const renderDashboardWidget = render;

@@ -1,0 +1,17 @@
+name: Verificar administrador de solicitudes internas
+on:
+  push:
+    branches: [implementation/admin-solicitudes-internas]
+  pull_request:
+jobs:
+  tickets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci && npm test
+      - run: php tests/tickets-auth.php
+      - run: php -l tickets-lib.php && php -l tickets-api.php
+      - run: node apps-script/build.mjs && git diff --exit-code apps-script/tickets-backend.gs

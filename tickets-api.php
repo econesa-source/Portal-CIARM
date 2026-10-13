@@ -30,6 +30,13 @@ try {
   if(!ciarm_ticket_csrf_valid((string)($_SESSION['ciarm_ticket_csrf']??''),is_string($input['csrfToken']??null)?$input['csrfToken']:''))throw new RuntimeException('CSRF');
  }
  $selfService=in_array($action,['mine','creationStatus','beginCreate','uploadAttachment','finalizeCreate','serviceContext','serviceSettings','serviceList','serviceDetail','saveServicePolicy','serviceTransition'],true);
+
+ // Protección de acciones directas; la visibilidad del dashboard no es autorización.
+ if(ciarm_rbac_enforced()){
+  if($action==='mine'&&!ciarm_rbac_has_function($user,'INT_MIS'))throw new RuntimeException('FORBIDDEN');
+  if(in_array($action,['creationStatus','beginCreate','uploadAttachment','finalizeCreate'],true)
+      &&!ciarm_rbac_has_function($user,'INT_CREAR'))throw new RuntimeException('FORBIDDEN');
+ }
  if($selfService){
   ciarm_portal_current_collaborator($user);
   if(in_array($action,['serviceSettings','saveServicePolicy'],true)||($action==='serviceList'&&($input['kind']??'')==='all')){if(!ciarm_ticket_current_permission($user))throw new RuntimeException('FORBIDDEN');}

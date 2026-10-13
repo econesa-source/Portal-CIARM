@@ -1,12 +1,14 @@
 /**
  * Portal CIARM - Router SPA y Guardián de Autenticación
- * Versión: 18.6.0
+ * Versión: 18.7.0
  */
 
 import { getAuthenticatedUser, logout } from './services/authService.js';
 import { renderLoginWidget } from './components/loginWidget.js';
+import { getPortalPermissions, clearPortalPermissionsCache } from './services/portalPermissionsClient.js';
+import { applyDashboardAccess, allowedRoute } from './components/dashboardAccess.js';
 
-const APP_VERSION = '18.6.0';
+const APP_VERSION = '18.7.0';
 
 const routes = {
   '#vision-gerencial': () => import(`./components/ticketsManagementWidget.js?v=${APP_VERSION}`),
@@ -94,6 +96,7 @@ async function router() {
   if (navigationId !== latestNavigation) return;
 
   if (!user) {
+    clearPortalPermissionsCache();
     if (sidebar) sidebar.style.display = 'none';
     if (sidebarToggle) sidebarToggle.style.display = 'none';
     setSidebarOpen(false);
@@ -103,6 +106,7 @@ async function router() {
 
     mainContainer.innerHTML = '';
     renderLoginWidget(mainContainer, async () => {
+      clearPortalPermissionsCache();
       window.location.hash = '#inicio';
       await router();
     });
@@ -147,6 +151,12 @@ async function router() {
 
   if (routes[hash]) {
     try {
+      const permissions = await getPortalPermissions();
+      if (navigationId !== latestNavigation) return;
+      if (!allowedRoute(hash, permissions)) {
+        mainContainer.innerHTML = '<p role="alert">Esta función no está habilitada para tu perfil.</p>';
+        return;
+      }
       const module = await routes[hash]();
       if (navigationId !== latestNavigation) return;
       mainContainer.innerHTML = '';
@@ -154,7 +164,14 @@ async function router() {
       if (typeof module.renderMisSolicitudesWidget === 'function') {
         module.renderMisSolicitudesWidget(mainContainer, user);
       } else if (typeof module.render === 'function') {
-        module.render(mainContainer, user);
+        if (hash === '#inicio') mainContainer.style.visibility = 'hidden';
+        try {
+          await module.render(mainContainer, { ...user, dm05: permissions });
+          if (navigationId !== latestNavigation) return;
+          if (hash === '#inicio') applyDashboardAccess(mainContainer, permissions);
+        } finally {
+          mainContainer.style.visibility = '';
+        }
       }
     } catch (error) {
       console.error(`Error al cargar ${hash}:`, error);

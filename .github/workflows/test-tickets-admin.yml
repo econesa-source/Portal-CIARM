@@ -14,6 +14,8 @@ jobs:
       - run: npm ci && npm test
       - run: php tests/tickets-auth.php
       - run: php tests/tickets-portal-auth.php
+      - run: php tests/portal-permissions.php
       - run: php -l tickets-portal-lib.php && php -l auth-lib.php
       - run: php -l tickets-lib.php && php -l tickets-api.php
+      - run: php -l portal-permissions-lib.php && php -l portal-permissions.php && php -l voiceflow.php
       - run: node apps-script/build.mjs && git diff --exit-code apps-script/tickets-backend.gs

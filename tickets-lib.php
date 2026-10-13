@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/auth-lib.php';
+require_once __DIR__ . '/portal-permissions-lib.php';
 
 const CIARM_TICKETS_WEBAPP = 'https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec';
 const CIARM_TICKET_PERMISSIONS_RANGE = "'Permisos de usuario'!A1:M1010";
@@ -22,6 +23,9 @@ function ciarm_ticket_permission(array $rows, string $email): bool {
 }
 
 function ciarm_ticket_current_permission(array $sessionUser): bool {
+    if (ciarm_rbac_enforced()) {
+        return ciarm_rbac_has_function($sessionUser, 'INT_GESTION');
+    }
     $email = strtolower(trim((string)($sessionUser['correo'] ?? '')));
     if (!in_array($email, ['d.lara@ciarm.edu.mx', 'e.conesa@ciarm.edu.mx'], true)) return false;
     $raw = @file_get_contents(ciarm_private_path('service-account.json'));

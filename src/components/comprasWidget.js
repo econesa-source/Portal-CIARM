@@ -137,26 +137,77 @@ function renderAlternativas(p,data){
  });
 }
 function renderAprobaciones(p,data,canSign){
- p.innerHTML='<h3>Aprobar y firmar</h3><p>La autorización ordinaria exige firma del responsable de cada centro, ruta vigente y disponibilidad presupuestaria.</p>';
+ p.innerHTML='<h3>Aprobar y firmar</h3><p>Cada decisión se revalida en HT06: firmante, centro, ruta, presupuesto y cotización elegida.</p>';
  const rows=Array.isArray(data)?data:[];
  if(!canSign)return;
  if(!rows.length){p.insertAdjacentHTML('beforeend','<p>No hay solicitudes de compra pendientes de tu firma.</p>');return;}
  rows.forEach(s=>{
   const card=document.createElement('div');card.className='compras-item';
+  const renglones=Array.isArray(s._renglones)?s._renglones:[];
+  const donantes=Array.isArray(s._donantes)?s._donantes:[];
+  const puedeReasignar=s['Ruta aprobación']==='DIRECCION_ACADEMICA'&&s._esReintegro!==true&&
+   donantes.length>0&&renglones.length>0;
+  const keyReasignacion=key();
   card.innerHTML='<b>'+escapeHtml(s['ID Solicitud'])+'</b><p>Centro: '+escapeHtml(s['Centro de costos'])+
-  ' · Ruta: '+escapeHtml(s['Ruta aprobación'])+'</p><p>Importe: '+escapeHtml(s['Monto cotizado total'])+' MXN</p>'+
-  '<form><label>Decisión<select name="decision" required><option value="">Seleccionar</option><option>Aprobar</option>'+
-  '<option>Rechazar</option></select></label><label>Motivo (obligatorio al rechazar)<textarea name="motivo"></textarea></label>'+
-  '<button type="submit">Confirmar decisión</button></form>';
+   ' · Ruta: '+escapeHtml(s['Ruta aprobación'])+'</p><p>Importe: '+escapeHtml(s['Monto cotizado total'])+' MXN</p>'+
+   '<form><label>Decisión<select name="decision" required><option value="">Seleccionar explícitamente</option>'+
+   '<option value="Aprobar">Aprobar</option><option value="Rechazar">Rechazar</option>'+
+   (puedeReasignar?'<option value="Reasignar y aprobar">Reasignar y aprobar (Dirección Académica)</option>':'')+
+   '</select></label><label>Motivo<textarea name="motivo"></textarea></label>'+
+   (puedeReasignar?
+    '<fieldset class="compras-rea" hidden><legend>Reasignación presupuestaria</legend>'+
+    '<p>Seleccioná el artículo con insuficiencia, una partida donante y el importe. HT06 comprobará que pertenezcan al mismo agregado académico y que exista saldo disponible.</p>'+
+    '<label>Artículo<select name="renglon" required>'+
+    '<option value="">Elegir renglón</option>'+
+    renglones.map(r=>'<option value="'+escapeHtml(r['ID Renglón'])+'">'+escapeHtml(r['ID Renglón'])+' — '+
+      escapeHtml(r['Descripción / especificación'])+'</option>').join('')+
+    '</select></label><label>Partida presupuestaria donante<select name="partidaOrigen" required>'+
+    '<option value="">Seleccionar renglón primero</option></select></label>'+
+    '<label>Importe a transferir (MXN)<input type="number" name="importe" step="0.01" min="0.01" required></label></fieldset>':'')+
+   '<button type="submit">Confirmar decisión</button></form>';
   p.append(card);
   const form=card.querySelector('form');
+  const extra=form.querySelector('.compras-rea');
+  const motivoEl=form.elements.motivo;
+  if(extra){
+   const renglonSelect=form.elements.renglon,donanteSelect=form.elements.partidaOrigen;
+   function updateDonantes(){
+    const elegido=renglones.find(r=>r['ID Renglón']===renglonSelect.value);
+    const candidatos=elegido?donantes.filter(d=>d.fuente===elegido['Fuente presupuestaria']&&
+      d.partida!==elegido['Partida presupuestaria']):[];
+    donanteSelect.innerHTML='<option value="">Seleccionar partida donante</option>'+
+      candidatos.map(d=>'<option value="'+escapeHtml(d.partida)+'">'+escapeHtml(d.partida)+' · '+
+      escapeHtml(d.fuente)+'</option>').join('');
+   }
+   renglonSelect.addEventListener('change',updateDonantes);
+   form.elements.decision.addEventListener('change',()=>{
+    const active=form.elements.decision.value==='Reasignar y aprobar';
+    extra.hidden=!active;
+    extra.querySelectorAll('input,select').forEach(ctrl=>{ctrl.required=active&&ctrl.name!=='idRenglon';});
+    motivoEl.required=active||form.elements.decision.value==='Rechazar';
+   });
+   extra.querySelectorAll('input,select').forEach(ctrl=>{ctrl.required=false;});
+  }else form.elements.decision.addEventListener('change',()=>{
+   motivoEl.required=form.elements.decision.value==='Rechazar';
+  });
   form.addEventListener('submit',async e=>{
-   e.preventDefault();const decision=form.elements.decision.value,motivo=form.elements.motivo.value;
-   if(decision==='Rechazar'&&!motivo.trim()){note(card,'El motivo es obligatorio.',true);return;}
-   if(!window.confirm('¿Confirmás '+decision+' para '+s['ID Solicitud']+'?'))return;
-   const button=form.querySelector('button');button.disabled=true;
+   e.preventDefault();
+   const decision=form.elements.decision.value,motivo=motivoEl.value.trim();
+   if(!decision)return;
+   if(decision!=='Aprobar'&&!motivo){note(card,'La decisión requiere un motivo.',true);return;}
+   const payload={idSolicitud:s['ID Solicitud'],decision,motivo};
+   if(decision==='Reasignar y aprobar'){
+    const renglon=form.elements.renglon.value,partida=form.elements.partidaOrigen.value,
+      importe=Number(form.elements.importe.value);
+    if(!puedeReasignar||!renglon||!partida||!(importe>0)||!Number.isFinite(importe)){
+     note(card,'Completá renglón, partida donante e importe positivo.',true);return;
+    }
+    payload.reasignacion={idRenglon:renglon,partidaOrigen:partida,importe,idempotencyKey:keyReasignacion};
+   }
+   if(!window.confirm('¿Confirmás '+decision+' para '+value(s['ID Solicitud'])+'?'))return;
+   const button=form.querySelector('button[type=submit]');button.disabled=true;
    try{
-    await requestCompras('decidirSolicitud',{idSolicitud:s['ID Solicitud'],decision,motivo});
+    await requestCompras('decidirSolicitud',payload);
     card.remove();note(p,'Decisión registrada en HT06.');
    }catch(error){note(card,errText(error),true);button.disabled=false;}
   });

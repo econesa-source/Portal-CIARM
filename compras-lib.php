@@ -82,7 +82,7 @@ function ciarm_compras_forward(array $user,string $action,array $payload): array
     // No aceptar actor/rol desde el body: se toma exclusivamente de la sesión PHP.
     $envelope=json_encode([
       'version'=>'compras-v1','action'=>$action,'actor'=>$actor,
-      'issuedAt'=>time(),'nonce'=>bin2hex(random_bytes(24)),'payload'=>$payload
+      'issuedAt'=>time(),'nonce'=>bin2hex(random_bytes(24)),'payload'=>(object)$payload
     ],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
     $signed=['envelope'=>$envelope,'signature'=>hash_hmac('sha256',$envelope,$key)];
     $resp=ciarm_http_json($url,['post'=>true,'headers'=>[

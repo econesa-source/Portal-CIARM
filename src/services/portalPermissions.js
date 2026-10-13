@@ -6,6 +6,7 @@
 export const PORTAL_CARDS = Object.freeze({
   asistente: { code: 'ASISTENTE_TARJETA', actions: { consultar: 'ASISTENTE_CONSULTAR' } },
   solicitudes: { code: 'INT_TARJETA', actions: { crear: 'INT_CREAR', mis: 'INT_MIS', gestionar: 'INT_GESTION' } },
+  compras: { code: 'COMPRAS_TARJETA', actions: { crear: 'COMPRAS_CREAR', mis: 'COMPRAS_MIS', firmar: 'COMPRAS_FIRMAR', elegir: 'COMPRAS_ELEGIR', recibir: 'COMPRAS_RECIBIR_ASIGNADA' } },
   biblioteca: { code: 'BIBLIOTECA_TARJETA', actions: { acceder: 'BIBLIOTECA_ACCEDER' } },
   normativa: { code: 'NORM_TARJETA', actions: { consultar: 'NORM_CONSULTAR' } },
   comunicados: { code: 'COMUNICADOS_TARJETA', actions: { ver: 'COMUNICADOS_VER' } },

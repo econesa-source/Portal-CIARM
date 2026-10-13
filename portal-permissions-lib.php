@@ -59,7 +59,7 @@ function ciarm_rbac_user_roles(array $rows, string $email): array {
     }
     if (count($matches) !== 1) throw new RuntimeException('rbac_identity_mismatch');
     $row = $matches[0];
-    if (mb_strtolower(trim((string)($row[$cols['Status']] ?? ''))) !== 'activo') {
+    if (strtolower(trim((string)($row[$cols['Status']] ?? ''))) !== 'activo') {
         throw new RuntimeException('rbac_inactive');
     }
     return ciarm_rbac_codes_from_cell((string)($row[$cols['Roles DM05']] ?? ''));

@@ -107,7 +107,7 @@ async function router() {
     mainContainer.innerHTML = '';
     renderLoginWidget(mainContainer, async () => {
       clearPortalPermissionsCache();
-      window.location.hash = '#inicio';
+      if (window.location.hash !== '#diagnostico-permisos') window.location.hash = '#inicio';
       await router();
     });
     return;
@@ -148,6 +148,18 @@ async function router() {
       link.classList.remove('active');
     }
   });
+
+  if (hash === '#diagnostico-permisos') {
+    try {
+      const { render } = await import(`./components/portalDiagnosticsWidget.js?v=${APP_VERSION}`);
+      if (navigationId !== latestNavigation) return;
+      await render(mainContainer);
+    } catch (error) {
+      console.error('Diagnóstico de permisos:', error);
+      mainContainer.textContent = 'No se pudo ejecutar la comprobación desde el Portal.';
+    }
+    return;
+  }
 
   if (routes[hash]) {
     try {

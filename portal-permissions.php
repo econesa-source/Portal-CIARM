@@ -11,7 +11,9 @@ if ($user === null) {
 }
 
 try {
-    $result = ciarm_rbac_effective($user);
+    // Modo diagnóstico autenticado: comprueba Sheets sin activar permisos nuevos.
+    $preflight = ($_GET['preflight'] ?? '') === '1';
+    $result = ciarm_rbac_effective($user, $preflight);
     ciarm_json_response(200, ['ok' => true, 'data' => $result]);
 } catch (Throwable $error) {
     error_log('Portal DM05 permissions unavailable: ' . $error->getMessage());

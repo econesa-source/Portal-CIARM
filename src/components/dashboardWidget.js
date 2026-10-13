@@ -383,7 +383,8 @@ export function render(container, userSession) {
 
   mountAssistant();
   const header = container.querySelector('.ticket-card-header');
-  getAdminContext().then(context => {
+  if (userSession?.dm05?.enforced !== true || userSession.dm05.codes?.includes('INT_GESTION')) {
+    getAdminContext().then(context => {
     if (context.canAdmin !== true || !header?.isConnected || !container.contains(header)) return;
     if (userSession?.dm05?.enforced === true && !userSession.dm05.codes?.includes('INT_GESTION')) return;
     const link = document.createElement('a');
@@ -393,6 +394,7 @@ export function render(container, userSession) {
     link.setAttribute('aria-label', 'Administrar solicitudes internas');
     header.append(link);
   }).catch(() => { /* Ante un error de permisos, el acceso permanece ausente. */ });
+  }
 }
 
 export const renderDashboardWidget = render;

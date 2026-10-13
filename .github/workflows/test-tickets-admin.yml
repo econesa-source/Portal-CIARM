@@ -1,7 +1,7 @@
 name: Verificar administrador de solicitudes internas
 on:
   push:
-    branches: [implementation/admin-solicitudes-internas]
+    branches: [main, implementation/admin-solicitudes-internas]
   pull_request:
 jobs:
   tickets:

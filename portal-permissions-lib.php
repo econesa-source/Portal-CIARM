@@ -12,7 +12,7 @@ const CIARM_DM05_ID = '1h7byucfAaHEcO1hvidLKJUYfWQiS-NKx9-jZ8Jwvk2g';
 const CIARM_RBAC_TTL = 60;
 
 function ciarm_rbac_enforced(): bool {
-    return getenv('CIARM_DM05_ENFORCE') === '1';
+    return getenv('CIARM_DM05_ENFORCE') !== '0';
 }
 
 function ciarm_rbac_codes_from_cell(string $text): array {

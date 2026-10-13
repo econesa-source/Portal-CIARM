@@ -1564,3 +1564,15 @@ body {
   .ticket-summary-wide { grid-column: 1/-1; }
   .ticket-summary h3 { margin-top: 8px; }
 }
+
+/* Compact executive dashboard and consistent source-local timestamps. */
+.ticket-admin #ticket-dashboard { padding: 14px; }
+.ticket-admin .ticket-state { min-height: 68px; padding: 10px 12px; gap: 2px; }
+.ticket-admin .ticket-state strong { font-size: 1.5rem; }
+.ticket-admin .ticket-state-grid { gap: 8px; }
+.ticket-admin .ticket-group-grid { margin-top: 8px; gap: 4px 20px; }
+.ticket-admin .ticket-group { padding: 5px 0; }
+.ticket-admin .ticket-group-label { margin-bottom: 4px; }
+#ticket-subset { scroll-margin-top: 20px; }
+.ticket-table .ticket-date-day, .tickets-table .ticket-date-day { display: block; color: inherit; font-size: inherit; }
+.ticket-table .ticket-date-time, .tickets-table .ticket-date-time { display: block; color: #64748b; font-size: .75rem; line-height: 1.4; }

@@ -1,6 +1,6 @@
 /**
  * Portal CIARM - Router SPA y Guardián de Autenticación
- * Versión: 18.6.0
+ * Versión: 18.7.0
  */
 
 import { getAuthenticatedUser, logout } from './services/authService.js';
@@ -9,7 +9,7 @@ import { getPortalPermissions, clearPortalPermissionsCache } from './services/po
 import { applyDashboardAccess, allowedRoute } from './components/dashboardAccess.js';
 import { comprasUiEnabled } from './services/comprasClient.js';
 
-const APP_VERSION = '18.6.0';
+const APP_VERSION = '18.7.0';
 
 const routes = {
   '#vision-gerencial': () => import(`./components/ticketsManagementWidget.js?v=${APP_VERSION}`),

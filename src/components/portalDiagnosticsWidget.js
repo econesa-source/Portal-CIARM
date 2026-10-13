@@ -43,6 +43,7 @@ export async function render(container) {
         status.textContent = 'Sesión PHP: VERIFICADA\n' +
           'DM03–DM05: ERROR (HTTP ' + permissionsResponse.status + ')\n' +
           'Código: ' + String(payload?.code || 'UNKNOWN') + '\n' +
+          'Etapa: ' + String(payload?.stage || 'NO DETERMINADA') + '\n' +
           'Dominio: ' + window.location.hostname;
         return;
       }

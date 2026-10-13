@@ -7,12 +7,14 @@ import { getAuthenticatedUser, logout } from './services/authService.js';
 import { renderLoginWidget } from './components/loginWidget.js';
 import { getPortalPermissions, clearPortalPermissionsCache } from './services/portalPermissionsClient.js';
 import { applyDashboardAccess, allowedRoute } from './components/dashboardAccess.js';
+import { comprasUiEnabled } from './services/comprasClient.js';
 
 const APP_VERSION = '18.6.0';
 
 const routes = {
   '#vision-gerencial': () => import(`./components/ticketsManagementWidget.js?v=${APP_VERSION}`),
   '#inicio': () => import(`./components/dashboardWidget.js?v=${APP_VERSION}`),
+  '#compras': () => import(`./components/comprasWidget.js?v=${APP_VERSION}`),
   '#solicitudes': () => import(`./components/solicitudesWidget.js?v=${APP_VERSION}`),
   '#mis-solicitudes': () => import(`./components/misSolicitudesWidget.js?v=${APP_VERSION}`),
   '#mis-tareas': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
@@ -60,6 +62,20 @@ function setupSidebarControls() {
   });
 }
 
+function syncComprasNavigation(permissions){
+  const nav=document.querySelector('#main-sidebar .sidebar-nav');
+  if(!nav)return;
+  let link=nav.querySelector('[href="#compras"]');
+  const codes=permissions?.enforced===true&&permissions?.verified===true?permissions.codes||[]:[];
+  const eligible=comprasUiEnabled()&&codes.includes('COMPRAS_TARJETA')&&
+    ['COMPRAS_CREAR','COMPRAS_MIS','COMPRAS_AREA','COMPRAS_TODOS','COMPRAS_FIRMAR','COMPRAS_ELEGIR','COMPRAS_RECIBIR_ASIGNADA'].some(c=>codes.includes(c));
+  if(!eligible){link?.remove();return;}
+  if(link)return;
+  link=document.createElement('a');link.href='#compras';link.className='nav-link';
+  const icon=document.createElement('span');icon.className='nav-icon';icon.textContent='▤';
+  const label=document.createElement('span');label.className='nav-label';label.textContent='Compras';
+  link.append(icon,label);nav.append(link);
+}
 function initials(name) {
   return String(name || '')
     .trim()
@@ -97,6 +113,7 @@ async function router() {
 
   if (!user) {
     clearPortalPermissionsCache();
+    syncComprasNavigation(null);
     if (sidebar) sidebar.style.display = 'none';
     if (sidebarToggle) sidebarToggle.style.display = 'none';
     setSidebarOpen(false);
@@ -153,7 +170,8 @@ async function router() {
     try {
       const permissions = await getPortalPermissions();
       if (navigationId !== latestNavigation) return;
-      if (!allowedRoute(hash, permissions)) {
+      syncComprasNavigation(permissions);
+      if ((hash === '#compras' && !comprasUiEnabled()) || !allowedRoute(hash, permissions)) {
         mainContainer.innerHTML = '<p role="alert">Esta función no está habilitada para tu perfil.</p>';
         return;
       }

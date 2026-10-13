@@ -24,7 +24,8 @@ function note(el,message,error=false){
 function line(units){
  return '<div class="compras-line"><label>Descripción / especificación<input name="descripcion" required maxlength="500"></label>'+
  '<div class="compras-grid"><label>Cantidad<input name="cantidad" type="number" min="0.001" step="any" value="1" required></label>'+
- '<label>Unidad<select name="unidad" required><option value="">Seleccionar</option>'+selectOptions(units)+'</select></label></div></div>';
+ '<label>Unidad<select name="unidad" required><option value="">Seleccionar</option>'+selectOptions(units)+'</select></label></div>'+ 
+ '<label class="compras-importe" hidden>Importe efectivamente pagado (MXN)<input type="number" name="importeDeclarado" step="0.01" min="0.01"></label></div>';
 }
 function renderCrear(p,ctx){
  p.innerHTML='<h3>Solicitar compra</h3><p>Compras se encarga de cotizar y clasificar cada renglón. No necesitás conocer cuentas ni partidas.</p>'+
@@ -37,26 +38,34 @@ function renderCrear(p,ctx){
  '<label>Vínculo HTTPS del comprobante o cotización (si corresponde)<input name="adjuntosVinculos" type="url" placeholder="https://"></label>'+
  '<button type="submit">Enviar solicitud</button></form>';
  const form=p.querySelector('form'),container=p.querySelector('#compras-lineas');let clave=key();
+ const isReintegro=()=>form.elements.tipoSolicitud.value==='Reintegro de gasto';
+ function syncAmounts(){[...container.querySelectorAll('.compras-importe')].forEach(label=>{label.hidden=!isReintegro();label.querySelector('input').required=isReintegro();});}
+ form.elements.tipoSolicitud.addEventListener('change',syncAmounts);syncAmounts();
  p.querySelector('#compras-add').addEventListener('click',()=>{
   if(container.children.length>=20)return;
-  container.insertAdjacentHTML('beforeend',line(ctx.unidades));
+  container.insertAdjacentHTML('beforeend',line(ctx.unidades));syncAmounts();
  });
  form.addEventListener('submit',async e=>{
   e.preventDefault();
   const fields=Object.fromEntries(new FormData(form).entries());
-  const renglones=[...container.children].map(node=>({
-   descripcion:node.querySelector('[name=descripcion]').value.trim(),
-   cantidad:Number(node.querySelector('[name=cantidad]').value),
-   unidad:node.querySelector('[name=unidad]').value
-  }));
+  const renglones=[...container.children].map(node=>{
+   const item={descripcion:node.querySelector('[name=descripcion]').value.trim(),
+    cantidad:Number(node.querySelector('[name=cantidad]').value),unidad:node.querySelector('[name=unidad]').value};
+   if(isReintegro())item.importeDeclarado=Number(node.querySelector('[name=importeDeclarado]').value);
+   return item;
+  });
   const payload={tipoSolicitud:fields.tipoSolicitud,centroCostos:fields.centroCostos,fechaGeneral:fields.fechaGeneral,
    responsableRecepcion:fields.responsableRecepcion,areaContexto:fields.areaContexto,renglones,claveEnvio:clave};
   if(fields.adjuntosVinculos)payload.adjuntosVinculos=fields.adjuntosVinculos;
+  if((isReintegro()||fields.tipoSolicitud==='Compra - ya tengo cotización')&&
+    !/^https:\/\//i.test(fields.adjuntosVinculos||'')){
+   note(p,'Adjuntá un vínculo HTTPS del comprobante o cotización correspondiente.',true);return;
+  }
   const button=form.querySelector('[type=submit]');button.disabled=true;
   try{
    const result=await requestCompras('crearSolicitud',payload);
    note(p,'Solicitud registrada'+(result?.idSolicitud?' · '+result.idSolicitud:''));clave=key();
-   form.reset();container.innerHTML=line(ctx.unidades);
+   form.reset();container.innerHTML=line(ctx.unidades);syncAmounts();
   }catch(error){note(p,errText(error),true);}
   finally{button.disabled=false;}
  });

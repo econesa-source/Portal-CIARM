@@ -133,8 +133,8 @@ function ciarm_rbac_permissions(array $roles, array $roleRows, array $functionRo
 }
 
 /** Sesión + caché privada compartida: evita consultas por tarjeta o botón. */
-function ciarm_rbac_effective(array $sessionUser): array {
-    if (!ciarm_rbac_enforced()) return ['verified' => false, 'enforced' => false, 'codes' => []];
+function ciarm_rbac_effective(array $sessionUser, bool $preflight = false): array {
+    if (!ciarm_rbac_enforced() && !$preflight) return ['verified' => false, 'enforced' => false, 'codes' => []];
     $email = strtolower(trim((string)($sessionUser['correo'] ?? '')));
     if ($email === '') throw new RuntimeException('rbac_no_identity');
 
@@ -143,7 +143,7 @@ function ciarm_rbac_effective(array $sessionUser): array {
         ($sessionCache['email'] ?? null) === $email &&
         (int)($sessionCache['expiry'] ?? 0) > time() &&
         is_array($sessionCache['codes'] ?? null)) {
-        return ['verified' => true, 'enforced' => true, 'codes' => $sessionCache['codes']];
+        return ['verified' => true, 'enforced' => ciarm_rbac_enforced(), 'codes' => $sessionCache['codes']];
     }
 
     $account = ciarm_rbac_service_account();
@@ -167,7 +167,7 @@ function ciarm_rbac_effective(array $sessionUser): array {
     }
     $codes = ciarm_rbac_permissions($roles, $catalog[0], $catalog[1], $catalog[2]);
     $_SESSION['ciarm_rbac'] = ['email' => $email, 'expiry' => time() + CIARM_RBAC_TTL, 'codes' => $codes];
-    return ['verified' => true, 'enforced' => true, 'codes' => $codes];
+    return ['verified' => true, 'enforced' => ciarm_rbac_enforced(), 'codes' => $codes];
 }
 
 function ciarm_rbac_has_function(array $sessionUser, string $code): bool {

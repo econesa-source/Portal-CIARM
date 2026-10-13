@@ -29,7 +29,7 @@ function line(units){
 }
 function renderCrear(p,ctx){
  p.innerHTML='<h3>Solicitar compra</h3><p>Compras se encarga de cotizar y clasificar cada renglón. No necesitás conocer cuentas ni partidas.</p>'+
- '<form id="compras-crear"><div class="compras-grid"><label>Tipo de solicitud<select name="tipoSolicitud" required>'+selectOptions(ctx.tipos)+'</select></label>'+
+ '<form id="compras-crear"><div class="compras-grid"><label>Tipo de solicitud<select name="tipoSolicitud" required><option value="">Seleccionar tipo</option>'+selectOptions(ctx.tipos)+'</select></label>'+
  '<label>Centro de costos<select name="centroCostos" required><option value="">Seleccionar</option>'+selectOptions(ctx.areas,ctx.areaSugerida)+'</select></label>'+
  '<label>Fecha necesaria<input type="date" name="fechaGeneral" required></label>'+
  '<label>Responsable de recepción<input name="responsableRecepcion" type="email" value="'+escapeHtml(ctx.email)+'" required></label></div>'+
@@ -242,7 +242,7 @@ function renderRecepciones(p,data){
 const CSS='<style>.compras-shell{max-width:1050px;margin:0 auto;padding:18px;color:#262626}.compras-shell h2,.compras-shell h3{color:#26487f}' +
  '.compras-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.compras-tabs button{border:1px solid #26487f;background:white;color:#26487f;border-radius:7px;padding:10px;cursor:pointer}' +
  '.compras-tabs [aria-selected=true]{background:#26487f;color:white}.compras-body{padding:20px;border:1px solid #dce3eb;border-radius:9px;background:white}' +
- '.compras-body label{display:block;color:#26487f;font-weight:600;font-size:13px;margin:10px 0}.compras-body input:not([type=radio]),.compras-body select,.compras-body textarea{display:block;box-sizing:border-box;width:100%;padding:9px;border:1px solid #c1cada;border-radius:6px}' +
+ '.compras-body label{display:block;color:#26487f;font-weight:600;font-size:13px;margin:10px 0}.compras-body [hidden]{display:none!important}.compras-body input:not([type=radio]),.compras-body select,.compras-body textarea{display:block;box-sizing:border-box;width:100%;padding:9px;border:1px solid #c1cada;border-radius:6px}' +
  '.compras-body button{background:#26487f;color:white;padding:10px;border:0;border-radius:6px;cursor:pointer}.compras-body button:disabled{opacity:.45}' +
  '.compras-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.compras-item,.compras-line{border:1px solid #e0e7ef;border-radius:6px;margin:13px 0;padding:14px}' +
  '.compras-extras{border-top:1px solid #dce3eb;margin-top:26px;padding-top:16px}.compras-body details summary{color:#26487f;cursor:pointer;font-weight:600}.compras-body details textarea{min-width:180px}.compras-scroll{overflow:auto}.compras-body table{width:100%;border-collapse:collapse}.compras-body th,.compras-body td{text-align:left;padding:10px;border-bottom:1px solid #ddd}.compras-body th{background:#26487f;color:white}</style>';
@@ -257,8 +257,8 @@ export async function render(container,session){
   ?['COMPRAS_MIS','COMPRAS_AREA','COMPRAS_TODOS'].some(k=>roles.has(k))
   :t.id==='aprobar'?['COMPRAS_FIRMAR','COMPRAS_PRORROGA_FIRMAR','COMPRAS_EXCEPCION_COT'].some(k=>roles.has(k))
   :roles.has(t.permission));
- container.innerHTML=CSS+'<section class="compras-shell"><a href="#inicio">← Volver al inicio</a><h2>Compras y solicitudes</h2>'+
-  '<p>Solicitar → Cotizar → Elegir → Aprobar → Comprar → Recibir</p><nav class="compras-tabs" role="tablist"></nav><div class="compras-body" role="tabpanel"></div></section>';
+ container.innerHTML=CSS+'<section class="compras-shell"><a href="#inicio">← Volver al inicio</a><h2>Compras</h2>'+
+  '<p>Solicitud → Cotización → Elección → Aprobación → Compra → Recepción</p><nav class="compras-tabs" role="tablist"></nav><div class="compras-body" role="tabpanel"></div></section>';
  const nav=container.querySelector('.compras-tabs'),body=container.querySelector('.compras-body');
  let controller=null;
  async function choose(tab){

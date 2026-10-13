@@ -19,5 +19,5 @@ test('El diagnóstico no activa ni cambia políticas RBAC', () => {
   const lib = readFileSync('portal-permissions-lib.php','utf8');
   assert.match(endpoint,/ciarm_session_user\(\)/);
   assert.match(endpoint,/ciarm_rbac_effective\(\$user, \$preflight\)/);
-  assert.match(lib,/getenv\('CIARM_DM05_ENFORCE'\) === '1'/);
+  assert.match(lib,/getenv\('CIARM_DM05_ENFORCE'\) !== '0'/);
 });

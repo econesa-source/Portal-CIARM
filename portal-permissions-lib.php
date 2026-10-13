@@ -33,6 +33,28 @@ function ciarm_rbac_values(string $spreadsheetId, string $range, string $token):
     return $res['body']['values'];
 }
 
+/** Tres tablas de DM05 en una sola solicitud HTTP de Sheets. */
+function ciarm_rbac_catalog(string $token): array {
+    $ranges = ["'CAT_ROLES'!A4:H100", "'CAT_FUNCIONES'!A4:G250", "'MATRIZ_ACCESOS'!A5:O200"];
+    $query = implode('&', array_map(static fn($range) => 'ranges=' . rawurlencode($range), $ranges));
+    $url = 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode(CIARM_DM05_ID)
+        . '/values:batchGet?' . $query . '&valueRenderOption=FORMATTED_VALUE';
+    $response = ciarm_http_json($url, ['headers' => [
+        'Accept: application/json', 'Authorization: Bearer ' . $token
+    ]]);
+    if ($response['status'] !== 200 || count($response['body']['valueRanges'] ?? []) !== 3) {
+        throw new RuntimeException('rbac_catalog_unavailable');
+    }
+    $catalog = [];
+    foreach ($response['body']['valueRanges'] as $valueRange) {
+        if (!is_array($valueRange['values'] ?? null)) {
+            throw new RuntimeException('rbac_catalog_invalid');
+        }
+        $catalog[] = $valueRange['values'];
+    }
+    return $catalog;
+}
+
 function ciarm_rbac_service_account(): array {
     $raw = @file_get_contents(ciarm_private_path('service-account.json'));
     if ($raw === false) throw new RuntimeException('rbac_service_account_unavailable');
@@ -136,11 +158,7 @@ function ciarm_rbac_effective(array $sessionUser): array {
         if (is_array($decoded) && count($decoded) === 3) $catalog = $decoded;
     }
     if ($catalog === null) {
-        $catalog = [
-            ciarm_rbac_values(CIARM_DM05_ID, "'CAT_ROLES'!A4:H100", $token),
-            ciarm_rbac_values(CIARM_DM05_ID, "'CAT_FUNCIONES'!A4:G250", $token),
-            ciarm_rbac_values(CIARM_DM05_ID, "'MATRIZ_ACCESOS'!A5:O200", $token)
-        ];
+        $catalog = ciarm_rbac_catalog($token);
         $temporary = $catalogPath . '.' . bin2hex(random_bytes(6)) . '.tmp';
         if (@file_put_contents($temporary, json_encode($catalog, JSON_THROW_ON_ERROR), LOCK_EX) !== false) {
             @chmod($temporary, 0600);

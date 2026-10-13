@@ -68,7 +68,7 @@ function syncComprasNavigation(permissions){
   let link=nav.querySelector('[href="#compras"]');
   const codes=permissions?.enforced===true&&permissions?.verified===true?permissions.codes||[]:[];
   const eligible=comprasUiEnabled()&&codes.includes('COMPRAS_TARJETA')&&
-    ['COMPRAS_CREAR','COMPRAS_MIS','COMPRAS_AREA','COMPRAS_TODOS','COMPRAS_FIRMAR','COMPRAS_ELEGIR','COMPRAS_RECIBIR_ASIGNADA'].some(c=>codes.includes(c));
+    ['COMPRAS_CREAR','COMPRAS_MIS','COMPRAS_AREA','COMPRAS_TODOS','COMPRAS_FIRMAR','COMPRAS_PRORROGA_FIRMAR','COMPRAS_EXCEPCION_COT','COMPRAS_ELEGIR','COMPRAS_RECIBIR_ASIGNADA'].some(c=>codes.includes(c));
   if(!eligible){link?.remove();return;}
   if(link)return;
   link=document.createElement('a');link.href='#compras';link.className='nav-link';

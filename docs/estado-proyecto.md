@@ -50,3 +50,7 @@ El usuario aprobó el diseño de protección el 2026-10-12. El plan técnico est
 El usuario confirmó que TKT-2026-00023 se registró y cambió de estado correctamente al asignarse. Esto acredita creación y movimiento observados por el usuario; no acredita por sí solo adjuntos, bitácora, revocación ni concurrencia. Frontend 18.4.0 y PHP publicados; el usuario confirmó capabilities y el workflow acreditó rechazo de lectura histórica pública.
 
 Ajuste 18.4.1 preparado: distinguir fecha de solicitud y fecha de asignación, mostrar hora de solicitud y devolver fecha/hora de asignación ya existente en la fuente. No modifica datos ni reglas de asignación. Requiere actualizar el bundle Apps Script antes de publicar frontend.
+
+## Ajuste de experiencia 18.4.2
+
+El usuario confirmó que la entrega de fechas funciona. Se unifican fecha arriba/hora debajo en ambos listados, se compacta el dashboard y cada clic en estado o agrupación enfoca el título y desplaza suavemente al subconjunto (respeta movimiento reducido). Toda solicitud pendiente muestra Asignar en cualquier subconjunto; abre el mismo modal existente. La tarea corresponde a asignación, sin introducir ejecución/resolución/cierre. No requiere cambio Apps Script.

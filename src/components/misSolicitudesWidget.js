@@ -1,3 +1,4 @@
+import {ticketDate} from './ticketDate.js';
 /**
  * Componente Mis Solicitudes - Portal CIARM
  * Versión: 18.0.0
@@ -131,10 +132,9 @@ function renderTable(container, tickets, userEmail) {
           <tr>
             <td class="col-id"><strong>${escapeHtml(ticket.id || '—')}</strong></td>
             <td class="col-fecha">
-              ${escapeHtml(ticket.fecha || '—')}
-              ${ticket.hora ? `<small class="ticket-time">${escapeHtml(ticket.hora)}</small>` : ''}
+              ${ticketDate(ticket.fecha,ticket.hora)}
             </td>
-            <td class="col-fecha">${escapeHtml(ticket.fechaAsignacion || 'Sin registro')}</td>
+            <td class="col-fecha">${ticketDate(ticket.fechaAsignacion)}</td>
             <td class="col-tipo">${escapeHtml(ticket.tipo || '—')}</td>
             <td class="col-desc">${escapeHtml(ticket.descripcion || '—')}</td>
             <td class="col-estado">

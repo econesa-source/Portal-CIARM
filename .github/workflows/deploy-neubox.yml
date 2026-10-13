@@ -118,11 +118,11 @@ jobs:
           CODE="$(get "$BASE/?sha=$EXPECTED_SHA" /tmp/root.html || echo 000)"
           echo "root HTTP=$CODE"
           if [ "$CODE" = "200" ] && \
-             grep -E 'src/main(-v1782)?\.js\?v=18\.4\.1' /tmp/root.html >/dev/null && \
+             grep -E 'src/main(-v1782)?\.js\?v=18\.4\.2' /tmp/root.html >/dev/null && \
              grep -F 'assets/images/ciarm-logo-header-v2.png?v=18.1.0' /tmp/root.html >/dev/null; then
-            echo "OK: el sitio público usa v18.4.1 y referencia el logo CIARM."
+            echo "OK: el sitio público usa v18.4.2 y referencia el logo CIARM."
           else
-            echo "ERROR: el sitio público NO usa el entrypoint v18.4.1."
+            echo "ERROR: el sitio público NO usa el entrypoint v18.4.2."
             ERRORS=1
           fi
 

@@ -136,3 +136,24 @@ La Dirección General **autorizó** expresamente actualizar RBAC y preparar el p
 5. **Pruebas en Portal:** `tests/compras-contract.test.mjs` 12/12 en entorno JS aislado sobre source releído del repositorio. Los archivos PHP se releyeron de GitHub, pero PHP lint, pruebas HTTP, Apps Script y validaciones criptográficas end-to-end **NO se ejecutaron**.
 
 **Estado veraz:** RBAC de ambos módulos actualizado y preparado para `clasp push` del paso 12; puente PHP escrito en rama feature e inactivo; GAS bridge pendiente por bloqueo, por lo que el paso 10 NO puede certificarse completo ni abrir el Portal a Compras. El siguiente paso requiere restablecer un mecanismo de escritura autorizado para crear el nuevo original `PortalBridge.gs` dentro de Scripts HT06, o resolución del bloqueo del conector; no crear sustitutos ni activar configuraciones mientras tanto.
+
+
+## 10. Avance paso 11: pantallas Portal en rama feature
+
+Fecha: 13/10/2026. Se continuó con el paso 11 sin considerar resuelto el bloqueo del receptor GAS.
+
+**Guardado en rama de desarrollo** `feature/scgrc-compras-contrato-v1`, sin merge, sin despliegue NEUBOX:
+- `src/services/comprasClient.js`: cliente restringido al catálogo compras-v1, sesión misma procedencia, CSRF obtenida de consulta GET, rechazo de campos de actor/rol enviados por navegador; bandera `window.__CIARM_COMPRAS_UI_ENABLED__===true` obligatoria y **ausente por defecto**. No hay solicitudes de red cuando está deshabilitado.
+- `src/components/comprasWidget.js`: cinco vistas: Solicitar compra, Mis pedidos, Elegir cotización sin selección automática, Aprobar y firmar con confirmación explícita, y Declarar recepción parcial. Conserva claves idempotentes entre errores y exige motivo de elección. Reintegros admiten importe declarado por renglón y respaldo documental mediante vínculo HTTPS; no se implementó upload de PDF en este contrato.
+- `src/main.js`: ruta lógica `#compras` y enlace lateral sólo si la bandera está activa y DM05 entregó concesiones verificadas.
+- `src/services/portalPermissions.js` + `src/components/dashboardAccess.js`: `COMPRAS_TARJETA` y una acción propia comprobadas conjuntamente; las tarjetas de tickets existentes continúan intactas.
+- `compras-api.php`: rectificado control de origen; una consulta GET del mismo host puede no llevar encabezado `Origin`, mientras POST requiere origen esperado y CSRF. Se exige host coincidente y se rechaza `Sec-Fetch-Site` distinto de `same-origin`/ `none`. El endpoint permanece inactivo salvo configuración privada, no publicada.
+
+**QA aislada:**
+- Cliente / navegación / validador / estructura de vistas, con fuentes releídas de GitHub: 16/16 PASS. Cubre denegación con DM05 no verificado, no fetch cuando la bandera está apagada, denegación de comandos sin CSRF, prohibición de actor enviado por navegador, catálogo cerrado, cinco pestañas y decisiones explícitas. No se usó navegador productivo.
+- HT06 y HT10 RBAC: se corrigió en ambos originales `RBAC.gs` el control de tarjeta madre por el **mismo rol** (ADR-083), evitando mezclar derechos entre roles; se acotó la matriz evaluada al dominio `COMPRAS_*` para que funciones ajenas no bloqueen los módulos. Verificación con copia en memoria de los datos reales DM03/DM05: 9/9 PASS, incluye usuario Alejandro con rol director, prohibición de `COMPRAS_OC` interna y simulación de no herencia entre roles. Mismos IDs de fuente en Drive, releídos tras guardar.
+- Datos DM03/DM05 existentes no modificados durante estas pruebas.
+
+**Bloqueo sin resolver:** el conector de Drive rechazó la creación del original nuevo `PortalBridge.gs` en HT06/Scripts. No se intentó eludir el control alterando otro archivo para alojarlo. Aun con receptor, antes de habilitarse hay que diseñar y probar la propagación de identidad firmada al contexto HT06 por operación, verificación GAS de HMAC/nonce, rechazo de replays, y CSRF/origen en el entorno real; el borrador previo de receptor que utiliza una variable global no debe darse por apto para despliegue. En consecuencia **paso 10 no cerrado, paso 11 UI preparada sólo en feature**, paso 12 sin push/publicación y paso 13 sin certificación de circuito.
+
+**Pendiente para integración:** restablecer posibilidad autorizada de crear un nuevo archivo original en carpeta Scripts HT06 y completar de forma segura el receptor GAS; después realizar pruebas PHP reales/Node test nativo y homologar host de Portal/NEUBOX con configuración de origen, antes de levantar la bandera. No publicar HTML/JS sin receptor funcional.

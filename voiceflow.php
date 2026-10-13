@@ -8,6 +8,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/auth-lib.php';
+require_once __DIR__ . '/portal-permissions-lib.php';
 
 const CIARM_VOICEFLOW_BASE = 'https://general-runtime.voiceflow.com';
 const CIARM_VOICEFLOW_PROJECT_ID = '6a81e72529695cfeb738ad6e';
@@ -20,6 +21,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
 $user = ciarm_session_user();
 if (!$user) {
     ciarm_json_response(401, ['error' => 'La sesión institucional no es válida.']);
+}
+
+if (ciarm_rbac_enforced() && !ciarm_rbac_has_function($user, 'ASISTENTE_CONSULTAR')) {
+    ciarm_json_response(403, ['error' => 'Esta función no está habilitada para tu perfil.']);
 }
 
 $tokenRaw = @file_get_contents(ciarm_private_path('voiceflow-access-token.txt'));

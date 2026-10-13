@@ -97,12 +97,12 @@ function ciarm_rbac_permissions(array $roles, array $roleRows, array $functionRo
         foreach ($rowsByCode as $code => $row) {
             $meta = $functions[$code];
             if ($meta['type'] === 'INTERNA') continue;
-            $yes = strtoupper(trim((string)($row[$column] ?? ''))) === 'TRUE';
+            $yes = (($row[$column] ?? false) === true || strtoupper(trim((string)($row[$column] ?? ''))) === 'TRUE');
             if (!$yes) continue;
             if ($meta['type'] !== 'TARJETA') {
                 $parent = $meta['parent'];
                 if ($parent === '' || !isset($functions[$parent]) ||
-                    strtoupper(trim((string)($rowsByCode[$parent][$column] ?? ''))) !== 'TRUE') continue;
+                    (($rowsByCode[$parent][$column] ?? false) !== true && strtoupper(trim((string)($rowsByCode[$parent][$column] ?? ''))) !== 'TRUE')) continue;
             }
             $allowed[$code] = true;
         }

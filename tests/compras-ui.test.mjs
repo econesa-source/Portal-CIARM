@@ -144,3 +144,54 @@ test('Aprobación no selecciona decisiones y confirma cada firma',async()=>{
   assert.equal(write.body.payload.idSolicitud,'SOL-000021');
  }finally{env.cleanup();}
 });
+
+
+test('Dirección Académica elige partida donante, artículo e importe sin reasignación automática',async()=>{
+ const sol={
+  'ID Solicitud':'SOL-000111','Centro de costos':'CC-03','Ruta aprobación':'DIRECCION_ACADEMICA',
+  'Monto cotizado total':14000,_esReintegro:false,
+  _renglones:[{'ID Renglón':'REN-000111','Descripción / especificación':'Material didáctico',
+   'Fuente presupuestaria':'OPERACIÓN','Partida presupuestaria':'2.2.1.2'}],
+  _donantes:[{fuente:'OPERACIÓN',partida:'2.2.1.1'},{fuente:'OPERACIÓN',partida:'2.2.1.2'},
+             {fuente:'CAPEX',partida:'100.05.01'}]
+ };
+ const env=setup({pendientesAprobacion:[sol],decidirSolicitud:{ok:true}});
+ try{
+  await render(env.root,session([card,'COMPRAS_FIRMAR','COMPRAS_REASIGNAR_ACAD']));
+  const form=env.root.querySelector('.compras-item form');
+  assert.ok(form);
+  assert.equal(form.querySelector('option[value="Reasignar y aprobar"]')!==null,true);
+  form.elements.decision.value='Reasignar y aprobar';
+  form.elements.decision.dispatchEvent(new env.dom.window.Event('change'));
+  assert.equal(form.querySelector('.compras-rea').hidden,false);
+  form.elements.renglon.value='REN-000111';
+  form.elements.renglon.dispatchEvent(new env.dom.window.Event('change'));
+  const opciones=[...form.elements.partidaOrigen.options].map(x=>x.value);
+  assert.ok(opciones.includes('2.2.1.1'));
+  assert.ok(!opciones.includes('2.2.1.2'));
+  assert.ok(!opciones.includes('100.05.01'));
+  form.elements.partidaOrigen.value='2.2.1.1';
+  form.elements.importe.value='1500';
+  form.elements.motivo.value='Cobertura con partida académica disponible';
+  form.dispatchEvent(new env.dom.window.Event('submit',{bubbles:true,cancelable:true}));
+  await settle();
+  const call=env.calls.find(c=>c.action==='decidirSolicitud');
+  assert.ok(call);
+  assert.equal(call.body.payload.decision,'Reasignar y aprobar');
+  assert.deepEqual(
+   Object.fromEntries(Object.entries(call.body.payload.reasignacion).filter(([k])=>k!=='idempotencyKey')),
+   {idRenglon:'REN-000111',partidaOrigen:'2.2.1.1',importe:1500}
+  );
+  assert.match(call.body.payload.reasignacion.idempotencyKey,/^PORTAL_[a-f0-9]{32}$/);
+ }finally{env.cleanup();}
+});
+test('Sin COMPRAS_REASIGNAR_ACAD no aparece la opción de reasignar',async()=>{
+ const sol={'ID Solicitud':'SOL-000111','Centro de costos':'CC-03','Ruta aprobación':'DIRECCION_ACADEMICA',
+  'Monto cotizado total':14000,_esReintegro:false,
+  _renglones:[{'ID Renglón':'REN-000111'}],_donantes:[{fuente:'OPERACIÓN',partida:'2.2.1.1'}]};
+ const env=setup({pendientesAprobacion:[sol]});
+ try{
+  await render(env.root,session([card,'COMPRAS_FIRMAR']));
+  assert.equal(env.root.querySelector('option[value="Reasignar y aprobar"]'),null);
+ }finally{env.cleanup();}
+});

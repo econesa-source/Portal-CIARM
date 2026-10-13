@@ -14,13 +14,22 @@ function compras_result(int $status,array $result): never {
 }
 $expected=(string)(getenv('CIARM_COMPRAS_ORIGIN')?:'');
 $origin=(string)($_SERVER['HTTP_ORIGIN']??'');
+$expectedHost=(string)(parse_url($expected,PHP_URL_HOST)?:'');
+$currentHost=strtolower((string)($_SERVER['HTTP_HOST']??''));
+$currentHost=explode(':',$currentHost,2)[0];
+$fetchSite=(string)($_SERVER['HTTP_SEC_FETCH_SITE']??'');
+$method=(string)($_SERVER['REQUEST_METHOD']??'');
+// El navegador no siempre envía Origin en solicitudes GET del mismo origen.
+// La sesión y permisos se verifican también en GET; para POST exigimos Origin + CSRF.
 if($expected===''||!preg_match('~^https://[a-z0-9.-]+\.ciarm\.edu\.mx$~i',$expected)||
-   !hash_equals($expected,$origin)){
+   !hash_equals(strtolower($expectedHost),$currentHost)||
+   ($origin!==''&&!hash_equals($expected,$origin))||
+   ($method==='POST'&&!hash_equals($expected,$origin))||
+   ($fetchSite!==''&&!in_array($fetchSite,['same-origin','none'],true))){
   compras_result(403,['ok'=>false,'version'=>'compras-v1','code'=>'FORBIDDEN']);
 }
 header('Access-Control-Allow-Origin: '.$expected);
 header('Access-Control-Allow-Credentials: true');
-$method=(string)($_SERVER['REQUEST_METHOD']??'');
 if($method==='OPTIONS'){
   header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
   header('Access-Control-Allow-Headers: Content-Type');

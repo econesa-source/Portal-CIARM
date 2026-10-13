@@ -1582,3 +1582,35 @@ body {
 #service-policy textarea,#service-form textarea {width:100%;box-sizing:border-box;}
 #service-policy .ticket-table input {width:80px;}
 #service-dialog #service-detail {padding:16px;}
+
+/* Executive management dashboard: existing institutional surfaces and dialogs. */
+.management-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.management-kpi { background:white; color:#26487f; border:1px solid #e2e7ee; border-top:3px solid #2eb1a0; border-radius:9px; padding:18px; text-align:left; }
+.management-kpi strong { display:block; font-size:2rem; margin:8px 0; }
+.management-kpi small, .management-note { color:#64748b; }
+.management-alert { border-top-color:#b64b40; }
+.management-note { font-size:.8rem; line-height:1.6; }
+.management-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:16px 0; }
+.management-panel { background:white; border:1px solid #e2e7ee; border-radius:10px; padding:20px; min-width:0; }
+.management-panel h2 { color:#26487f; font-size:1.1rem; margin:0 0 16px; }
+.management-sla { display:grid; grid-template-columns:1.2fr 1fr auto; align-items:center; gap:12px; width:100%; background:transparent; color:#26487f; border:0; padding:10px 0; text-align:left; }
+.management-sla small { grid-column:1/-1; color:#64748b; }
+.management-track { height:9px; background:#eef1f4; border-radius:8px; overflow:hidden; }
+.management-track span { display:block; height:100%; background:#2eb1a0; }
+.management-quality { display:flex; align-items:center; gap:20px; background:transparent; border:0; color:#26487f; text-align:left; margin-bottom:20px; }
+.management-quality strong { font-size:2rem; }
+.management-quality small { display:block; color:#64748b; margin-top:8px; }
+.management-chart { display:flex; align-items:end; gap:16px; }
+.management-chart>div { flex:1; text-align:center; min-width:0; }
+.management-chart small { display:block; }
+.management-bars { height:110px; display:flex; justify-content:center; align-items:end; gap:5px; margin-bottom:8px; }
+.management-bars span { width:24px; background:#26487f; border-radius:3px 3px 0 0; }
+.management-bars span+span { background:#2eb1a0; }
+.management-legend { display:flex; gap:15px; flex-wrap:wrap; font-size:.8rem; }
+.management-legend span:first-child { color:#26487f; }
+.management-legend span+span { color:#218b7e; }
+.management-heading,.management-case { display:flex; justify-content:space-between; gap:16px; align-items:center; }
+.management-case { padding:12px 0; border-top:1px solid #edf0f4; }
+.management-case p { font-size:.8rem; color:#64748b; margin:6px 0; }
+.management-modal { width:min(920px,calc(100% - 32px)); }
+@media(max-width:760px) { .management-grid{grid-template-columns:1fr;} .management-kpis{grid-template-columns:repeat(2,minmax(0,1fr));} .management-panel{padding:16px;} .management-case,.management-heading{flex-wrap:wrap;} }

@@ -26,7 +26,7 @@ export async function render(container) {
  const groupValue=(t,key)=>String(t[key]||'').trim()||({responsable:'Sin responsable',prioridad:'Sin prioridad',tipo:'Sin tipo',area:'Sin área'})[key];
  const columns='<tr><th scope="col">Solicitud</th><th scope="col">Fecha de solicitud</th><th scope="col">Fecha de asignación</th><th scope="col">Solicitante</th><th scope="col">Estado</th><th scope="col">Urgencia solicitada</th><th scope="col">Prioridad asignada</th><th scope="col">Responsable</th><th scope="col">Fecha de compromiso</th><th scope="col">Acción</th></tr>';
  container.innerHTML=`<section class="ticket-admin">
-  <nav class="ticket-service-nav"><a href="#mis-tareas">Mis tareas</a><a href="#seguimiento-servicio">Cumplimiento del servicio</a><a href="#config-servicio">Configuración del servicio</a></nav><header class="ticket-executive-heading"><div><h1>Administrar solicitudes internas</h1><p>Estado general y solicitudes que requieren atención.</p></div></header><p id="ticket-notice" class="ticket-notice" role="status" aria-live="polite"></p>
+  <nav class="ticket-service-nav"><a href="#mis-tareas">Mis tareas</a><a href="#vision-gerencial">Visión gerencial</a><a href="#seguimiento-servicio">Cumplimiento del servicio</a><a href="#config-servicio">Configuración del servicio</a></nav><header class="ticket-executive-heading"><div><h1>Administrar solicitudes internas</h1><p>Estado general y solicitudes que requieren atención.</p></div></header><p id="ticket-notice" class="ticket-notice" role="status" aria-live="polite"></p>
   <section id="ticket-dashboard" class="ticket-panel" aria-labelledby="ticket-dashboard-title">
    <div class="ticket-panel-heading"><h2 id="ticket-dashboard-title">Estado de las solicitudes</h2><span id="ticket-total" class="ticket-counter"></span></div>
    <div id="ticket-states" class="ticket-state-grid"></div>
@@ -80,6 +80,9 @@ export async function render(container) {
  }
  function resetFilters(){Object.keys(filters).forEach(key=>delete filters[key]);container.querySelector('#ticket-query').value='';container.querySelectorAll('[data-filter]').forEach(select=>select.value='');}
  paint();
+ let requestedAssignment;
+ try{requestedAssignment=window.sessionStorage.getItem('ciarm.management.assign');window.sessionStorage.removeItem('ciarm.management.assign');}catch{}
+ if(requestedAssignment&&tickets.some(t=>t.id===requestedAssignment))openTicket(requestedAssignment);
  container.querySelector('#ticket-group').addEventListener('change',paint);
  container.querySelector('#ticket-query').addEventListener('input',e=>{filters.query=e.target.value;paint();});
  container.querySelectorAll('[data-filter]').forEach(select=>select.addEventListener('change',()=>{filters[select.dataset.filter]=select.value;paint();}));

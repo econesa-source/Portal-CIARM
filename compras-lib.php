@@ -100,7 +100,7 @@ function ciarm_compras_csrf_token(): string {
 /** No devolver columnas técnicas internas en la lista de seguimiento. */
 function ciarm_compras_public_data(string $action,mixed $data): mixed {
     if($action!=='misPedidos'||!is_array($data))return $data;
-    $fields=['ID Solicitud','Fecha creación','Centro de costos','Estado','Monto cotizado total','ID OC','Estado compra visible','Tipo de solicitud','Área / contexto de uso','Fecha última acción'];
+    $fields=['ID Solicitud','Fecha creación','Correo solicitante','Centro de costos','Estado','Monto cotizado total','ID OC','Estado compra visible','Tipo de solicitud','Área / contexto de uso','Fecha última acción'];
     return array_map(static function($r)use($fields){
       if(!is_array($r))return [];
       return array_intersect_key($r,array_flip($fields));

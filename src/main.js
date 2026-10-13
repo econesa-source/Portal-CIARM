@@ -5,7 +5,7 @@
 
 import { getAuthenticatedUser, logout } from './services/authService.js';
 import { renderLoginWidget } from './components/loginWidget.js';
-import { getPortalPermissions } from './services/portalPermissionsClient.js';
+import { getPortalPermissions, clearPortalPermissionsCache } from './services/portalPermissionsClient.js';
 import { applyDashboardAccess, allowedRoute } from './components/dashboardAccess.js';
 
 const APP_VERSION = '18.6.0';
@@ -96,6 +96,7 @@ async function router() {
   if (navigationId !== latestNavigation) return;
 
   if (!user) {
+    clearPortalPermissionsCache();
     if (sidebar) sidebar.style.display = 'none';
     if (sidebarToggle) sidebarToggle.style.display = 'none';
     setSidebarOpen(false);
@@ -105,6 +106,7 @@ async function router() {
 
     mainContainer.innerHTML = '';
     renderLoginWidget(mainContainer, async () => {
+      clearPortalPermissionsCache();
       window.location.hash = '#inicio';
       await router();
     });

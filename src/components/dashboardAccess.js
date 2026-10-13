@@ -41,9 +41,12 @@ export function applyDashboardAccess(container, response) {
 }
 
 export function allowedRoute(hash, response) {
+  // Las compras requieren SIEMPRE una concesión verificada. No heredan el modo transitorio.
+  if (hash === '#compras' && (response?.enforced !== true || response?.verified !== true)) return false;
   if (response?.enforced !== true) return true;
   const permissions = resolvePortalPermissions({ dm05: response });
   if (!permissions) return false;
+  if (hash === '#compras') return canSeeCard(permissions, 'compras') && ['crear','mis','firmar','elegir','recibir'].some(action=>canSeeAction(permissions,'compras',action));
   if (hash === '#solicitudes') return canSeeAction(permissions, 'solicitudes', 'crear');
   if (hash === '#mis-solicitudes') return canSeeAction(permissions, 'solicitudes', 'mis');
   if (hash === '#admin-solicitudes' || hash === '#vision-gerencial') {

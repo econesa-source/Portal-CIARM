@@ -385,6 +385,7 @@ export function render(container, userSession) {
   const header = container.querySelector('.ticket-card-header');
   getAdminContext().then(context => {
     if (context.canAdmin !== true || !header?.isConnected || !container.contains(header)) return;
+    if (userSession?.dm05?.enforced === true && !userSession.dm05.codes?.includes('INT_GESTION')) return;
     const link = document.createElement('a');
     link.href = '#admin-solicitudes';
     link.className = 'exact-btn dark';

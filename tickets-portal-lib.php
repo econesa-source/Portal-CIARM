@@ -35,10 +35,10 @@ function ciarm_portal_context(array $user): array {
     $cap=ciarm_portal_bridge($user,'capabilities',[]);
     if(($cap['ok']??false)!==true||($cap['data']['protocol']??'')!=='tickets-portal-v1')throw new RuntimeException('CONFIGURATION');
     if(empty($_SESSION['ciarm_ticket_csrf']))$_SESSION['ciarm_ticket_csrf']=bin2hex(random_bytes(32));
-    return ['canCreate'=>true,'csrfToken'=>$_SESSION['ciarm_ticket_csrf'],'canUpload'=>ciarm_portal_upload_supported()];
+    return ['canCreate'=>true,'csrfToken'=>$_SESSION['ciarm_ticket_csrf'],'canUpload'=>ciarm_portal_upload_supported(),'serviceAvailable'=>($cap['data']['serviceProtocol']??'')==='tickets-service-v1'];
 }
 function ciarm_portal_payload(string $action,array $input): array {
-    $keys=match($action){'mine','capabilities'=>[],'beginCreate'=>['operationId','tipo','descripcion','prioridadSolicitada','fechaProgramada','files'],'creationStatus','finalizeCreate'=>['operationId'],default=>throw new RuntimeException('VALIDATION')};
+    $keys=match($action){'mine','capabilities','serviceContext','serviceSettings'=>[],'serviceDetail'=>['id'],'serviceList'=>['kind'],'saveServicePolicy'=>['operationId','expectedVersion','policy'],'serviceTransition'=>['operationId','ticketId','expectedVersion','event','comment','priority','dependency','followAt','evidence','commitment'],'beginCreate'=>['operationId','tipo','descripcion','prioridadSolicitada','fechaProgramada','files'],'creationStatus','finalizeCreate'=>['operationId'],default=>throw new RuntimeException('VALIDATION')};
     return array_intersect_key($input,array_flip($keys));
 }
 function ciarm_portal_file_payload(array $file,array $input): array {

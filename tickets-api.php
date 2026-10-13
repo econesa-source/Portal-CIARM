@@ -13,7 +13,7 @@ try {
   $action=$_GET['action']??'';if(!is_string($action))throw new RuntimeException('VALIDATION');
   if($action==='context')ciarm_json_response(200,['ok'=>true,'data'=>ciarm_ticket_context($user)]);
   if($action==='selfContext')ciarm_json_response(200,['ok'=>true,'data'=>ciarm_portal_context($user)]);
-  if(!in_array($action,['mine','creationStatus','list','catalogs','detail'],true))throw new RuntimeException('VALIDATION');
+  if(!in_array($action,['mine','creationStatus','list','catalogs','detail','serviceContext','serviceSettings','serviceList','serviceDetail'],true))throw new RuntimeException('VALIDATION');
   $input=$_GET;
  } else {
   if(!ciarm_ticket_origin_valid($_SERVER['HTTP_ORIGIN']??'',$_SERVER['HTTP_HOST']??''))throw new RuntimeException('ORIGIN');
@@ -25,13 +25,14 @@ try {
    if((int)($_SERVER['CONTENT_LENGTH']??0)>16*1024*1024)throw new RuntimeException('PAYLOAD_SIZE');$input=$_POST;
   } else throw new RuntimeException('CONTENT_TYPE');
   $action=$input['action']??'';
-  if(!is_string($action)||!in_array($action,['assign','beginCreate','uploadAttachment','finalizeCreate'],true))throw new RuntimeException('VALIDATION');
+  if(!is_string($action)||!in_array($action,['assign','beginCreate','uploadAttachment','finalizeCreate','saveServicePolicy','serviceTransition'],true))throw new RuntimeException('VALIDATION');
   if(($action==='uploadAttachment')!==($contentType==='multipart/form-data'))throw new RuntimeException('CONTENT_TYPE');
   if(!ciarm_ticket_csrf_valid((string)($_SESSION['ciarm_ticket_csrf']??''),is_string($input['csrfToken']??null)?$input['csrfToken']:''))throw new RuntimeException('CSRF');
  }
- $selfService=in_array($action,['mine','creationStatus','beginCreate','uploadAttachment','finalizeCreate'],true);
+ $selfService=in_array($action,['mine','creationStatus','beginCreate','uploadAttachment','finalizeCreate','serviceContext','serviceSettings','serviceList','serviceDetail','saveServicePolicy','serviceTransition'],true);
  if($selfService){
   ciarm_portal_current_collaborator($user);
+  if(in_array($action,['serviceSettings','saveServicePolicy'],true)||($action==='serviceList'&&($input['kind']??'')==='all')){if(!ciarm_ticket_current_permission($user))throw new RuntimeException('FORBIDDEN');}
   $payload=$action==='uploadAttachment'?ciarm_portal_upload($_FILES,$input):ciarm_portal_payload($action,$input);
  } else {
   if(!ciarm_ticket_current_permission($user))throw new RuntimeException('FORBIDDEN');

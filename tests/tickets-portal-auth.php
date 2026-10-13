@@ -37,3 +37,6 @@ try{
  fails(fn()=>ciarm_portal_file_payload([...$file,'size'=>filesize($tmp)],$input),'PAYLOAD_SIZE');
 }finally{unlink($tmp);}
 echo "PHP collaborator, identity, upload, MIME and limits checks passed\n";
+// Workflow payloads never accept identity/permission fields from the client.
+check(ciarm_portal_payload('serviceTransition',['ticketId'=>'TKT-1','event'=>'START','actor'=>'fake','correo'=>'fake','canAdmin'=>true])===['ticketId'=>'TKT-1','event'=>'START'],'Workflow cannot impersonate actor');
+check(ciarm_portal_payload('serviceSettings',['actor'=>'fake'])===[],'Settings cannot select actor');

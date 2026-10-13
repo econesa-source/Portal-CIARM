@@ -70,19 +70,45 @@ function renderCrear(p,ctx){
   finally{button.disabled=false;}
  });
 }
-function renderMis(p,data){
+function renderMis(p,data,session,codes){
  const rows=Array.isArray(data)?data:[];
- p.innerHTML='<h3>Mis pedidos</h3><p>Seguimiento originado en HT06 y sincronizado desde HT10, sin duplicar registros.</p>'+
- '<label>Buscar por SOL, OC, centro o estado<input type="search" id="compras-buscar"></label>'+
- '<div class="compras-scroll"><table><thead><tr><th>Solicitud</th><th>Centro</th><th>Estado</th><th>OC</th><th>Compra / recepción</th></tr></thead><tbody></tbody></table></div>';
+ const email=value(session?.correo).trim().toLowerCase();
+ const permitted=codes.has('COMPRAS_CANCELAR');
+ p.innerHTML='<h3>Mis pedidos</h3><p>Seguimiento de HT06, actualizado desde Compras. La cancelación afecta únicamente el remanente de una OC, no lo ya comprado o recibido.</p>'+
+ '<label>Buscar por solicitud, OC, centro o estado<input type="search" id="compras-buscar"></label>'+
+ '<div class="compras-scroll"><table><thead><tr><th>Solicitud</th><th>Centro</th><th>Estado</th><th>OC</th><th>Compra / recepción</th><th>Acción</th></tr></thead><tbody></tbody></table></div>';
  const body=p.querySelector('tbody'),find=p.querySelector('#compras-buscar');
- function paint(){
-  const v=find.value.toLowerCase();
-  const filtered=rows.filter(r=>['ID Solicitud','ID OC','Centro de costos','Estado','Estado compra visible'].some(k=>value(r[k]).toLowerCase().includes(v)));
-  body.innerHTML=filtered.map(r=>'<tr><td>'+escapeHtml(r['ID Solicitud'])+'</td><td>'+escapeHtml(r['Centro de costos'])+
-   '</td><td>'+escapeHtml(r.Estado)+'</td><td>'+escapeHtml(r['ID OC'])+'</td><td>'+escapeHtml(r['Estado compra visible'])+'</td></tr>').join('')||
-   '<tr><td colspan="5">No hay pedidos para mostrar.</td></tr>';
+ function isOwn(r){return value(r['Correo solicitante']).trim().toLowerCase()===email;}
+ function cancelable(r){
+  return permitted&&isOwn(r)&&/^OC-\d+$/.test(value(r['ID OC']))&&
+    !/cancelaci[oó]n|cancelad/i.test(value(r['Estado compra visible']));
  }
+ function paint(){
+  const term=find.value.trim().toLowerCase();
+  const filtered=rows.filter(r=>['ID Solicitud','ID OC','Centro de costos','Estado','Estado compra visible'].some(k=>value(r[k]).toLowerCase().includes(term)));
+  body.innerHTML=filtered.map(r=>'<tr><td>'+escapeHtml(r['ID Solicitud'])+'</td><td>'+escapeHtml(r['Centro de costos'])+
+   '</td><td>'+escapeHtml(r.Estado)+'</td><td>'+escapeHtml(r['ID OC'])+'</td><td>'+escapeHtml(r['Estado compra visible'])+
+   '</td><td>'+(cancelable(r)?
+    '<details><summary>Cancelar remanente</summary><form data-cancel="'+escapeHtml(r['ID Solicitud'])+'">'+
+    '<label>Motivo<textarea name="motivo" minlength="8" required maxlength="800"></textarea></label>'+
+    '<button type="submit">Solicitar cancelación</button></form></details>':'—')+'</td></tr>').join('')||
+   '<tr><td colspan="6">No hay pedidos para mostrar.</td></tr>';
+ }
+ body.addEventListener('submit',async e=>{
+  const form=e.target.closest('form[data-cancel]');
+  if(!form)return;
+  e.preventDefault();
+  const id=form.dataset.cancel,motivo=form.elements.motivo.value.trim();
+  if(motivo.length<8){note(p,'El motivo de cancelación debe tener al menos 8 caracteres.',true);return;}
+  if(!window.confirm('¿Solicitar la cancelación del remanente pendiente de '+id+'? No anula entregas previas.'))return;
+  const button=form.querySelector('button');button.disabled=true;
+  try{
+   await requestCompras('cancelarRemanente',{idSolicitud:id,motivo});
+   const row=rows.find(r=>r['ID Solicitud']===id);
+   if(row)row['Estado compra visible']='Cancelación de remanente solicitada';
+   paint();note(p,'Cancelación solicitada; Compras deberá completar su registro.');
+  }catch(error){note(p,errText(error),true);button.disabled=false;}
+ });
  find.addEventListener('input',paint);paint();
 }
 function renderAlternativas(p,data){
@@ -110,10 +136,11 @@ function renderAlternativas(p,data){
   });
  });
 }
-function renderAprobaciones(p,data){
- p.innerHTML='<h3>Aprobar y firmar OC</h3><p>El servidor vuelve a comprobar al firmante, su centro, la ruta y el presupuesto antes de autorizar.</p>';
+function renderAprobaciones(p,data,canSign){
+ p.innerHTML='<h3>Aprobar y firmar</h3><p>La autorización ordinaria exige firma del responsable de cada centro, ruta vigente y disponibilidad presupuestaria.</p>';
  const rows=Array.isArray(data)?data:[];
- if(!rows.length){p.insertAdjacentHTML('beforeend','<p>No hay solicitudes pendientes de tu firma.</p>');return;}
+ if(!canSign)return;
+ if(!rows.length){p.insertAdjacentHTML('beforeend','<p>No hay solicitudes de compra pendientes de tu firma.</p>');return;}
  rows.forEach(s=>{
   const card=document.createElement('div');card.className='compras-item';
   card.innerHTML='<b>'+escapeHtml(s['ID Solicitud'])+'</b><p>Centro: '+escapeHtml(s['Centro de costos'])+
@@ -134,6 +161,56 @@ function renderAprobaciones(p,data){
    }catch(error){note(card,errText(error),true);button.disabled=false;}
   });
  });
+}
+function renderProrrogas(p,data){
+ const rows=Array.isArray(data)?data:[];
+ const section=document.createElement('section');section.className='compras-extras';
+ section.innerHTML='<h3>Prórrogas de órdenes de compra</h3><p>Solamente pueden firmarlas los firmantes originales. Una firma no ejecuta una compra.</p>';
+ if(!rows.length)section.insertAdjacentHTML('beforeend','<p>No hay prórrogas pendientes para tu firma.</p>');
+ rows.forEach(r=>{
+  const card=document.createElement('div');card.className='compras-item';
+  card.innerHTML='<b>'+escapeHtml(r.idOC)+'</b> · '+escapeHtml(r.idSolicitud)+
+   '<p>Nueva fecha: '+escapeHtml(r.nuevaFecha)+' · Motivo: '+escapeHtml(r.motivo)+'</p>'+
+   '<button type="button">Firmar prórroga</button>';
+  section.append(card);
+  const button=card.querySelector('button');
+  button.addEventListener('click',async()=>{
+   if(!window.confirm('¿Confirmás tu firma de la prórroga para '+value(r.idOC)+'?'))return;
+   button.disabled=true;
+   try{
+    await requestCompras('firmarProrroga',{idOC:r.idOC,clave:r.clave});
+    card.remove();note(section,'Firma registrada; la aplicación corresponde a HT10.');
+   }catch(error){note(card,errText(error),true);button.disabled=false;}
+  });
+ });
+ p.append(section);
+}
+function renderExcepciones(p,data){
+ const rows=Array.isArray(data)?data:[];
+ const section=document.createElement('section');section.className='compras-extras';
+ section.innerHTML='<h3>Excepciones de cotización (Dirección General)</h3><p>Autorización extraordinaria con fundamento obligatorio. No equivale a firmar una OC.</p>';
+ if(!rows.length)section.insertAdjacentHTML('beforeend','<p>No hay excepciones pendientes de Dirección General.</p>');
+ rows.forEach(r=>{
+  const card=document.createElement('div');card.className='compras-item';
+  card.innerHTML='<b>'+escapeHtml(r.idSolicitud)+'</b> · '+escapeHtml(r.centroCostos)+
+   '<p>'+escapeHtml(r.descripcion)+'</p><p>Antecedente: '+escapeHtml(r.motivo)+'</p>'+
+   '<form><label>Fundamento de autorización<textarea name="motivo" minlength="15" maxlength="1000" required></textarea></label>'+
+   '<button type="submit">Autorizar excepción</button></form>';
+  section.append(card);
+  const form=card.querySelector('form');
+  form.addEventListener('submit',async e=>{
+   e.preventDefault();
+   const motivo=form.elements.motivo.value.trim();
+   if(motivo.length<15){note(card,'El fundamento debe tener al menos 15 caracteres.',true);return;}
+   if(!window.confirm('¿Autorizás excepcionalmente esta cotización para '+value(r.idSolicitud)+'?'))return;
+   const button=form.querySelector('button');button.disabled=true;
+   try{
+    await requestCompras('autorizarExcepcionCotizacion',{idSolicitud:r.idSolicitud,motivo});
+    card.remove();note(section,'Excepción registrada; queda pendiente el circuito ordinario.');
+   }catch(error){note(card,errText(error),true);button.disabled=false;}
+  });
+ });
+ p.append(section);
 }
 function renderRecepciones(p,data){
  p.innerHTML='<h3>Declarar recepción</h3><p>Registrá las cantidades efectivamente recibidas y conformes; HT10 conciliará la recepción.</p>';
@@ -168,7 +245,7 @@ const CSS='<style>.compras-shell{max-width:1050px;margin:0 auto;padding:18px;col
  '.compras-body label{display:block;color:#26487f;font-weight:600;font-size:13px;margin:10px 0}.compras-body input:not([type=radio]),.compras-body select,.compras-body textarea{display:block;box-sizing:border-box;width:100%;padding:9px;border:1px solid #c1cada;border-radius:6px}' +
  '.compras-body button{background:#26487f;color:white;padding:10px;border:0;border-radius:6px;cursor:pointer}.compras-body button:disabled{opacity:.45}' +
  '.compras-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.compras-item,.compras-line{border:1px solid #e0e7ef;border-radius:6px;margin:13px 0;padding:14px}' +
- '.compras-scroll{overflow:auto}.compras-body table{width:100%;border-collapse:collapse}.compras-body th,.compras-body td{text-align:left;padding:10px;border-bottom:1px solid #ddd}.compras-body th{background:#26487f;color:white}</style>';
+ '.compras-extras{border-top:1px solid #dce3eb;margin-top:26px;padding-top:16px}.compras-body details summary{color:#26487f;cursor:pointer;font-weight:600}.compras-body details textarea{min-width:180px}.compras-scroll{overflow:auto}.compras-body table{width:100%;border-collapse:collapse}.compras-body th,.compras-body td{text-align:left;padding:10px;border-bottom:1px solid #ddd}.compras-body th{background:#26487f;color:white}</style>';
 
 export async function render(container,session){
  if(!container)return;
@@ -178,6 +255,7 @@ export async function render(container,session){
  }
  const tabs=TABS.filter(t=>t.id==='mis'
   ?['COMPRAS_MIS','COMPRAS_AREA','COMPRAS_TODOS'].some(k=>roles.has(k))
+  :t.id==='aprobar'?['COMPRAS_FIRMAR','COMPRAS_PRORROGA_FIRMAR','COMPRAS_EXCEPCION_COT'].some(k=>roles.has(k))
   :roles.has(t.permission));
  container.innerHTML=CSS+'<section class="compras-shell"><a href="#inicio">← Volver al inicio</a><h2>Compras y solicitudes</h2>'+
   '<p>Solicitar → Cotizar → Elegir → Aprobar → Comprar → Recibir</p><nav class="compras-tabs" role="tablist"></nav><div class="compras-body" role="tabpanel"></div></section>';
@@ -188,12 +266,28 @@ export async function render(container,session){
   nav.querySelectorAll('button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===tab.id)));
   body.textContent='Consultando…';
   try{
-   const data=await requestCompras(tab.query,{},controller.signal);
+   let data;
+   let extras=[];
+   if(tab.id==='aprobar'){
+    const jobs=[];
+    if(roles.has('COMPRAS_FIRMAR'))jobs.push(['ordinarias',requestCompras(tab.query,{},controller.signal)]);
+    if(roles.has('COMPRAS_PRORROGA_FIRMAR'))jobs.push(['prorrogas',requestCompras('prorrogasPendientes',{},controller.signal)]);
+    if(roles.has('COMPRAS_EXCEPCION_COT'))jobs.push(['excepciones',requestCompras('excepcionesPendientes',{},controller.signal)]);
+    // Si falla una consulta autorizada, no mostrar una lista parcial como si fuera completa.
+    extras=await Promise.all(jobs.map(async ([name,job])=>({name,data:await job})));
+    data=extras.find(x=>x.name==='ordinarias')?.data||[];
+   }else data=await requestCompras(tab.query,{},controller.signal);
    if(controller.signal.aborted)return;
    if(tab.id==='crear')renderCrear(body,data);
-   if(tab.id==='mis')renderMis(body,data);
+   if(tab.id==='mis')renderMis(body,data,session,roles);
    if(tab.id==='elegir')renderAlternativas(body,data);
-   if(tab.id==='aprobar')renderAprobaciones(body,data);
+   if(tab.id==='aprobar'){
+    renderAprobaciones(body,data,roles.has('COMPRAS_FIRMAR'));
+    const prorrogas=extras.find(x=>x.name==='prorrogas');
+    const excepciones=extras.find(x=>x.name==='excepciones');
+    if(prorrogas)renderProrrogas(body,prorrogas.data);
+    if(excepciones)renderExcepciones(body,excepciones.data);
+   }
    if(tab.id==='recibir')renderRecepciones(body,data);
   }catch(error){if(!controller.signal.aborted){body.textContent='';note(body,errText(error),true);}}
  }

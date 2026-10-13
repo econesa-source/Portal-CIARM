@@ -136,7 +136,7 @@ function renderAlternativas(p,data){
   });
  });
 }
-function renderAprobaciones(p,data,canSign){
+function renderAprobaciones(p,data,canSign,canReassign){
  p.innerHTML='<h3>Aprobar y firmar</h3><p>Cada decisión se revalida en HT06: firmante, centro, ruta, presupuesto y cotización elegida.</p>';
  const rows=Array.isArray(data)?data:[];
  if(!canSign)return;
@@ -145,7 +145,7 @@ function renderAprobaciones(p,data,canSign){
   const card=document.createElement('div');card.className='compras-item';
   const renglones=Array.isArray(s._renglones)?s._renglones:[];
   const donantes=Array.isArray(s._donantes)?s._donantes:[];
-  const puedeReasignar=s['Ruta aprobación']==='DIRECCION_ACADEMICA'&&s._esReintegro!==true&&
+  const puedeReasignar=canReassign&&s['Ruta aprobación']==='DIRECCION_ACADEMICA'&&s._esReintegro!==true&&
    donantes.length>0&&renglones.length>0;
   const keyReasignacion=key();
   card.innerHTML='<b>'+escapeHtml(s['ID Solicitud'])+'</b><p>Centro: '+escapeHtml(s['Centro de costos'])+
@@ -333,7 +333,7 @@ export async function render(container,session){
    if(tab.id==='mis')renderMis(body,data,session,roles);
    if(tab.id==='elegir')renderAlternativas(body,data);
    if(tab.id==='aprobar'){
-    renderAprobaciones(body,data,roles.has('COMPRAS_FIRMAR'));
+    renderAprobaciones(body,data,roles.has('COMPRAS_FIRMAR'),roles.has('COMPRAS_REASIGNAR_ACAD'));
     const prorrogas=extras.find(x=>x.name==='prorrogas');
     const excepciones=extras.find(x=>x.name==='excepciones');
     if(prorrogas)renderProrrogas(body,prorrogas.data);

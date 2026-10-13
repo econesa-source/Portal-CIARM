@@ -455,7 +455,7 @@ function adminFindTicket(book,id,allowPendingCreation) {
  if(adminPurchase(matches[0].row,table.headers))adminFail('NOT_FOUND');if(!allowPendingCreation&&typeof portalPendingCreation==='function'&&portalPendingCreation(book,id))adminFail('PENDING_OPERATION');return matches[0];
 }
 function adminCellValue(value,header) {
- if(value instanceof Date) { var format=header==='HORA SOLICITUD'?'HH:mm:ss':(['FECHA ASIGNACIÓN','ÚLTIMA ACTUALIZACIÓN'].indexOf(header)>=0?'yyyy-MM-dd HH:mm:ss':'yyyy-MM-dd');return Utilities.formatDate(value,'America/Cancun',format); }
+ if(value instanceof Date) { var format=header==='HORA SOLICITUD'?'HH:mm:ss':(['FECHA ASIGNACIÓN','FECHA INICIO','FECHA TERMINACIÓN','ÚLTIMA ACTUALIZACIÓN'].indexOf(header)>=0?'yyyy-MM-dd HH:mm:ss':'yyyy-MM-dd');return Utilities.formatDate(value,'America/Cancun',format); }
  if(typeof value==='string' && (header.indexOf('FECHA')===0||header==='ÚLTIMA ACTUALIZACIÓN')) {
   var match=value.match(/^(\d{2})\/(\d{2})\/(\d{4})(?: (\d{2}:\d{2})(?::(\d{2}))?)?$/);
   if(match)return match[3]+'-'+match[2]+'-'+match[1]+(match[4]?' '+match[4]+':'+(match[5]||'00'):'');
@@ -475,7 +475,7 @@ function adminTicketList(book) {
 function adminCatalogs(book) {
  var priorities=adminTable(book,'CATALOGOS',['PRIORIDADES']);var people=adminTable(book,'RESPONSABLES',['RESPONSABLE']);
  function unique(table,h){var seen={};return table.rows.slice(1).map(function(row){return String(row[table.headers.indexOf(h)]||'').trim();}).filter(function(v){if(!v||seen[v])return false;seen[v]=true;return true;});}
- return {prioridades:unique(priorities,'PRIORIDADES').filter(function(p){return ['CRITICA','URGENTE','ALTA','MEDIA','BAJA'].indexOf(p)>=0;}),responsables:unique(people,'RESPONSABLE')};
+ return {prioridades:unique(priorities,'PRIORIDADES').filter(function(p){return ['CRITICA','URGENTE','ALTA','MEDIA','BAJA'].indexOf(p)>=0;}),responsables:unique(people,'RESPONSABLE').concat(typeof serviceConfig==='function'&&serviceConfig(book)?serviceConfig(book).responsibles.map(function(r){return r.name;}):[]).filter(function(v,i,a){return a.indexOf(v)===i;})};
 }
 function adminLiteral(value) { return /^[=+@'-]/.test(value)?'\u200B'+value:value; }
 function adminAssignmentChanges(book,payload,ticket) {
@@ -503,7 +503,7 @@ function adminPendingOperation(book,id,actor) {
  if(!book.getSheetByName('BITACORA TICKETS'))return null;
  var table=adminJournalTable(book);var rows=table.rows.slice(1).filter(function(row){return (!row[9]||row[9]==='ASIGNAR')&&row[1]==='PENDIENTE'&&row[2]===actor&&row[4]===id;});
  if(rows.length>1)adminFail('PENDING_OPERATION');
- return rows.length===1?JSON.parse(rows[0][8]):null;
+ if(rows.length!==1)return null;var data=JSON.parse(rows[0][8]);return data.request||data;
 }
 function adminAssign(book,actor,payload) {
  if(!payload||typeof payload.operationId!=='string'||!/^[a-zA-Z0-9-]{16,80}$/.test(payload.operationId)||typeof payload.expectedVersion!=='string')adminFail('VALIDATION');
@@ -520,6 +520,7 @@ function adminAssign(book,actor,payload) {
   if(snapshot.length!==before.length||snapshot.some(function(value,i){return JSON.stringify(value)!==JSON.stringify(before[i])&&JSON.stringify(value)!==JSON.stringify(after[i]);}))adminFail('CONFLICT');
   if(current!==adminHash(after))adminWriteAssignment(ticket,after);
   if(adminHash(adminSnapshot(adminFindTicket(book,payload.ticketId)))!==adminHash(after))adminFail('CONFLICT');
+  if(typeof serviceAssignmentRecover==='function')serviceAssignmentRecover(book,payload.ticketId,JSON.parse(event.row[8]));
   journal.sheet.getRange(event.rowNumber,2).setValue('CONFIRMADO');SpreadsheetApp.flush();
   return {ticket:adminTicketView(adminFindTicket(book,payload.ticketId)),operationId:payload.operationId};
  }
@@ -533,10 +534,12 @@ function adminAssign(book,actor,payload) {
  if(!after[h.indexOf('FECHA ASIGNACIÓN')])set('FECHA ASIGNACIÓN',now);
  set('OBSERVACIONES',adminLiteral(changes.observacion));set('ÚLTIMA ACTUALIZACIÓN',now);
  journal=journal||adminJournal(book);
- journal.sheet.appendRow([payload.operationId,'PENDIENTE',actor,hash,payload.ticketId,JSON.stringify(before),JSON.stringify(after),now,JSON.stringify(payload)]);SpreadsheetApp.flush();
+ var plan=typeof serviceAssignmentPlan==='function'?serviceAssignmentPlan(book,ticket,changes):null;if(plan){if(!plan.before||!plan.before.assignedAt)plan.after.assignedBy=actor;plan.after.lastAssignedBy=actor;}var stored=plan?{request:payload,service:plan}:payload;
+ journal.sheet.appendRow([payload.operationId,'PENDIENTE',actor,hash,payload.ticketId,JSON.stringify(before),JSON.stringify(after),now,JSON.stringify(stored),'ASIGNAR']);SpreadsheetApp.flush();
  var eventNumber=journal.sheet.getLastRow();
  adminWriteAssignment(ticket,after);
  if(adminHash(adminSnapshot(adminFindTicket(book,payload.ticketId)))!==adminHash(after))adminFail('CONFLICT');
+ if(plan)serviceSaveCase(book,payload.ticketId,plan.before,plan.after);
  journal.sheet.getRange(eventNumber,2).setValue('CONFIRMADO');SpreadsheetApp.flush();
  return {ticket:adminTicketView(adminFindTicket(book,payload.ticketId)),operationId:payload.operationId};
 }
@@ -570,7 +573,7 @@ function verifyTicketRequest(envelope,signature) {
 function handleTicketEnvelope(envelope,signature) {
  var lock,locked=false,request;
  try {
-  request=verifyTicketRequest(envelope,signature);
+  request=verifyTicketRequest(envelope,signature);if(typeof SERVICE_TABLE_CACHE!=='undefined')SERVICE_TABLE_CACHE={};
   var collaborator=portalCollaborator(request.actor);
   if(['list','detail','catalogs','assign'].indexOf(request.action)>=0)return handleAdminEnvelope(envelope,signature);
   lock=LockService.getScriptLock();locked=lock.tryLock(15000);if(!locked)adminFail('BUSY');
@@ -578,7 +581,13 @@ function handleTicketEnvelope(envelope,signature) {
   if(cache.get(key))adminFail('REPLAY');cache.put(key,'1',300);
   var book=SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID),data;
   switch(request.action){
-   case 'capabilities':data={protocol:'tickets-portal-v1',maxFiles:5,maxFileBytes:10*1024*1024};break;
+   case 'serviceContext':data={protocol:'tickets-service-v1',enabled:Boolean(serviceConfig(book)),canAdmin:adminPermission(request.actor)};break;
+   case 'serviceSettings':data=serviceSettings(book,request.actor);break;
+   case 'saveServicePolicy':data=servicePublish(book,request.actor,request.payload);break;
+   case 'serviceDetail':data=serviceDetail(book,request.actor,request.payload.id);break;
+   case 'serviceTransition':data=serviceTransition(book,request.actor,request.payload);break;
+   case 'serviceList':data=serviceList(book,request.actor,request.payload.kind);break;
+   case 'capabilities':data={protocol:'tickets-portal-v1',serviceProtocol:'tickets-service-v1',maxFiles:5,maxFileBytes:10*1024*1024};break;
    case 'mine':data=adminTicketList(book).filter(function(ticket){return ticket.correo.trim().toLowerCase()===collaborator.correoDM03;});break;
    case 'beginCreate':data=portalBeginCreate(book,request.actor,request.payload);break;
    case 'uploadAttachment':data=portalUploadAttachment(book,request.actor,request.payload);break;
@@ -587,8 +596,8 @@ function handleTicketEnvelope(envelope,signature) {
    default:adminFail('VALIDATION');
   }
   return {ok:true,data:data};
- }catch(error){return {ok:false,code:error.adminCode||'UPSTREAM'};}
- finally{if(locked)lock.releaseLock();}
+ }catch(error){var result={ok:false,code:error.adminCode||'UPSTREAM'};if(request&&request.action==='serviceTransition'&&book&&request.payload){try{var history=book.getSheetByName('BITACORA TICKETS');result.operationPending=history?history.getDataRange().getValues().slice(1).some(function(r){return r[0]===request.payload.operationId&&r[2]===request.actor;}):false;}catch(ignored){}}return result;}
+ finally{if(typeof SERVICE_TABLE_CACHE!=='undefined')SERVICE_TABLE_CACHE=null;if(locked)lock.releaseLock();}
 }
 
 /** Canonical collaborator identity from the official DM03 catalogue. */
@@ -676,7 +685,7 @@ function portalBeginCreate(book,actor,request){
  var projectedReceipts=request.files.map(function(file){return {index:file.index,fileId:'x'.repeat(128),url:'https://drive.google.com/'+ 'x'.repeat(512),sha256:file.sha256};});
  var projected={request:request,receipts:projectedReceipts,folderId:'x'.repeat(128),reservation:portalPreparedReservation(book,actor,request,projectedReceipts,table,adminTicketTable(book))};
  if(Utilities.newBlob(JSON.stringify(projected)).getBytes().length>PORTAL_METADATA_LIMIT-2048)adminFail('PAYLOAD_SIZE');
- table.sheet.appendRow([request.operationId,'PENDIENTE',actor,hash,'','null','null',Utilities.formatDate(new Date(),'America/Cancun','yyyy-MM-dd HH:mm:ss'),JSON.stringify({request:request,receipts:[]}), 'CREAR']);
+ table.sheet.appendRow([request.operationId,'PENDIENTE',actor,hash,'','null','null',Utilities.formatDate(new Date(),'America/Cancun','yyyy-MM-dd HH:mm:ss'),JSON.stringify({request:request,receipts:[],serviceCreation:typeof serviceCreationPlan==='function'?serviceCreationPlan(book,request):null}), 'CREAR']);
  return portalCreationView(book,portalCreationEvent(book,actor,request.operationId));
 }
 function portalPendingCreationIds(book){
@@ -733,6 +742,7 @@ function portalFinalizeCreate(book,actor,input){
  SpreadsheetApp.flush();
  var ticket=adminFindTicket(book,reserved.id,true);
  if(adminHash(adminSnapshot(ticket))!==adminHash(reserved.after))adminFail('CONFLICT');
+ if(typeof serviceCreationRecover==='function')serviceCreationRecover(book,reserved.id,data.serviceCreation);
  event.table.sheet.getRange(event.rowNumber,2).setValue('CONFIRMADO');event.row[1]='CONFIRMADO';
  return portalCreationView(book,event);
 }
@@ -746,6 +756,96 @@ function portalPreparedReservation(book,actor,request,receipts,journal,table){
   set('ID TICKET',slot.id);set('FECHA SOLICITUD',now.slice(0,10));set('HORA SOLICITUD',now.slice(11));set('ÁREA SOLICITANTE',adminLiteral(person.area));set('SOLICITANTE',adminLiteral(person.nombreCompleto));set('CORREO SOLICITANTE',actor);set('TIPO DE SOLICITUD',request.tipo);set('DESCRIPCIÓN',adminLiteral(request.descripcion));set('PRIORIDAD','POR DEFINIR');set('RESPONSABLE','SIN ASIGNAR');set('ESTADO','NUEVO');if(!slot.formulas[headers.indexOf('SLA')])set('SLA','POR DEFINIR');set('ÚLTIMA ACTUALIZACIÓN',now);set('PRIORIDAD SOLICITADA',request.prioridadSolicitada);set('PLAZO SOLICITADO',request.fechaProgramada);set('ARCHIVOS ADJUNTOS',receipts.map(function(r){return r.url;}).join('\n'));
  slot.after=after;return slot;
 }
+
+/** Source-local business clock. Pure functions; no ticket mutations or inferred identity. */
+function serviceDefaultPolicy(){return {version:1,timeZone:'America/Cancun',startHour:8,endHour:16,days:[1,2,3,4,5],holidays:[],assignmentHours:8,validationHours:16,levels:{CRITICA:{assign:1,start:1,contain:4,resolve:null},URGENTE:{assign:4,start:4,resolve:8},ALTA:{assign:8,start:8,resolve:16},MEDIA:{assign:8,start:16,resolve:40},BAJA:{assign:8,start:24,resolve:80}}};}
+function serviceValidatePolicy(value){
+ if(!value||value.timeZone!=='America/Cancun'||!Number.isInteger(value.version)||value.version<1||!Number.isInteger(value.startHour)||!Number.isInteger(value.endHour)||value.startHour<0||value.endHour>24||value.startHour>=value.endHour)throw Error('SERVICE_POLICY');
+ if(!Array.isArray(value.days)||!value.days.length||new Set(value.days).size!==value.days.length||value.days.some(function(day){return !Number.isInteger(day)||day<0||day>6;}))throw Error('SERVICE_POLICY');
+ if(!Array.isArray(value.holidays)||value.holidays.some(function(date){if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date))return true;var d=new Date(date+'T00:00:00Z');return isNaN(d.getTime())||d.toISOString().slice(0,10)!==date;}))throw Error('SERVICE_POLICY');
+ ['assignmentHours','validationHours'].forEach(function(k){if(!Number.isFinite(value[k])||value[k]<=0||value[k]>87600)throw Error('SERVICE_POLICY');});
+ ['CRITICA','URGENTE','ALTA','MEDIA','BAJA'].forEach(function(level){var r=value.levels&&value.levels[level];if(!r)throw Error('SERVICE_POLICY');['assign','start'].concat(level==='CRITICA'?['contain']:['resolve']).forEach(function(k){if(!Number.isFinite(r[k])||r[k]<=0||r[k]>87600)throw Error('SERVICE_POLICY');});if(level==='CRITICA'&&r.resolve!==null)throw Error('SERVICE_POLICY');});
+ return JSON.parse(JSON.stringify(value));
+}
+function serviceWindow(date,policy){
+ // Cancun is fixed UTC-05:00. The policy rejects other zones rather than reinterpreting dates.
+ var local=new Date(date.getTime()-5*3600000),day=local.toISOString().slice(0,10),base=Date.parse(day+'T00:00:00Z')+5*3600000;
+ return {start:base+policy.startHour*3600000,end:base+policy.endHour*3600000,next:base+86400000,working:policy.days.indexOf(local.getUTCDay())>=0&&policy.holidays.indexOf(day)<0};
+}
+function serviceDeadline(received,hours,input){
+ var policy=serviceValidatePolicy(input),cursor=new Date(received).getTime(),remaining=hours*3600000;
+ if(!Number.isFinite(cursor)||!Number.isFinite(remaining)||remaining<0||hours>87600)throw Error('SERVICE_DATE');
+ if(remaining===0)return new Date(cursor);
+ for(var i=0;i<36600;i++){var w=serviceWindow(new Date(cursor),policy);cursor=Math.max(cursor,w.start);if(w.working&&cursor<w.end){var available=w.end-cursor;if(remaining<=available)return new Date(cursor+remaining);remaining-=available;}cursor=w.next;}
+ throw Error('SERVICE_DATE');
+}
+function serviceElapsedHours(from,to,input){
+ var policy=serviceValidatePolicy(input),cursor=new Date(from).getTime(),end=new Date(to).getTime(),total=0;
+ if(!Number.isFinite(cursor)||!Number.isFinite(end)||end<cursor||end-cursor>36600*86400000)throw Error('SERVICE_DATE');
+ while(cursor<end){var w=serviceWindow(new Date(cursor),policy);if(w.working)total+=Math.max(0,Math.min(end,w.end)-Math.max(cursor,w.start));cursor=w.next;}
+ return total/3600000;
+}
+
+var SERVICE_TABLE_CACHE=null;
+function serviceCachedRows(book,name,headers){if(SERVICE_TABLE_CACHE&&SERVICE_TABLE_CACHE[name])return SERVICE_TABLE_CACHE[name];var rows=adminTable(book,name,headers).rows;if(SERVICE_TABLE_CACHE)SERVICE_TABLE_CACHE[name]=rows;return rows;}
+function serviceInvalidate(name){if(SERVICE_TABLE_CACHE)delete SERVICE_TABLE_CACHE[name];}
+/** Service configuration and recoverable lifecycle. All callers hold the signed protocol lock. */
+function serviceTable(book,name,headers){var sheet=book.getSheetByName(name);if(!sheet){sheet=book.insertSheet(name);sheet.appendRow(headers);}else if(sheet.getLastRow()===0)sheet.appendRow(headers);return adminTable(book,name,headers);}
+function serviceConfig(book){var sheet=book.getSheetByName('CONFIG SERVICIO');if(!sheet||sheet.getLastRow()===0)return null;var rows=serviceCachedRows(book,'CONFIG SERVICIO',['VERSION','REGLAS','ACTOR','FECHA','OPERACION','HASH']).slice(1);if(!rows.length)return null;var value=JSON.parse(rows[rows.length-1][1]);return serviceValidatePolicy(value);}
+function serviceSettings(book,actor){if(!adminPermission(actor))adminFail('FORBIDDEN');var p=serviceConfig(book)||serviceDefaultPolicy();if(!p.responsibles)p.responsibles=[{name:'Daniel Lara',email:'d.lara@ciarm.edu.mx'},{name:'PRUEBA — Rodrigo Valencia',email:'r.valencia@ciarm.edu.mx',test:true},{name:'PRUEBA — Ezequiel Conesa',email:'e.conesa@ciarm.edu.mx',test:true}];return {enabled:Boolean(serviceConfig(book)),policy:p};}
+function servicePublish(book,actor,input){
+ if(!adminPermission(actor))adminFail('FORBIDDEN');portalOperationId(input.operationId);var table=serviceTable(book,'CONFIG SERVICIO',['VERSION','REGLAS','ACTOR','FECHA','OPERACION','HASH']),hash=adminHash(input),old=table.rows.slice(1).filter(function(r){return r[4]===input.operationId;});
+ if(old.length){if(old.length!==1||old[0][2]!==actor||old[0][5]!==hash)adminFail('OPERATION_REUSED');return serviceSettings(book,actor);}
+ var current=serviceConfig(book),version=current?current.version:0;if(input.expectedVersion!==version)adminFail('CONFLICT');var p;try{p=serviceValidatePolicy(input.policy);}catch(error){adminFail('VALIDATION');}p.version=version+1;
+ if(!Array.isArray(p.responsibles)||!p.responsibles.length||p.responsibles.length>100)adminFail('VALIDATION');var names={},emails={};
+ p.responsibles.forEach(function(r){if(!r||typeof r.name!=='string'||!r.name.trim()||r.name.length>100||names[r.name]||emails[r.email])adminFail('VALIDATION');portalCollaborator(r.email);names[r.name]=true;emails[r.email]=true;});
+ var raw=JSON.stringify(p);if(Utilities.newBlob(raw).getBytes().length>20000)adminFail('PAYLOAD_SIZE');table.sheet.appendRow([p.version,raw,actor,serviceNow(),input.operationId,hash]);serviceInvalidate('CONFIG SERVICIO');SpreadsheetApp.flush();return serviceSettings(book,actor);
+}
+function serviceNow(){return Utilities.formatDate(new Date(),'America/Cancun','yyyy-MM-dd HH:mm:ss');}
+function serviceDate(value){if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value))adminFail('VALIDATION');var date=new Date(value.replace(' ','T')+'-05:00');if(isNaN(date.getTime())||Utilities.formatDate(date,'America/Cancun','yyyy-MM-dd HH:mm:ss')!==value)adminFail('VALIDATION');return date;}
+function serviceCase(book,id){var sheet=book.getSheetByName('SEGUIMIENTO SERVICIO');if(!sheet||sheet.getLastRow()===0)return null;var rows=serviceCachedRows(book,'SEGUIMIENTO SERVICIO',['FOLIO','SEGUIMIENTO']).slice(1).filter(function(r){return r[0]===id;});if(rows.length>1)adminFail('DUPLICATE_ID');return rows.length?JSON.parse(rows[0][1]):null;}
+function serviceSaveCase(book,id,before,after){var table=serviceTable(book,'SEGUIMIENTO SERVICIO',['FOLIO','SEGUIMIENTO']),matches=[];table.rows.slice(1).forEach(function(r,i){if(r[0]===id)matches.push(i+2);});if(matches.length>1)adminFail('DUPLICATE_ID');var current=serviceCase(book,id);if(adminHash(current)!==adminHash(before)&&adminHash(current)!==adminHash(after))adminFail('CONFLICT');var raw=JSON.stringify(after);if(Utilities.newBlob(raw).getBytes().length>45000)adminFail('PAYLOAD_SIZE');if(matches.length)table.sheet.getRange(matches[0],2).setValue(raw);else table.sheet.appendRow([id,raw]);serviceInvalidate('SEGUIMIENTO SERVICIO');}
+function serviceAssignmentPlan(book,ticket,changes){var p=serviceConfig(book);if(!p)return null;var target=p.responsibles.filter(function(r){return r.name===changes.responsable;});if(target.length!==1)adminFail('RESPONSIBLE_ACCOUNT');portalCollaborator(target[0].email);var before=serviceCase(book,adminTicketView(ticket).id);if(!before&&['EN PROCESO','EN ESPERA'].indexOf(adminTicketView(ticket).estado)>=0)adminFail('SERVICE_MIGRATION_REQUIRED');var after=before?JSON.parse(JSON.stringify(before)):{policy:p,createdAt:serviceNow(),historical:true,cycles:[],waits:[]};p=after.policy;var now=serviceNow();after.email=target[0].email;after.responsible=changes.responsable;
+ if(!after.assignedAt){after.assignedAt=now;after.firstAssignedAt=now;if(after.assignmentDeadline){var limit=serviceDeadline(serviceDate(after.createdAt),p.levels[changes.prioridad].assign,p);if(limit.getTime()<serviceDate(after.assignmentDeadline).getTime())after.assignmentDeadline=Utilities.formatDate(limit,'America/Cancun','yyyy-MM-dd HH:mm:ss');}after.priority=changes.prioridad;after.assignedBy=null;after.deadlines={start:Utilities.formatDate(serviceDeadline(serviceDate(now),p.levels[changes.prioridad].start,p),'America/Cancun','yyyy-MM-dd HH:mm:ss')};var level=p.levels[changes.prioridad];if(level.resolve)after.deadlines.resolve=Utilities.formatDate(serviceDeadline(serviceDate(now),level.resolve,p),'America/Cancun','yyyy-MM-dd HH:mm:ss');if(level.contain){after.deadlines.resolve=Utilities.formatDate(new Date(serviceWindow(serviceDate(changes.fechaCompromiso+' 00:00:00'),p).end),'America/Cancun','yyyy-MM-dd HH:mm:ss');}if(level.contain)after.deadlines.contain=Utilities.formatDate(serviceDeadline(serviceDate(now),level.contain,p),'America/Cancun','yyyy-MM-dd HH:mm:ss');}
+ after.stageOwners=after.stageOwners||{};if(!after.originalDeadlines){after.originalDeadlines=JSON.parse(JSON.stringify(after.deadlines));after.originalPriority=after.priority;}if(before&&before.assignedAt&&after.priority!==changes.prioridad){var previous=after.priority;after.priority=changes.prioridad;after.priorityChanges=after.priorityChanges||[];after.priorityChanges.push({from:previous,to:after.priority,date:now});var level=p.levels[after.priority];['start','contain','resolve'].forEach(function(k){if(k==='start'&&after.startedAt||k==='contain'&&after.containedAt||k==='resolve'&&after.resolvedAt)return;var candidate;if(k==='resolve'&&after.priority==='CRITICA')candidate=new Date(serviceWindow(serviceDate(changes.fechaCompromiso+' 00:00:00'),p).end);else if(level[k])candidate=serviceDeadline(serviceDate(now),level[k],p);if(candidate&&(!after.deadlines[k]||candidate.getTime()<serviceDate(after.deadlines[k]).getTime()))after.deadlines[k]=Utilities.formatDate(candidate,'America/Cancun','yyyy-MM-dd HH:mm:ss');});}
+ return {before:before,after:after};}
+function serviceAssignmentRecover(book,id,payload){if(payload.service)serviceSaveCase(book,id,payload.service.before,payload.service.after);}
+function servicePending(book,id,operationId){var sheet=book.getSheetByName('BITACORA TICKETS');return sheet&&sheet.getDataRange().getValues().slice(1).some(function(r){return r[4]===id&&r[1]==='PENDIENTE'&&r[0]!==operationId;});}
+function serviceAuthorize(ticket,meta,actor,event){var admin=adminPermission(actor),owner=ticket.correo.trim().toLowerCase()===actor,executor=meta&&meta.email===actor;var allowed=event==='ACCEPT'||event==='REJECT'?owner:event==='WAIT_APPROVE'||event==='EXCEPTION'||event==='TRIAGE'?admin:event==='RESUME'?(executor||admin):executor;if(!allowed)adminFail('FORBIDDEN');}
+function serviceDetail(book,actor,id){var raw=adminFindTicket(book,id),ticket=adminTicketView(raw),meta=serviceCase(book,id);if(!adminPermission(actor)&&ticket.correo!==actor&&(!meta||meta.email!==actor))adminFail('FORBIDDEN');var events=book.getSheetByName('BITACORA TICKETS');var history=events?events.getDataRange().getValues().slice(1).filter(function(r){return r[4]===id&&r[1]==='CONFIRMADO';}).map(function(r){var data;try{data=JSON.parse(r[8]);}catch(e){data={};}return {action:r[9]==='SERVICIO'&&data.request?data.request.event:r[9]||'ASIGNAR',actor:r[2],date:adminCellValue(r[7],'ÚLTIMA ACTUALIZACIÓN'),comment:data.request?data.request.comment||(data.request.changes||{}).observacion||(data.request.priority?'Prioridad: '+data.request.priority:''):data.comment||'',evidence:data.request?data.request.evidence||[]:[]};}):[];
+ var pending=events?events.getDataRange().getValues().slice(1).filter(function(r){return r[4]===id&&r[9]==='SERVICIO'&&r[1]==='PENDIENTE'&&r[2]===actor;}):[];if(pending.length>1)adminFail('PENDING_OPERATION');var operation=pending.length?JSON.parse(pending[0][8]).request:null;
+ return {ticket:ticket,pendingOperation:operation||undefined,service:meta?serviceView(meta,ticket):null,history:history,roles:{admin:adminPermission(actor),owner:ticket.correo.trim().toLowerCase()===actor,executor:Boolean(meta&&meta.email===actor)}};}
+function serviceView(meta,ticket){var value=JSON.parse(JSON.stringify(meta)),now=new Date();value.effectiveDeadlines={};Object.keys(value.deadlines||{}).forEach(function(k){var completed=k==='start'?value.startedAt:k==='resolve'?value.resolvedAt:value.containedAt;var cutoff=completed?serviceDate(completed):now,pauseHours=0;if(k!=='start')value.waits.forEach(function(w){var from=serviceDate(w.from),to=w.to?serviceDate(w.to):now;if(to>cutoff)to=cutoff;if(to>from)pauseHours+=serviceElapsedHours(from,to,value.policy);});value.effectiveDeadlines[k]=Utilities.formatDate(serviceDeadline(serviceDate(value.deadlines[k]),pauseHours,value.policy),'America/Cancun','yyyy-MM-dd HH:mm:ss');});value.overdue=Object.keys(value.effectiveDeadlines).filter(function(k){var done=k==='start'?value.startedAt:k==='resolve'?value.resolvedAt:value.containedAt;return serviceDate(done||serviceNow()).getTime()>serviceDate(value.effectiveDeadlines[k]).getTime();});if(value.resolvedAt){value.validationDeadline=Utilities.formatDate(serviceDeadline(serviceDate(value.resolvedAt),value.policy.validationHours,value.policy),'America/Cancun','yyyy-MM-dd HH:mm:ss');value.validationOverdue=serviceDate(value.closedAt||serviceNow()).getTime()>serviceDate(value.validationDeadline).getTime();}var wait=value.waits[value.waits.length-1];if(wait&&!wait.to){value.waitFollowAt=wait.request.followAt;value.waitFollowOverdue=now.getTime()>serviceDate(value.waitFollowAt).getTime();}value.assignmentOverdue=value.assignmentDeadline?serviceDate(value.firstAssignedAt||value.assignedAt||serviceNow()).getTime()>serviceDate(value.assignmentDeadline).getTime():null;value.totalHours=(now.getTime()-serviceDate(value.createdAt).getTime())/3600000;return value;}
+
+function serviceTransition(book,actor,input){
+ portalOperationId(input.operationId);if(typeof input.expectedVersion!=='string'||typeof input.ticketId!=='string'||typeof input.comment!=='string'||input.comment.length>4000)adminFail('VALIDATION');var valid=['TRIAGE','START','WAIT_REQUEST','WAIT_APPROVE','RESUME','CONTAIN','RESOLVE','ACCEPT','REJECT','EXCEPTION'];if(valid.indexOf(input.event)<0)adminFail('VALIDATION');var raw=adminFindTicket(book,input.ticketId),ticket=adminTicketView(raw),meta=serviceCase(book,input.ticketId);if(!meta)adminFail('SERVICE_NOT_ENABLED');serviceAuthorize(ticket,meta,actor,input.event);
+ var journal=portalJournal(book),hash=adminHash(input),events=journal.rows.slice(1).map(function(r,i){return {row:r,index:i+2};}).filter(function(e){return e.row[0]===input.operationId;});if(events.length>1)adminFail('OPERATION_REUSED');var event;
+ if(events.length){event=events[0];if(event.row[9]!=='SERVICIO'||event.row[2]!==actor||event.row[3]!==hash)adminFail('OPERATION_REUSED');if(event.row[1]==='CONFIRMADO')return serviceDetail(book,actor,input.ticketId);}
+ else{
+  if(servicePending(book,input.ticketId,input.operationId))adminFail('PENDING_OPERATION');if(ticket.version!==input.expectedVersion)adminFail('CONFLICT');var before=adminSnapshot(raw),after=before.slice(),next=JSON.parse(JSON.stringify(meta)),now=serviceNow(),state=ticket.estado;
+  function set(header,value){var index=raw.table.headers.indexOf(header);if(raw.formulas[index])adminFail('SCHEMA');after[index]=value;}
+  var comment=input.comment.trim();if(['WAIT_REQUEST','CONTAIN','RESOLVE','REJECT','EXCEPTION'].indexOf(input.event)>=0&&!comment)adminFail('VALIDATION');var evidence=input.evidence||[];if(!Array.isArray(evidence)||evidence.length>5||evidence.some(function(u){return typeof u!=='string'||!/^https:\/\/(drive|docs)\.google\.com\//.test(u)||u.length>500;}))adminFail('VALIDATION');
+  switch(input.event){
+   case 'TRIAGE':if(state!=='NUEVO'||!next.policy.levels[input.priority])adminFail('VALIDATION');next.triagePriority=input.priority;var limit=serviceDeadline(serviceDate(next.createdAt),next.policy.levels[input.priority].assign,next.policy);if(!next.assignmentDeadline||limit.getTime()<serviceDate(next.assignmentDeadline).getTime())next.assignmentDeadline=Utilities.formatDate(limit,'America/Cancun','yyyy-MM-dd HH:mm:ss');set('PRIORIDAD',input.priority);break;
+   case 'START':if(state!=='ASIGNADO'||next.startedAt)adminFail('VALIDATION');next.startedAt=now;next.stageOwners=next.stageOwners||{};next.stageOwners.start=actor;set('ESTADO','EN PROCESO');set('FECHA INICIO',now);break;
+   case 'WAIT_REQUEST':if(state!=='EN PROCESO'||next.waitRequest)adminFail('VALIDATION');if(typeof input.dependency!=='string'||!input.dependency.trim()||input.dependency.length>300||serviceDate(input.followAt).getTime()<=new Date().getTime())adminFail('VALIDATION');next.waitRequest={comment:comment,dependency:input.dependency,followAt:input.followAt,requestedBy:actor,requestedAt:now,operationId:input.operationId};break;
+   case 'WAIT_APPROVE':if(state!=='EN PROCESO'||!next.waitRequest)adminFail('VALIDATION');next.waits.push({from:now,to:null,approvedBy:actor,request:{dependency:next.waitRequest.dependency,followAt:next.waitRequest.followAt,requestedBy:next.waitRequest.requestedBy,requestedAt:next.waitRequest.requestedAt,operationId:next.waitRequest.operationId}});next.waitRequest=null;set('ESTADO','EN ESPERA');break;
+   case 'RESUME':if(state!=='EN ESPERA'||!next.waits.length||next.waits[next.waits.length-1].to)adminFail('VALIDATION');next.waits[next.waits.length-1].to=now;set('ESTADO','EN PROCESO');break;
+   case 'CONTAIN':if(state!=='EN PROCESO'||next.priority!=='CRITICA'||next.containedAt)adminFail('VALIDATION');next.containedAt=now;next.stageOwners=next.stageOwners||{};next.stageOwners.contain=actor;next.containmentComment=comment;break;
+   case 'RESOLVE':if(state!=='EN PROCESO'||next.priority==='CRITICA'&&!next.containedAt)adminFail('VALIDATION');next.stageOwners=next.stageOwners||{};next.stageOwners.resolve=actor;next.resolvedAt=now;next.waitRequest=null;next.solution=comment;next.evidence=evidence;set('ESTADO','RESUELTO');set('FECHA TERMINACIÓN',now);break;
+   case 'ACCEPT':if(state!=='RESUELTO')adminFail('VALIDATION');next.closedAt=now;next.verdict={conforme:true,comment:comment,actor:actor,date:now};set('ESTADO','CERRADO');break;
+   case 'REJECT':if(state!=='RESUELTO')adminFail('VALIDATION');next.cycles.push({assignedAt:next.assignedAt,startedAt:next.startedAt,resolvedAt:next.resolvedAt,containedAt:next.containedAt||null,deadlines:next.deadlines,outcomes:serviceView(meta,ticket).overdue,executor:next.stageOwners&&next.stageOwners.resolve||next.email,stageOwners:next.stageOwners||{},validationOwner:ticket.correo,validationLate:serviceView(meta,ticket).validationOverdue,verdict:{conforme:false,actor:actor,date:now,operationId:input.operationId}});next.assignedAt=now;next.stageOwners={};next.startedAt=null;next.resolvedAt=null;next.containedAt=null;next.waits=[];next.waitRequest=null;next.deadlines={};Object.keys(meta.deadlines).forEach(function(k){if(next.priority==='CRITICA'&&k==='resolve'){next.deadlines[k]=meta.deadlines[k];return;}next.deadlines[k]=Utilities.formatDate(serviceDeadline(serviceDate(now),next.policy.levels[next.priority][k]||0,next.policy),'America/Cancun','yyyy-MM-dd HH:mm:ss');});set('ESTADO','ASIGNADO');set('FECHA INICIO','');set('FECHA TERMINACIÓN','');break;
+   case 'EXCEPTION':if(['RESUELTO','CERRADO','CANCELADO'].indexOf(state)>=0)adminFail('VALIDATION');next.exceptions=next.exceptions||[];next.exceptions.push({actor:actor,date:now,operationId:input.operationId,commitment:input.commitment});if(!/^\d{4}-\d{2}-\d{2}$/.test(input.commitment||''))adminFail('VALIDATION');serviceDate(input.commitment+' 00:00:00');set('FECHA COMPROMISO',input.commitment);break;
+  }
+  set('ÚLTIMA ACTUALIZACIÓN',now);var payload={request:input,service:{before:meta,after:next}};if(Utilities.newBlob(JSON.stringify(payload)).getBytes().length>45000)adminFail('PAYLOAD_SIZE');journal.sheet.appendRow([input.operationId,'PENDIENTE',actor,hash,input.ticketId,JSON.stringify(before),JSON.stringify(after),now,JSON.stringify(payload),'SERVICIO']);event={row:[input.operationId,'PENDIENTE',actor,hash,input.ticketId,JSON.stringify(before),JSON.stringify(after),now,JSON.stringify(payload),'SERVICIO'],index:journal.sheet.getLastRow()};SpreadsheetApp.flush();
+ }
+ var prior=JSON.parse(event.row[5]),target=JSON.parse(event.row[6]),data=JSON.parse(event.row[8]),current=adminSnapshot(raw);if(current.some(function(v,i){return JSON.stringify(v)!==JSON.stringify(prior[i])&&JSON.stringify(v)!==JSON.stringify(target[i]);}))adminFail('CONFLICT');target.forEach(function(v,i){if(JSON.stringify(v)===JSON.stringify(current[i]))return;if(v&&typeof v==='object'&&v.formula)adminFail('SCHEMA');if(['FECHA INICIO','FECHA TERMINACIÓN','FECHA COMPROMISO','ÚLTIMA ACTUALIZACIÓN'].indexOf(raw.table.headers[i])>=0&&v)v=serviceDate(v.length===10?v+' 00:00:00':v);raw.table.sheet.getRange(raw.rowNumber,i+1).setValue(v);});SpreadsheetApp.flush();serviceSaveCase(book,input.ticketId,data.service.before,data.service.after);if(adminHash(adminSnapshot(adminFindTicket(book,input.ticketId)))!==adminHash(target))adminFail('CONFLICT');journal.sheet.getRange(event.index,2).setValue('CONFIRMADO');SpreadsheetApp.flush();return serviceDetail(book,actor,input.ticketId);
+}
+function serviceList(book,actor,kind){var admin=adminPermission(actor);if(kind==='all'&&!admin)adminFail('FORBIDDEN');return adminTicketList(book).filter(function(t){var m=serviceCase(book,t.id);return kind==='all'||kind==='mine'&&t.correo.trim().toLowerCase()===actor||kind==='assigned'&&m&&m.email===actor;}).map(function(t){var m=serviceCase(book,t.id);return {ticket:t,service:m?serviceView(m,t):null};});}
+
+function serviceConfigVersion(book,version){var rows=serviceCachedRows(book,'CONFIG SERVICIO',['VERSION','REGLAS','ACTOR','FECHA','OPERACION','HASH']).slice(1).filter(function(r){return r[0]===version;});if(rows.length!==1)adminFail('SCHEMA');return serviceValidatePolicy(JSON.parse(rows[0][1]));}
+function serviceCreationPlan(book,request){var policy=serviceConfig(book);return policy?{version:policy.version,receivedAt:serviceNow(),urgent:request.prioridadSolicitada==='🔴 Urgente'}:null;}
+function serviceCreationRecover(book,id,creation){if(!creation)return;var policy=serviceConfigVersion(book,creation.version),deadline=serviceDeadline(serviceDate(creation.receivedAt),creation.urgent?policy.levels.URGENTE.assign:policy.assignmentHours,policy);var meta={policy:policy,createdAt:creation.receivedAt,historical:false,assignmentOwner:'d.lara@ciarm.edu.mx',assignmentDeadline:Utilities.formatDate(deadline,'America/Cancun','yyyy-MM-dd HH:mm:ss'),cycles:[],waits:[]};serviceSaveCase(book,id,null,meta);}
 
 
 // Entradas originales preservadas; las operaciones administrativas requieren firma.

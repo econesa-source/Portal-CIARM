@@ -42,7 +42,7 @@ function portalBeginCreate(book,actor,request){
  var projectedReceipts=request.files.map(function(file){return {index:file.index,fileId:'x'.repeat(128),url:'https://drive.google.com/'+ 'x'.repeat(512),sha256:file.sha256};});
  var projected={request:request,receipts:projectedReceipts,folderId:'x'.repeat(128),reservation:portalPreparedReservation(book,actor,request,projectedReceipts,table,adminTicketTable(book))};
  if(Utilities.newBlob(JSON.stringify(projected)).getBytes().length>PORTAL_METADATA_LIMIT-2048)adminFail('PAYLOAD_SIZE');
- table.sheet.appendRow([request.operationId,'PENDIENTE',actor,hash,'','null','null',Utilities.formatDate(new Date(),'America/Cancun','yyyy-MM-dd HH:mm:ss'),JSON.stringify({request:request,receipts:[]}), 'CREAR']);
+ table.sheet.appendRow([request.operationId,'PENDIENTE',actor,hash,'','null','null',Utilities.formatDate(new Date(),'America/Cancun','yyyy-MM-dd HH:mm:ss'),JSON.stringify({request:request,receipts:[],serviceCreation:typeof serviceCreationPlan==='function'?serviceCreationPlan(book,request):null}), 'CREAR']);
  return portalCreationView(book,portalCreationEvent(book,actor,request.operationId));
 }
 function portalPendingCreationIds(book){
@@ -99,6 +99,7 @@ function portalFinalizeCreate(book,actor,input){
  SpreadsheetApp.flush();
  var ticket=adminFindTicket(book,reserved.id,true);
  if(adminHash(adminSnapshot(ticket))!==adminHash(reserved.after))adminFail('CONFLICT');
+ if(typeof serviceCreationRecover==='function')serviceCreationRecover(book,reserved.id,data.serviceCreation);
  event.table.sheet.getRange(event.rowNumber,2).setValue('CONFIRMADO');event.row[1]='CONFIRMADO';
  return portalCreationView(book,event);
 }

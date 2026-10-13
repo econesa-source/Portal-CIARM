@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 const original=fs.readFileSync(new URL('./tickets-original.gs',import.meta.url),'utf8');
 const admin=fs.readFileSync(new URL('./tickets-admin.gs',import.meta.url),'utf8');
-const portal=['tickets-protocol.gs','tickets-portal.gs','tickets-folios.gs','tickets-creation.gs'].map(name=>fs.readFileSync(new URL('./'+name,import.meta.url),'utf8')).join('\n');
+const portal=['tickets-protocol.gs','tickets-portal.gs','tickets-folios.gs','tickets-creation.gs','tickets-service-policy.gs','tickets-service-flow.gs'].map(name=>fs.readFileSync(new URL('./'+name,import.meta.url),'utf8')).join('\n');
 const dispatcher=`
 // Entradas originales preservadas; las operaciones administrativas requieren firma.
 function doPost(e) {

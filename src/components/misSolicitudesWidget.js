@@ -25,7 +25,7 @@ export async function renderMisSolicitudesWidget(container, userSession) {
     <div class="card-container-wide mis-solicitudes-card">
       <div class="solicitud-topbar">
         <a href="#inicio" class="card-top-nav-link">← Volver al Inicio</a>
-        <a href="#solicitudes" class="solicitud-secondary-link">+ Crear Nueva Solicitud</a>
+        <a href="#validar-solicitudes" class="solicitud-secondary-link">Seguimiento y validar solución</a><a href="#mis-tareas" class="solicitud-secondary-link">Mis tareas asignadas</a><a href="#solicitudes" class="solicitud-secondary-link">+ Crear Nueva Solicitud</a>
       </div>
 
       <div class="mis-solicitudes-header">
@@ -157,7 +157,7 @@ function renderTable(container, tickets, userEmail) {
     <div class="card-container-wide mis-solicitudes-card">
       <div class="solicitud-topbar">
         <a href="#inicio" class="card-top-nav-link">← Volver al Inicio</a>
-        <a href="#solicitudes" class="solicitud-secondary-link">+ Crear Nueva Solicitud</a>
+        <a href="#validar-solicitudes" class="solicitud-secondary-link">Seguimiento y validar solución</a><a href="#mis-tareas" class="solicitud-secondary-link">Mis tareas asignadas</a><a href="#solicitudes" class="solicitud-secondary-link">+ Crear Nueva Solicitud</a>
       </div>
 
       <div class="mis-solicitudes-header">
@@ -208,7 +208,7 @@ function renderError(container, message, userEmail = '') {
     <div class="card-container-wide mis-solicitudes-card">
       <div class="solicitud-topbar">
         <a href="#inicio" class="card-top-nav-link">← Volver al Inicio</a>
-        <a href="#solicitudes" class="solicitud-secondary-link">+ Crear Nueva Solicitud</a>
+        <a href="#validar-solicitudes" class="solicitud-secondary-link">Seguimiento y validar solución</a><a href="#mis-tareas" class="solicitud-secondary-link">Mis tareas asignadas</a><a href="#solicitudes" class="solicitud-secondary-link">+ Crear Nueva Solicitud</a>
       </div>
       <div class="mis-solicitudes-error">
         <strong>⚠️ No pudimos cargar Mis Solicitudes.</strong>

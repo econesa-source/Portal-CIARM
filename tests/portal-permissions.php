@@ -26,18 +26,18 @@ $functions = [
 ];
 $matrix = [
     ['Código función','Tarjeta / función','PORTAL_USUARIO','TICKETS_GESTION'],
-    ['INT_TARJETA','',true,true],
-    ['INT_CREAR','',true,false],
-    ['INT_GESTION','',true,true],
-    ['COMPRAS_OC','',true,true]
+    ['INT_TARJETA','','TRUE','TRUE'],
+    ['INT_CREAR','','TRUE','FALSE'],
+    ['INT_GESTION','','TRUE','TRUE'],
+    ['COMPRAS_OC','','TRUE','TRUE']
 ];
 $grants = ciarm_rbac_permissions(['PORTAL_USUARIO','TICKETS_GESTION'],$roleRows,$functions,$matrix);
 ensure(in_array('INT_TARJETA',$grants,true), 'Card');
 ensure(in_array('INT_CREAR',$grants,true), 'Create');
 ensure(in_array('INT_GESTION',$grants,true), 'Manage');
 ensure(!in_array('COMPRAS_OC',$grants,true), 'Internal prohibited');
-$matrix[1][3] = false; // Tickets role without its mother card
-$matrix[3][2] = false; // User does not manage
+$matrix[1][3] = 'FALSE'; // Tickets role without its mother card
+$matrix[3][2] = 'FALSE'; // User does not manage
 $denied = ciarm_rbac_permissions(['PORTAL_USUARIO','TICKETS_GESTION'],$roleRows,$functions,$matrix);
 ensure(!in_array('INT_GESTION',$denied,true), 'Parent must be granted within same role');
 echo "DM05 permissions: tests passed\n";

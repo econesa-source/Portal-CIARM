@@ -2,7 +2,7 @@ import {ticketDate} from './ticketDate.js';
 import {getAdminContext,listAdminTickets,getAdminCatalogs,getAdminTicket,assignAdminTicket,escapeText as esc,safeAttachmentUrl,filterTickets} from '../services/ticketsAdminService.js';
 
 const pendingOperations=new Map();
-const messages={FORBIDDEN:'No tienes permiso para administrar solicitudes internas.',CONFLICT:'Otro administrador modificó esta solicitud. Tu edición se conserva; carga la versión actual antes de guardar.',PENDING_OPERATION:'Hay una asignación pendiente de confirmar. Reintenta la operación original.',VALIDATION:'Revisa responsable, prioridad y fecha de compromiso.',NOT_FOUND:'La solicitud ya no está disponible.',DUPLICATE_ID:'El folio está duplicado en la fuente. Requiere revisión.',OPERATION_REUSED:'La operación ya está registrada con otros datos.',BUSY:'El sistema está ocupado. Reintenta en unos segundos.'};
+const messages={SERVICE_MIGRATION_REQUIRED:'Esta tarea histórica ya está en ejecución o espera. Requiere incorporación explícita al seguimiento; no se modificaron sus datos.',RESPONSIBLE_ACCOUNT:'Configura el correo activo de este responsable en Configuración del servicio.',FORBIDDEN:'No tienes permiso para administrar solicitudes internas.',CONFLICT:'Otro administrador modificó esta solicitud. Tu edición se conserva; carga la versión actual antes de guardar.',PENDING_OPERATION:'Hay una asignación pendiente de confirmar. Reintenta la operación original.',VALIDATION:'Revisa responsable, prioridad y fecha de compromiso.',NOT_FOUND:'La solicitud ya no está disponible.',DUPLICATE_ID:'El folio está duplicado en la fuente. Requiere revisión.',OPERATION_REUSED:'La operación ya está registrada con otros datos.',BUSY:'El sistema está ocupado. Reintenta en unos segundos.'};
 function errorMessage(error){return messages[error.code]||'No se pudo confirmar la operación. Reintenta en unos segundos.';}
 
 export async function render(container) {
@@ -26,7 +26,7 @@ export async function render(container) {
  const groupValue=(t,key)=>String(t[key]||'').trim()||({responsable:'Sin responsable',prioridad:'Sin prioridad',tipo:'Sin tipo',area:'Sin área'})[key];
  const columns='<tr><th scope="col">Solicitud</th><th scope="col">Fecha de solicitud</th><th scope="col">Fecha de asignación</th><th scope="col">Solicitante</th><th scope="col">Estado</th><th scope="col">Urgencia solicitada</th><th scope="col">Prioridad asignada</th><th scope="col">Responsable</th><th scope="col">Fecha de compromiso</th><th scope="col">Acción</th></tr>';
  container.innerHTML=`<section class="ticket-admin">
-  <header class="ticket-executive-heading"><div><h1>Administrar solicitudes internas</h1><p>Estado general y solicitudes que requieren atención.</p></div></header><p id="ticket-notice" class="ticket-notice" role="status" aria-live="polite"></p>
+  <nav class="ticket-service-nav"><a href="#mis-tareas">Mis tareas</a><a href="#seguimiento-servicio">Cumplimiento del servicio</a><a href="#config-servicio">Configuración del servicio</a></nav><header class="ticket-executive-heading"><div><h1>Administrar solicitudes internas</h1><p>Estado general y solicitudes que requieren atención.</p></div></header><p id="ticket-notice" class="ticket-notice" role="status" aria-live="polite"></p>
   <section id="ticket-dashboard" class="ticket-panel" aria-labelledby="ticket-dashboard-title">
    <div class="ticket-panel-heading"><h2 id="ticket-dashboard-title">Estado de las solicitudes</h2><span id="ticket-total" class="ticket-counter"></span></div>
    <div id="ticket-states" class="ticket-state-grid"></div>

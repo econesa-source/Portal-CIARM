@@ -5,6 +5,8 @@
 
 import { getAuthenticatedUser, logout } from './services/authService.js';
 import { renderLoginWidget } from './components/loginWidget.js';
+import { getPortalPermissions } from './services/portalPermissionsClient.js';
+import { applyDashboardAccess, allowedRoute } from './components/dashboardAccess.js';
 
 const APP_VERSION = '18.6.0';
 
@@ -147,6 +149,12 @@ async function router() {
 
   if (routes[hash]) {
     try {
+      const permissions = await getPortalPermissions();
+      if (navigationId !== latestNavigation) return;
+      if (!allowedRoute(hash, permissions)) {
+        mainContainer.innerHTML = '<p role="alert">Esta función no está habilitada para tu perfil.</p>';
+        return;
+      }
       const module = await routes[hash]();
       if (navigationId !== latestNavigation) return;
       mainContainer.innerHTML = '';
@@ -154,7 +162,14 @@ async function router() {
       if (typeof module.renderMisSolicitudesWidget === 'function') {
         module.renderMisSolicitudesWidget(mainContainer, user);
       } else if (typeof module.render === 'function') {
-        module.render(mainContainer, user);
+        if (hash === '#inicio') mainContainer.style.visibility = 'hidden';
+        try {
+          await module.render(mainContainer, { ...user, dm05: permissions });
+          if (navigationId !== latestNavigation) return;
+          if (hash === '#inicio') applyDashboardAccess(mainContainer, permissions);
+        } finally {
+          mainContainer.style.visibility = '';
+        }
       }
     } catch (error) {
       console.error(`Error al cargar ${hash}:`, error);

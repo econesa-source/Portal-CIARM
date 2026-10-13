@@ -123,3 +123,16 @@ Los datos de entrada del navegador **nunca incluyen** correo del actor, roles, f
 **Paso 12:** publicación de bibliotecas/deployments, configuración segura y `clasp push` en los originales.
 
 **Paso 13:** pruebas reales y negativas del circuito completo. **Paso 14:** piloto y operación.
+
+
+## 9. Estado posterior a la autorización explícita — 13/10/2026
+
+La Dirección General **autorizó** expresamente actualizar RBAC y preparar el puente autenticado PHP → HT06, preservando permisos y reglas actuales. Avance comprobado:
+
+1. **Aplicado en Drive, originales HT06/HT10:** `RBAC.gs` HT06 `1qh-Rkl_DWYf6ZE5xMAycEkY6w3Sm7tXb`, HT10 `1N6L5u5i-AUFT28i-Bj31F58WR66qW8TE`. Ahora obtienen asignaciones de `DM03/Permisos de usuario!D` y validan roles de DM05, bloqueando códigos inválidos, inactivos o duplicados, sin conceder derechos por defecto. `Auth.gs` HT06 `1YaMWXQwKoWVk-y0Dnna0VL3rC3DUWfAD` y HT10 `1-cTCpm-eiKvbZ1jkw35NfAZg7Ds3bt_A` actualizaron textos desfasados sobre la autoridad. Todos los originales releídos y sus IDs preservados.
+2. **QA RBAC 11/11, simulación aislada:** múltiples roles, unión de capacidades, rechazo de inactivos, código inexistente, rol repetido, rol inactivo, esquema DM03 incorrecto, correo duplicado y función interna indebida. HT06/HT10 `RBAC.gs` quedaron byte a byte iguales al releerse y no consultan `ROLES_USUARIO`.
+3. **Preparado en rama GitHub (no main):** nuevos originales del extremo PHP Portal `compras-lib.php` y `compras-api.php` aplican sesión, chequeos de DM05 habilitado, origen exacto, CORS restringido, CSRF, whitelists y sobre HMAC con una **clave independiente de Tickets**, cuyo valor no está en repositorio. El transporte está **deshabilitado** salvo `CIARM_COMPRAS_ENABLED=1`; también requiere `CIARM_COMPRAS_ORIGIN`, `CIARM_COMPRAS_GAS_URL`, `CIARM_COMPRAS_HMAC_KEY` y el despliegue de HT06. No confundir existencia en GitHub con publicación NEUBOX.
+4. **BLOQUEO DE HERRAMIENTA:** la creación de `PortalBridge.gs` en carpeta original Scripts HT06 fue rechazada por controles de seguridad del conector Drive. El archivo **no existe**; se verificó la carpeta. No se intentó eludir el rechazo creando fuentes paralelas. Por ello `doPost` firmado, identidad por actor validado en GAS, control de nonce y propagación autorizada hacia APIs originales aún **NO están implementados**. No se modificó `Session.getActiveUser()` en HT06 porque sería peligroso sin receptor firmado.
+5. **Pruebas en Portal:** `tests/compras-contract.test.mjs` 12/12 en entorno JS aislado sobre source releído del repositorio. Los archivos PHP se releyeron de GitHub, pero PHP lint, pruebas HTTP, Apps Script y validaciones criptográficas end-to-end **NO se ejecutaron**.
+
+**Estado veraz:** RBAC de ambos módulos actualizado y preparado para `clasp push` del paso 12; puente PHP escrito en rama feature e inactivo; GAS bridge pendiente por bloqueo, por lo que el paso 10 NO puede certificarse completo ni abrir el Portal a Compras. El siguiente paso requiere restablecer un mecanismo de escritura autorizado para crear el nuevo original `PortalBridge.gs` dentro de Scripts HT06, o resolución del bloqueo del conector; no crear sustitutos ni activar configuraciones mientras tanto.

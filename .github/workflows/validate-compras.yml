@@ -1,0 +1,24 @@
+name: Validación SCGRC Compras (rama no productiva)
+on:
+  push:
+    branches:
+      - feature/scgrc-compras-contrato-v1
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qa-compras:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Suite Node del Portal
+        run: npm ci && npm test
+      - name: Lint PHP del puente y permisos
+        run: |
+          php -l compras-api.php
+          php -l compras-lib.php
+          php -l portal-permissions-lib.php
+          php -l auth-lib.php

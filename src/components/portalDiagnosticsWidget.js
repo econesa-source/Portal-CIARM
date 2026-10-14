@@ -74,7 +74,7 @@ export async function render(container) {
       'Operación                Navegador  Identidad   Permisos   Puente GAS   PHP total',
       '--------------------------------------------------------------------------'
     ];
-    const print = () => {timings.textContent=output.join('\\n')};
+    const print = () => {timings.textContent=output.join('\n')};
     print();
     const checks=[
       ['Permisos tickets','action=context'],
@@ -91,7 +91,7 @@ export async function render(container) {
         const result=await measured(label,query);
         output[output.length-1]=result.line;
         if(label==='Listado de tickets' && Array.isArray(result.data)) {
-          const id=result.data.find(t => /^TKT-\\d{4}-\\d+$/.test(String(t?.id || '')))?.id;
+          const id=result.data.find(t => /^TKT-\d{4}-\d+$/.test(String(t?.id || '')))?.id;
           if(id) firstTicket=id;
         }
         print();

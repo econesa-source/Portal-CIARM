@@ -46,8 +46,10 @@ export function allowedRoute(hash, response) {
   if (!permissions) return false;
   if (hash === '#solicitudes') return canSeeAction(permissions, 'solicitudes', 'crear');
   if (hash === '#mis-solicitudes') return canSeeAction(permissions, 'solicitudes', 'mis');
+  // Las pantallas administrativas solicitan GET tickets-api.php?action=context
+  // y el servidor autoriza INT_GESTION desde DM05. No duplicar esta decisión.
   if (hash === '#admin-solicitudes' || hash === '#vision-gerencial') {
-    return canSeeAction(permissions, 'solicitudes', 'gestionar');
+    return true;
   }
   return true; // el resto de rutas conserva validaciones específicas del backend
 }

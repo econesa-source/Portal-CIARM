@@ -1,4 +1,5 @@
-import {serviceContext,serviceList,serviceDetail} from '../services/ticketsServiceWorkflow.js';
+import {serviceList,serviceDetail} from '../services/ticketsServiceWorkflow.js';
+import {getAdminContext} from '../services/ticketsAdminService.js';
 import {escapeText as esc,safeAttachmentUrl} from '../services/ticketsAdminService.js';
 import {managementSummary,needsAssignment} from '../services/ticketsManagementMetrics.js';
 import {ticketDate} from './ticketDate.js';
@@ -10,7 +11,7 @@ export async function render(container){
  window.addEventListener('hashchange',()=>{controller.abort();dialog?.close();},{once:true});
  container.innerHTML='<section class="ticket-admin"><p role="status">Consultando visión gerencial…</p></section>';
  try{
-  const context=await serviceContext(signal);if(!active())return;if(!context.canAdmin)throw Error('Acceso restringido a administradores.');
+  const context=await getAdminContext(signal);if(!active())return;if(!context.canAdmin)throw Error('Acceso restringido a administradores.');
   const data=await serviceList('all',signal);if(!active())return;
   const filters={days:30};let summary;
   const nameMap=new Map();for(const r of data){if(r.service?.email&&r.ticket.responsable)nameMap.set(r.service.email,r.ticket.responsable);}

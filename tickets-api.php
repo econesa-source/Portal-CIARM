@@ -47,8 +47,19 @@ try {
   else $payload=$action==='detail'?['id'=>$input['id']??null]:[];
   if($action==='detail'&&!is_string($payload['id']))throw new RuntimeException('VALIDATION');
  }
+ // La respuesta serviceContext ya proviene de un puente autenticado.
+ // Entregar el CSRF en esta respuesta evita pedir primero selfContext
+ // (que generaba otra lectura a DM03 y otra ejecución Apps Script).
+ $serviceContextCsrf = null;
+ if($action==='serviceContext'){
+  if(empty($_SESSION['ciarm_ticket_csrf']))$_SESSION['ciarm_ticket_csrf']=bin2hex(random_bytes(32));
+  $serviceContextCsrf=$_SESSION['ciarm_ticket_csrf'];
+ }
  session_write_close();
  $result=$selfService?ciarm_portal_bridge($user,$action,$payload):ciarm_ticket_bridge($user,$action,$payload);
+ if($action==='serviceContext'&&($result['ok']??false)===true&&is_array($result['data']??null)){
+  $result['data']['csrfToken']=$serviceContextCsrf;
+ }
  ciarm_json_response(($result['ok']??false)===true?200:ticket_http_status((string)($result['code']??'')),$result);
 } catch(JsonException $error){ciarm_json_response(422,['ok'=>false,'code'=>'VALIDATION']);}
 catch(Throwable $error){

@@ -12,11 +12,30 @@ function ciarm_portal_collaborator(array $rows,string $email): ?array {
     $r=$matches[0];return ['correo'=>$email,'nombre'=>trim(($r[$columns['Nombre']]??'').' '.($r[$columns['Apellido']]??'')),'area'=>trim((string)($r[$columns['Área']]??''))];
 }
 function ciarm_portal_current_collaborator(array $user): array {
+    // Resuelve identidad en DM03 una vez por sesión durante un intervalo corto:
+    // no vuelve a intercambiar un JWT OAuth ni a leer toda la tabla en cada clic.
+    // Las autorizaciones DM05 se siguen verificando de forma independiente.
+    $email = strtolower(trim((string)($user['correo'] ?? '')));
+    if ($email === '') throw new RuntimeException('FORBIDDEN');
+    $cached = $_SESSION['ciarm_ticket_collaborator'] ?? null;
+    if (session_status() === PHP_SESSION_ACTIVE && is_array($cached)
+        && ($cached['email'] ?? '') === $email
+        && (int)($cached['expires'] ?? 0) > time()
+        && is_array($cached['person'] ?? null)) {
+        return $cached['person'];
+    }
     $raw=@file_get_contents(ciarm_private_path('service-account.json'));if($raw===false)throw new RuntimeException('CONFIGURATION');
     $account=json_decode($raw,true,512,JSON_THROW_ON_ERROR);if(!is_array($account))throw new RuntimeException('CONFIGURATION');
     $response=ciarm_http_json('https://sheets.googleapis.com/v4/spreadsheets/'.CIARM_DM03_SPREADSHEET_ID.'/values/'.rawurlencode(CIARM_DM03_RANGE),['headers'=>['Accept: application/json','Authorization: Bearer '.ciarm_google_access_token($account)]]);
     if($response['status']!==200)throw new RuntimeException('UPSTREAM');
-    $person=ciarm_portal_collaborator($response['body']['values']??[],(string)($user['correo']??''));if($person===null)throw new RuntimeException('FORBIDDEN');return $person;
+    $person=ciarm_portal_collaborator($response['body']['values']??[],$email);
+    if($person===null)throw new RuntimeException('FORBIDDEN');
+    if(session_status() === PHP_SESSION_ACTIVE) {
+        $_SESSION['ciarm_ticket_collaborator']=[
+            'email'=>$email, 'expires'=>time()+45, 'person'=>$person
+        ];
+    }
+    return $person;
 }
 function ciarm_portal_ini_bytes(string $value): int {
     $value=trim($value);if($value==='-1')return -1;

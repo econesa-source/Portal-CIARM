@@ -93,7 +93,19 @@ export async function render(container) {
   if(state||group){grouping=state?{key:'estado',value:state.dataset.state}:{key:container.querySelector('#ticket-group').value,value:group.dataset.groupValue};resetFilters();paint();const title=container.querySelector('#ticket-subset-title');title.focus({preventScroll:true});container.querySelector('#ticket-subset').scrollIntoView?.({behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});}
  });
  async function openTicket(id){
-  const request=++selection;returnId=id;detail.innerHTML='<p role="status">Cargando detalle…</p>';
+  const request=++selection;returnId=id;
+  // El listado ya contiene una instantánea. Mostrar lectura de inmediato,
+  // pero revalidar el ticket y su versión antes de habilitar ediciones.
+  const preview=tickets.find(t=>t.id===id);
+  detail.innerHTML=preview
+    ? `<section class="ticket-summary" aria-label="Vista preliminar de solicitud">
+        <h2>${esc(preview.id)}</h2>
+        <p><strong>Solicitante:</strong> ${esc(preview.solicitante)}</p>
+        <p><strong>Estado:</strong> ${esc(preview.estado)} · <strong>Responsable:</strong> ${esc(preview.responsable||'Sin asignar')}</p>
+        <p><strong>Solicitud:</strong> ${esc(preview.descripcion)}</p>
+        <p role="status">Verificando versión actual antes de habilitar la asignación…</p>
+       </section>`
+    : '<p role="status">Cargando detalle…</p>';
   container.querySelector('#ticket-notice').textContent='';
   if(!modal.open)modal.showModal();
   try{const ticket=await getAdminTicket(id,signal);if(current()&&request===selection&&modal.open){const index=tickets.findIndex(t=>t.id===id);if(index>=0)tickets[index]=ticket;paint();paintDetail(ticket);detail.querySelector('[name=responsable]')?.focus();}}catch(error){if(signal.aborted)return;if(await handleSession(error))return;if(current()&&request===selection&&modal.open)detail.innerHTML=`<p role="alert">${esc(errorMessage(error))}</p>`;}

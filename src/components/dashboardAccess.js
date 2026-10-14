@@ -34,6 +34,11 @@ export function applyDashboardAccess(container, response) {
       if (!canSeeAction(permissions, card, 'gestionar')) {
         element.querySelector('a[href="#admin-solicitudes"]')?.remove();
       }
+    } else if (card === 'ib') {
+      if (!canSeeAction(permissions, 'ib', 'acceder')) {
+        element.querySelector('a[href="#ib"]')?.remove();
+        element.querySelector('.exact-btn-disabled')?.remove();
+      }
     } else if (!canSeeAction(permissions, card, PENDING_BUTTON[card])) {
       element.querySelector('.exact-btn-disabled')?.remove();
     }
@@ -50,6 +55,9 @@ export function allowedRoute(hash, response) {
   // y el servidor autoriza INT_GESTION desde DM05. No duplicar esta decisión.
   if (hash === '#admin-solicitudes' || hash === '#vision-gerencial') {
     return true;
+  }
+  if (hash === '#ib') {
+    return canSeeAction(permissions, 'ib', 'acceder');
   }
   return true; // el resto de rutas conserva validaciones específicas del backend
 }

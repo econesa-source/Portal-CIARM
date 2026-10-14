@@ -26,8 +26,8 @@ test('Rutas de solicitudes se protegen en modo DM05 activo', () => {
 });
 test('Modo legado respeta el Portal vigente durante la transición', () => {
   assert.equal(allowedRoute('#solicitudes', { verified: false, enforced: false, codes: [] }), true);
+  assert.equal(allowedRoute('#ib', { verified: false, enforced: false, codes: [] }), true);
 });
-
 test('INT_GESTION se verifica en el servidor en ambas rutas administrativas', async () => {
   const { readFileSync } = await import('node:fs');
   const backend = readFileSync('tickets-lib.php','utf8');
@@ -40,4 +40,15 @@ test('INT_GESTION se verifica en el servidor en ambas rutas administrativas', as
   assert.match(admin, /if\(!context\.canAdmin\)/);
   assert.match(gerencial, /context=await getAdminContext\(signal\)/);
   assert.match(gerencial, /if\(!context\.canAdmin\)/);
+});
+
+test('Ruta de IB se protege en modo DM05 activo', () => {
+  const responseWithoutIb = { verified: true, enforced: true, codes: ['INT_TARJETA'] };
+  assert.equal(allowedRoute('#ib', responseWithoutIb), false);
+  const responseWithCardOnly = { verified: true, enforced: true, codes: ['IB_TARJETA'] };
+  assert.equal(allowedRoute('#ib', responseWithCardOnly), false);
+  const responseWithActionOnly = { verified: true, enforced: true, codes: ['IB_ACCEDER'] };
+  assert.equal(allowedRoute('#ib', responseWithActionOnly), false);
+  const responseWithIb = { verified: true, enforced: true, codes: ['IB_TARJETA', 'IB_ACCEDER'] };
+  assert.equal(allowedRoute('#ib', responseWithIb), true);
 });

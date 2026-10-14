@@ -19,7 +19,8 @@ const routes = {
   '#validar-solicitudes': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
   '#seguimiento-servicio': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
   '#config-servicio': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
-  '#admin-solicitudes': () => import(`./components/adminSolicitudesWidget.js?v=${APP_VERSION}`)
+  '#admin-solicitudes': () => import(`./components/adminSolicitudesWidget.js?v=${APP_VERSION}`),
+  '#ib': () => import(`./components/ibWidget.js?v=${APP_VERSION}`)
 };
 
 function isMobileViewport() {

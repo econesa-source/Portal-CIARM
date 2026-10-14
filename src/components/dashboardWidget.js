@@ -375,7 +375,7 @@ export function render(container, userSession) {
           <span class="exact-card-category">BACHILLERATO INTERNACIONAL</span>
           <h3 class="exact-card-title">IB</h3>
           <p class="exact-card-desc">Accede a documentación, programas, recursos y herramientas correspondientes a tu función.</p>
-          <span class="exact-btn light exact-btn-disabled" aria-disabled="true">Acceso Módulo IB</span>
+          <a href="#ib" class="exact-btn gold">Acceso Módulo IB</a>
         </div>
       </div>
     </div>

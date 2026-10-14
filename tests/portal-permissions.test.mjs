@@ -19,9 +19,25 @@ test('Rutas de solicitudes se protegen en modo DM05 activo', () => {
   const response = { verified: true, enforced: true, codes: ['INT_TARJETA','INT_MIS'] };
   assert.equal(allowedRoute('#mis-solicitudes', response), true);
   assert.equal(allowedRoute('#solicitudes', response), false);
-  assert.equal(allowedRoute('#admin-solicitudes', response), false);
+  // No hay segunda política local: cada módulo exige contexto autenticado de servidor.
+  assert.equal(allowedRoute('#admin-solicitudes', response), true);
+  assert.equal(allowedRoute('#vision-gerencial', response), true);
   assert.equal(allowedRoute('#inicio', response), true);
 });
 test('Modo legado respeta el Portal vigente durante la transición', () => {
   assert.equal(allowedRoute('#solicitudes', { verified: false, enforced: false, codes: [] }), true);
+});
+
+test('INT_GESTION se verifica en el servidor en ambas rutas administrativas', async () => {
+  const { readFileSync } = await import('node:fs');
+  const backend = readFileSync('tickets-lib.php','utf8');
+  const admin = readFileSync('src/components/adminSolicitudesWidget.js','utf8');
+  const gerencial = readFileSync('src/components/ticketsManagementWidget.js','utf8');
+  const api = readFileSync('tickets-api.php','utf8');
+  assert.match(backend, /ciarm_rbac_has_function\(\$sessionUser, 'INT_GESTION'\)/);
+  assert.match(api, /ciarm_ticket_context\(\$user\)/);
+  assert.match(admin, /context=await getAdminContext\(signal\)/);
+  assert.match(admin, /if\(!context\.canAdmin\)/);
+  assert.match(gerencial, /context=await getAdminContext\(signal\)/);
+  assert.match(gerencial, /if\(!context\.canAdmin\)/);
 });

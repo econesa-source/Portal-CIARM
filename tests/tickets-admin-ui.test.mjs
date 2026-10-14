@@ -114,3 +114,20 @@ test('detail preview appears immediately while current version is being checked'
  assert.ok(detail.querySelector('#ticket-assignment'),'form appears once fresh version is verified');
  s.dom.window.close();
 });
+
+test('admin dashboard renders without waiting for assignment catalogs',async()=>{
+ const s=setup('TKT-2026-00015');
+ const original=globalThis.fetch;
+ let catalogCalls=0;
+ globalThis.fetch=(url,options)=>{
+   if(String(url).includes('action=catalogs'))catalogCalls++;
+   return original(url,options);
+ };
+ await render(s.root);
+ assert.match(s.root.textContent,/Estado de las solicitudes/);
+ assert.equal(catalogCalls,0,'catalog not needed to display dashboard');
+ s.root.querySelector('[data-id]').click();
+ await s.flush();
+ assert.equal(catalogCalls,1,'catalog loaded once when editing');
+ s.dom.window.close();
+});

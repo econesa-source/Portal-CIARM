@@ -15,7 +15,7 @@ export async function render(container) {
  try{
   context=await getAdminContext(signal);if(!current())return;
   if(!context.canAdmin){container.innerHTML=`<section class="ticket-admin"><h1>Administrar solicitudes internas</h1><p role="alert">${messages.FORBIDDEN}</p></section>`;return;}
-  [tickets,catalogs]=await Promise.all([listAdminTickets(signal),getAdminCatalogs(signal)]);if(!current())return;
+  tickets=await listAdminTickets(signal);if(!current())return;
  }catch(error){if(signal.aborted)return;if(await handleSession(error))return;container.innerHTML=`<section class="ticket-admin"><h1>Administrar solicitudes internas</h1><p role="alert">${esc(errorMessage(error))}</p><button type="button" id="tickets-retry">Reintentar</button></section>`;container.querySelector('#tickets-retry').onclick=()=>render(container);return;}
  const filters={};let grouping=null;
  const knownStates=['NUEVO','ASIGNADO','EN PROCESO','EN ESPERA','RESUELTO','CERRADO','CANCELADO'];
@@ -92,6 +92,17 @@ export async function render(container) {
   const state=e.target.closest('[data-state]');const group=e.target.closest('[data-group-value]');
   if(state||group){grouping=state?{key:'estado',value:state.dataset.state}:{key:container.querySelector('#ticket-group').value,value:group.dataset.groupValue};resetFilters();paint();const title=container.querySelector('#ticket-subset-title');title.focus({preventScroll:true});container.querySelector('#ticket-subset').scrollIntoView?.({behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});}
  });
+ // El catálogo se utiliza únicamente al abrir una asignación.
+ // Una sola lectura por pantalla, con reintento ante un fallo; no retrasa el dashboard.
+ let catalogPromise;
+ function ensureCatalogs(){
+  if(catalogs)return Promise.resolve(catalogs);
+  if(!catalogPromise){
+   catalogPromise=getAdminCatalogs(signal).then(result=>{catalogs=result;return result;})
+    .catch(error=>{catalogPromise=null;throw error;});
+  }
+  return catalogPromise;
+ }
  async function openTicket(id){
   const request=++selection;returnId=id;
   // El listado ya contiene una instantánea. Mostrar lectura de inmediato,
@@ -108,7 +119,7 @@ export async function render(container) {
     : '<p role="status">Cargando detalle…</p>';
   container.querySelector('#ticket-notice').textContent='';
   if(!modal.open)modal.showModal();
-  try{const ticket=await getAdminTicket(id,signal);if(current()&&request===selection&&modal.open){const index=tickets.findIndex(t=>t.id===id);if(index>=0)tickets[index]=ticket;paint();paintDetail(ticket);detail.querySelector('[name=responsable]')?.focus();}}catch(error){if(signal.aborted)return;if(await handleSession(error))return;if(current()&&request===selection&&modal.open)detail.innerHTML=`<p role="alert">${esc(errorMessage(error))}</p>`;}
+  try{const [ticket]=await Promise.all([getAdminTicket(id,signal),ensureCatalogs()]);if(current()&&request===selection&&modal.open){const index=tickets.findIndex(t=>t.id===id);if(index>=0)tickets[index]=ticket;paint();paintDetail(ticket);detail.querySelector('[name=responsable]')?.focus();}}catch(error){if(signal.aborted)return;if(await handleSession(error))return;if(current()&&request===selection&&modal.open)detail.innerHTML=`<p role="alert">${esc(errorMessage(error))}</p>`;}
  }
  function paintDetail(ticket){
   const links=String(ticket.adjuntos||'').split(/\s+/).filter(Boolean).map(value=>{const safe=safeAttachmentUrl(value);return safe?`<li><a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">Abrir adjunto en Google Drive</a></li>`:`<li>${esc(value)}</li>`;}).join('');

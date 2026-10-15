@@ -12,7 +12,7 @@ export const COMPRAS_OPERATIONS = Object.freeze({
   recepcionesAsignadas: Object.freeze({method:'GET', fields:[]}),
   prorrogasPendientes: Object.freeze({method:'GET', fields:[]}),
   excepcionesPendientes: Object.freeze({method:'GET', fields:[]}),
-  crearSolicitud: Object.freeze({method:'POST', fields:['tipoSolicitud','centroCostos','fechaGeneral','responsableRecepcion','areaContexto','renglones','adjuntosVinculos','claveEnvio']}),
+  crearSolicitud: Object.freeze({method:'POST', fields:['tipoSolicitud','centroCostos','fechaGeneral','responsableRecepcion','areaContexto','renglones','adjuntosVinculos','adjuntoArchivo','claveEnvio']}),
   elegirAlternativa: Object.freeze({method:'POST', fields:['idSolicitud','idAlternativa','motivo']}),
   decidirSolicitud: Object.freeze({method:'POST', fields:['idSolicitud','decision','motivo','reasignacion']}),
   declararRecepcion: Object.freeze({method:'POST', fields:['idSolicitud','idRenglon','cantidadRecibida','cantidadConforme','fechaRecepcion','observacion','claveEnvio']}),
@@ -39,7 +39,7 @@ export function validateComprasRequest(action,payload={},method) {
   if (!plain(payload)) fail('INVALID_PAYLOAD');
   const keys=Object.keys(payload);
   if(keys.some(k=>UNSAFE_FIELDS.has(k)||!schema.fields.includes(k))) fail('UNEXPECTED_FIELD');
-  if(JSON.stringify(payload).length>32768) fail('PAYLOAD_TOO_LARGE');
+  if(JSON.stringify(payload).length>(action==='crearSolicitud'&&payload.adjuntoArchivo?2900000:32768)) fail('PAYLOAD_TOO_LARGE');
   if(schema.method==='GET') return {version:COMPRAS_CONTRACT_VERSION,action,payload:{}};
   if(action==='crearSolicitud'){
     if(!nonBlank(payload.tipoSolicitud)||!nonBlank(payload.centroCostos)||!nonBlank(payload.fechaGeneral)||
@@ -48,6 +48,10 @@ export function validateComprasRequest(action,payload={},method) {
     if(!/^[A-Za-z0-9_-]{16,100}$/.test(payload.claveEnvio))fail('INVALID_IDEMPOTENCY_KEY');
     if(payload.renglones.some(r=>!plain(r)||!nonBlank(r.descripcion)||!(Number(r.cantidad)>0)||
       !nonBlank(r.unidad)||Object.keys(r).some(k=>!['descripcion','cantidad','unidad','importeDeclarado'].includes(k))))fail('INVALID_LINES');
+    if(payload.adjuntoArchivo!==undefined){
+      const a=payload.adjuntoArchivo;
+      if(!plain(a)||Object.keys(a).sort().join(',')!=='base64,mime,nombre'||!maxString(a.nombre,180)||!nonBlank(a.nombre)||!['application/pdf','image/jpeg','image/png'].includes(a.mime)||typeof a.base64!=='string'||a.base64.length>2796204||!a.base64.length||!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(a.base64))fail('INVALID_ATTACHMENT');
+    }
     if(payload.areaContexto!==undefined&&!maxString(payload.areaContexto,200))fail('INVALID_CONTEXT');
     if(payload.adjuntosVinculos!==undefined&&!maxString(payload.adjuntosVinculos,4096))fail('INVALID_REFERENCE');
   }else if(action==='elegirAlternativa'){

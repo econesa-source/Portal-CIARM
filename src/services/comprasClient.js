@@ -15,8 +15,17 @@ export async function requestCompras(action,payload={},signal){
   const init={method,credentials:'same-origin',cache:'no-store',signal,headers:{'Accept':'application/json'}};
   const url='/compras-api.php'+(method==='GET'?'?action='+encodeURIComponent(action):'');
   if(method==='POST'){
-    init.headers['Content-Type']='application/json';
-    init.body=JSON.stringify({action:contract.action,payload:contract.payload,csrfToken});
+    const {adjuntoArchivo,...metadata}=contract.payload;
+    if(adjuntoArchivo){
+      const binary=atob(adjuntoArchivo.base64);
+      const bytes=Uint8Array.from(binary,c=>c.charCodeAt(0));
+      init.body=new FormData();
+      init.body.append('request',JSON.stringify({action:contract.action,payload:metadata,csrfToken}));
+      init.body.append('adjunto',new Blob([bytes],{type:adjuntoArchivo.mime}),adjuntoArchivo.nombre);
+    }else{
+      init.headers['Content-Type']='application/json';
+      init.body=JSON.stringify({action:contract.action,payload:contract.payload,csrfToken});
+    }
   }
   let response;
   try{response=await fetch(url,init);}

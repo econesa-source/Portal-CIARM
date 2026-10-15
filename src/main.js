@@ -1,6 +1,6 @@
 /**
  * Portal CIARM - Router SPA y Guardián de Autenticación
- * Versión: 18.7.12
+ * Versión: 18.7.13
  */
 
 import { comprasUiEnabled, clearComprasClient } from './services/comprasClient.js';
@@ -9,7 +9,7 @@ import { renderLoginWidget } from './components/loginWidget.js';
 import { getPortalPermissions, clearPortalPermissionsCache } from './services/portalPermissionsClient.js';
 import { applyDashboardAccess, allowedRoute } from './components/dashboardAccess.js';
 
-const APP_VERSION = '18.7.12';
+const APP_VERSION = '18.7.13';
 
 const routes = {
   '#compras': () => import(`./components/comprasWidget.js?v=${APP_VERSION}`),

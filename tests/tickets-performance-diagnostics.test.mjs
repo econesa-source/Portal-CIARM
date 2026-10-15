@@ -75,3 +75,29 @@ test('activar lectura rápida requiere verificación y nunca envía modificacion
  assert.ok(calls.every(x=>x.opts.method==='GET'&&x.opts.credentials==='same-origin'));
  dom.window.close();
 });
+
+test('HTTP 401 al validar lectura rápida se informa como sesión vencida, no como diferencia de datos',async()=>{
+ const dom=new JSDOM('<main></main>',{url:'https://portal2.ciarm.edu.mx/#diagnostico-permisos'});
+ Object.assign(globalThis,{document:dom.window.document,window:dom.window});
+ const calls=[];
+ globalThis.fetch=async(url,opts)=>{
+   calls.push(url);
+   if(url==='/auth-session.php')return {ok:true,status:200,json:async()=>({ok:true,user:{correo:'user@ciarm.edu.mx'}})};
+   if(url.startsWith('/portal-permissions.php'))return {ok:true,status:200,json:async()=>({ok:true,data:{verified:true,enforced:true,codes:['INT_GESTION']}})};
+   return {ok:false,status:401,json:async()=>({ok:false,code:'UNAUTHENTICATED'})};
+ };
+ await render(document.querySelector('main'));
+ const button=[...document.querySelectorAll('button')].find(x=>x.textContent==='Validar lectura rápida');
+ assert.equal(button.disabled,false);
+ button.click();
+ for(let n=0;n<50&&!document.querySelector('main').textContent.includes('La sesión institucional venció');n++)
+  await new Promise(resolve=>setImmediate(resolve));
+ const content=document.querySelector('main').textContent;
+ assert.match(content,/Sesión PHP: NO VERIFICADA/);
+ assert.match(content,/Volvé a iniciar sesión/);
+ assert.doesNotMatch(content,/existe una diferencia entre las lecturas/);
+ assert.equal(button.disabled,true);
+ assert.equal([...document.querySelectorAll('button')].find(x=>x.textContent==='Medir velocidad de tickets').disabled,true);
+ assert.deepEqual(calls,['/auth-session.php','/portal-permissions.php?preflight=1','/tickets-api.php?action=validateDirectReads']);
+ dom.window.close();
+});

@@ -21,21 +21,22 @@ function adminPermission(actor) {
  return matches.length===1 && String(matches[0][table.headers.indexOf('Status')]||'').trim().toLowerCase()==='activo' && String(matches[0][table.headers.indexOf('Sistema de tickets')]||'').trim()==='Administrador';
 }
 function handleAdminEnvelope(envelope,signature) {
- var lock=LockService.getScriptLock();var locked=false;
+ var lock=LockService.getScriptLock();var locked=false,request,clock=ticketPerfClock();
  try {
   var secret=PropertiesService.getScriptProperties().getProperty('TICKETS_ADMIN_SECRET');
   if(!secret) adminFail('NOT_CONFIGURED');
   if(typeof envelope!=='string'||envelope.length>50000) adminFail('INVALID_SIGNATURE');
   var expected=adminHex(Utilities.computeHmacSha256Signature(envelope,secret,Utilities.Charset.UTF_8));
   if(!adminEqual(expected,signature)) adminFail('INVALID_SIGNATURE');
-  var request=JSON.parse(envelope);var now=Math.floor(Date.now()/1000);
+  request=JSON.parse(envelope);var now=Math.floor(Date.now()/1000);
   if(!Number.isInteger(request.issuedAt)||Math.abs(now-request.issuedAt)>120) adminFail('EXPIRED');
   if(typeof request.nonce!=='string'||!/^[a-zA-Z0-9-]{16,80}$/.test(request.nonce)) adminFail('VALIDATION');
-  if(typeof request.actor!=='string'||!adminPermission(request.actor)) adminFail('FORBIDDEN');
-  locked=lock.tryLock(15000);if(!locked) adminFail('BUSY');
+  clock.mark('verify');
+  if(typeof request.actor!=='string'||!adminPermission(request.actor)) adminFail('FORBIDDEN');clock.mark('authorize');
+  locked=lock.tryLock(15000);clock.mark('lock');if(!locked) adminFail('BUSY');
   var cache=CacheService.getScriptCache();var nonceKey='ticket-admin-'+request.nonce;
-  if(cache.get(nonceKey)) adminFail('REPLAY');cache.put(nonceKey,'1',300);
-  var book=SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID);
+  if(cache.get(nonceKey)) adminFail('REPLAY');cache.put(nonceKey,'1',300);clock.mark('nonce');
+  var book=SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID);clock.mark('open');
   var data;
   switch(request.action) {
    case 'list': data=adminTicketList(book);break;
@@ -44,14 +45,14 @@ function handleAdminEnvelope(envelope,signature) {
    case 'assign': data=adminAssign(book,request.actor,request.payload);break;
    default:adminFail('VALIDATION');
   }
-  return {ok:true,data:data};
+  clock.mark('work');return ticketPerfReply({ok:true,data:data},request,clock);
  } catch(err) {
   var result={ok:false,code:err.adminCode||'UPSTREAM'};
   // Tell the client whether it must retain the operation ID for recovery.
   if(request&&request.action==='assign'&&book&&request.payload) {
    try {var history=book.getSheetByName('BITACORA TICKETS');result.operationPending=history?history.getDataRange().getValues().slice(1).some(function(row){return row[0]===request.payload.operationId&&row[2]===request.actor;}):false;}catch(ignored){}
   }
-  return result;
+  return ticketPerfReply(result,request,clock);
  }
  finally { if(locked)lock.releaseLock(); }
 }

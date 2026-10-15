@@ -55,21 +55,23 @@ function ciarm_ticket_origin_valid(string $origin, string $host): bool {
     return $host === 'portal2.ciarm.edu.mx' && $origin === 'https://portal2.ciarm.edu.mx';
 }
 
-function ciarm_ticket_envelope(array $sessionUser, string $action, array $payload, string $secret, ?int $issuedAt = null, ?string $nonce = null): array {
-    $envelope = json_encode([
+function ciarm_ticket_envelope(array $sessionUser, string $action, array $payload, string $secret, ?int $issuedAt = null, ?string $nonce = null, bool $perfProbe = false): array {
+    $data = [
         'action' => $action,
         'actor' => strtolower(trim((string)($sessionUser['correo'] ?? ''))),
         'issuedAt' => $issuedAt ?? time(),
         'nonce' => $nonce ?? bin2hex(random_bytes(24)),
         'payload' => $payload,
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    ];
+    if ($perfProbe) $data['perfProbe'] = true;
+    $envelope = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     return ['envelope' => $envelope, 'signature' => hash_hmac('sha256', $envelope, $secret)];
 }
 
-function ciarm_ticket_bridge(array $sessionUser, string $action, array $payload): array {
+function ciarm_ticket_bridge(array $sessionUser, string $action, array $payload, bool $perfProbe = false): array {
     $secret = @file_get_contents(ciarm_private_path('tickets-admin.key'));
     if ($secret === false || strlen(trim($secret)) < 32) throw new RuntimeException('not_configured');
-    $signed = ciarm_ticket_envelope($sessionUser, $action, $payload, trim($secret));
+    $signed = ciarm_ticket_envelope($sessionUser, $action, $payload, trim($secret), null, null, $perfProbe);
     $response = ciarm_http_json(CIARM_TICKETS_WEBAPP, [
         'post' => true,
         'headers' => ['Accept: application/json', 'Content-Type: application/json'],

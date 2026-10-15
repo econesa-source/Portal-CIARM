@@ -75,7 +75,7 @@ function ciarm_tickets_date_text(mixed $value,string $header): string {
   // Match the date/time formatting in the Apps Script read contract.
   if($header==='HORA SOLICITUD'&&$value>=0&&$value<2)
     return gmdate('H:i:s',(int)round(fmod((float)$value,1.0)*86400));
-  if($header==='ÚLTIMA ACTUALIZACIÓN'||str_starts_with($header,'FECHA')){
+  if($header==='ÚLTIMA ACTUALIZACIÓN'||$header==='PLAZO SOLICITADO'||str_starts_with($header,'FECHA')){
    if($value>=20000&&$value<90000){
     $seconds=(int)round(((float)$value-25569)*86400);
     return gmdate(in_array($header,['FECHA ASIGNACIÓN','FECHA INICIO','FECHA TERMINACIÓN','ÚLTIMA ACTUALIZACIÓN'],true)

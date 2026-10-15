@@ -390,6 +390,18 @@ tickets.push({
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
+/** Timing kept only within a signed request. Never stores ticket content or actor. */
+function ticketPerfClock(){
+ var started=Date.now(),previous=started,stages={};
+ return {
+  mark:function(name){var now=Date.now();stages[name]=now-previous;previous=now;},
+  snapshot:function(){var result={};Object.keys(stages).forEach(function(k){result[k]=stages[k];});result.total=Date.now()-started;return result;}
+ };
+}
+function ticketPerfReply(reply,request,clock){
+ if(request&&request.perfProbe===true)reply._perf=clock.snapshot();
+ return reply;
+}
 /** Administración de solicitudes internas. Requiere puente PHP firmado. */
 var ADMIN_TICKET_HEADERS = ['ID TICKET','FECHA SOLICITUD','HORA SOLICITUD','ÁREA SOLICITANTE','SOLICITANTE','CORREO SOLICITANTE','TIPO DE SOLICITUD','DESCRIPCIÓN','PRIORIDAD','RESPONSABLE','FECHA ASIGNACIÓN','FECHA COMPROMISO','ESTADO','FECHA INICIO','FECHA TERMINACIÓN','TIEMPO EJECUCIÓN','TIEMPO TOTAL','SLA','PUNTOS','OBSERVACIONES','ÚLTIMA ACTUALIZACIÓN','PRIORIDAD SOLICITADA','PLAZO SOLICITADO','ARCHIVOS ADJUNTOS'];
 var ADMIN_JOURNAL_HEADERS = ['OPERACION','ESTADO','ACTOR','PAYLOAD HASH','TICKET','ANTES','DESPUES','FECHA','PAYLOAD'];
@@ -398,34 +410,37 @@ function adminFail(code) { var error = new Error(code); error.adminCode = code; 
 function adminHex(bytes) { return bytes.map(function(b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join(''); }
 function adminHash(value) { return adminHex(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, JSON.stringify(value), Utilities.Charset.UTF_8)); }
 function adminEqual(a,b) { if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false; var diff=0; for(var i=0;i<a.length;i++) diff |= a.charCodeAt(i)^b.charCodeAt(i); return diff===0; }
-function adminTable(book,name,required) {
+function adminTable(book,name,required,valuesOnly) {
  var sheet=book.getSheetByName(name); if(!sheet) adminFail('SCHEMA');
- var range=sheet.getDataRange();var rows=range.getValues();var formulas=range.getFormulas();var headers=rows[0].map(function(v){return String(v).trim();});
+ // Catalogs and authorization tables never use formula text. Avoid an extra
+ // Spreadsheet service read in those paths. Ticket snapshots remain unchanged.
+ var range=sheet.getDataRange();var rows=range.getValues();var formulas=valuesOnly?null:range.getFormulas();var headers=rows[0].map(function(v){return String(v).trim();});
  required.forEach(function(h){if(headers.indexOf(h)<0 || headers.indexOf(h)!==headers.lastIndexOf(h)) adminFail('SCHEMA');});
  return {sheet:sheet,headers:headers,rows:rows,formulas:formulas};
 }
 function adminPermission(actor) {
  if(['d.lara@ciarm.edu.mx','e.conesa@ciarm.edu.mx'].indexOf(actor)<0) return false;
- var table=adminTable(SpreadsheetApp.openById(CONFIG.DM03_SPREADSHEET_ID),'Permisos de usuario',['Correo Ciarm','Status','Sistema de tickets']);
+ var table=adminTable(SpreadsheetApp.openById(CONFIG.DM03_SPREADSHEET_ID),'Permisos de usuario',['Correo Ciarm','Status','Sistema de tickets'],true);
  var matches=table.rows.slice(1).filter(function(row){return String(row[table.headers.indexOf('Correo Ciarm')]||'').trim().toLowerCase()===actor;});
  return matches.length===1 && String(matches[0][table.headers.indexOf('Status')]||'').trim().toLowerCase()==='activo' && String(matches[0][table.headers.indexOf('Sistema de tickets')]||'').trim()==='Administrador';
 }
 function handleAdminEnvelope(envelope,signature) {
- var lock=LockService.getScriptLock();var locked=false;
+ var lock=LockService.getScriptLock();var locked=false,request,clock=ticketPerfClock();
  try {
   var secret=PropertiesService.getScriptProperties().getProperty('TICKETS_ADMIN_SECRET');
   if(!secret) adminFail('NOT_CONFIGURED');
   if(typeof envelope!=='string'||envelope.length>50000) adminFail('INVALID_SIGNATURE');
   var expected=adminHex(Utilities.computeHmacSha256Signature(envelope,secret,Utilities.Charset.UTF_8));
   if(!adminEqual(expected,signature)) adminFail('INVALID_SIGNATURE');
-  var request=JSON.parse(envelope);var now=Math.floor(Date.now()/1000);
+  request=JSON.parse(envelope);var now=Math.floor(Date.now()/1000);
   if(!Number.isInteger(request.issuedAt)||Math.abs(now-request.issuedAt)>120) adminFail('EXPIRED');
   if(typeof request.nonce!=='string'||!/^[a-zA-Z0-9-]{16,80}$/.test(request.nonce)) adminFail('VALIDATION');
-  if(typeof request.actor!=='string'||!adminPermission(request.actor)) adminFail('FORBIDDEN');
-  locked=lock.tryLock(15000);if(!locked) adminFail('BUSY');
+  clock.mark('verify');
+  if(typeof request.actor!=='string'||!adminPermission(request.actor)) adminFail('FORBIDDEN');clock.mark('authorize');
+  locked=lock.tryLock(15000);clock.mark('lock');if(!locked) adminFail('BUSY');
   var cache=CacheService.getScriptCache();var nonceKey='ticket-admin-'+request.nonce;
-  if(cache.get(nonceKey)) adminFail('REPLAY');cache.put(nonceKey,'1',300);
-  var book=SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID);
+  if(cache.get(nonceKey)) adminFail('REPLAY');cache.put(nonceKey,'1',300);clock.mark('nonce');
+  var book=SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID);clock.mark('open');
   var data;
   switch(request.action) {
    case 'list': data=adminTicketList(book);break;
@@ -434,14 +449,14 @@ function handleAdminEnvelope(envelope,signature) {
    case 'assign': data=adminAssign(book,request.actor,request.payload);break;
    default:adminFail('VALIDATION');
   }
-  return {ok:true,data:data};
+  clock.mark('work');return ticketPerfReply({ok:true,data:data},request,clock);
  } catch(err) {
   var result={ok:false,code:err.adminCode||'UPSTREAM'};
   // Tell the client whether it must retain the operation ID for recovery.
   if(request&&request.action==='assign'&&book&&request.payload) {
    try {var history=book.getSheetByName('BITACORA TICKETS');result.operationPending=history?history.getDataRange().getValues().slice(1).some(function(row){return row[0]===request.payload.operationId&&row[2]===request.actor;}):false;}catch(ignored){}
   }
-  return result;
+  return ticketPerfReply(result,request,clock);
  }
  finally { if(locked)lock.releaseLock(); }
 }
@@ -473,7 +488,7 @@ function adminTicketList(book) {
  return table.rows.slice(1).map(function(row,i){return {row:row,table:table,formulas:table.formulas[i+1]};}).filter(function(ticket){return /^TKT-\d{4}-\d+$/.test(String(ticket.row[table.headers.indexOf('ID TICKET')]))&&!adminPurchase(ticket.row,table.headers)&&!pending[String(ticket.row[table.headers.indexOf('ID TICKET')])];}).map(adminTicketView);
 }
 function adminCatalogs(book) {
- var priorities=adminTable(book,'CATALOGOS',['PRIORIDADES']);var people=adminTable(book,'RESPONSABLES',['RESPONSABLE']);
+ var priorities=adminTable(book,'CATALOGOS',['PRIORIDADES'],true);var people=adminTable(book,'RESPONSABLES',['RESPONSABLE'],true);
  function unique(table,h){var seen={};return table.rows.slice(1).map(function(row){return String(row[table.headers.indexOf(h)]||'').trim();}).filter(function(v){if(!v||seen[v])return false;seen[v]=true;return true;});}
  return {prioridades:unique(priorities,'PRIORIDADES').filter(function(p){return ['CRITICA','URGENTE','ALTA','MEDIA','BAJA'].indexOf(p)>=0;}),responsables:unique(people,'RESPONSABLE').concat(typeof serviceConfig==='function'&&serviceConfig(book)?serviceConfig(book).responsibles.map(function(r){return r.name;}):[]).filter(function(v,i,a){return a.indexOf(v)===i;})};
 }
@@ -571,15 +586,31 @@ function verifyTicketRequest(envelope,signature) {
  return request;
 }
 function handleTicketEnvelope(envelope,signature) {
- var lock,locked=false,request;
+ var lock,locked=false,request,clock=ticketPerfClock();
  try {
-  request=verifyTicketRequest(envelope,signature);if(typeof SERVICE_TABLE_CACHE!=='undefined')SERVICE_TABLE_CACHE={};
-  var collaborator=portalCollaborator(request.actor);
-  if(['list','detail','catalogs','assign'].indexOf(request.action)>=0)return handleAdminEnvelope(envelope,signature);
-  lock=LockService.getScriptLock();locked=lock.tryLock(15000);if(!locked)adminFail('BUSY');
+  request=verifyTicketRequest(envelope,signature);clock.mark('verify');if(typeof SERVICE_TABLE_CACHE!=='undefined')SERVICE_TABLE_CACHE={};
+  var collaborator=portalCollaborator(request.actor);clock.mark('identity');
+  if(['list','detail','catalogs','assign'].indexOf(request.action)>=0){
+   var delegated=handleAdminEnvelope(envelope,signature);
+   if(request.perfProbe===true){
+    var initial=clock.snapshot(),inner=delegated._perf||{};
+    delegated._perf={
+     verify:(initial.verify||0)+(inner.verify||0),
+     identity:initial.identity||0,
+     authorize:inner.authorize||0,
+     lock:inner.lock||0,
+     nonce:inner.nonce||0,
+     open:inner.open||0,
+     work:inner.work||0,
+     total:initial.total
+    };
+   }
+   return delegated;
+  }
+  lock=LockService.getScriptLock();locked=lock.tryLock(15000);clock.mark('lock');if(!locked)adminFail('BUSY');
   var cache=CacheService.getScriptCache(),key='ticket-admin-'+request.nonce;
-  if(cache.get(key))adminFail('REPLAY');cache.put(key,'1',300);
-  var book=SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID),data;
+  if(cache.get(key))adminFail('REPLAY');cache.put(key,'1',300);clock.mark('nonce');
+  var book=SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID),data;clock.mark('open');
   switch(request.action){
    case 'serviceContext':data={protocol:'tickets-service-v1',enabled:Boolean(serviceConfig(book)),canAdmin:adminPermission(request.actor)};break;
    case 'serviceSettings':data=serviceSettings(book,request.actor);break;
@@ -595,8 +626,9 @@ function handleTicketEnvelope(envelope,signature) {
    case 'creationStatus':data=portalCreationStatus(book,request.actor,(request.payload||{}).operationId);break;
    default:adminFail('VALIDATION');
   }
-  return {ok:true,data:data};
- }catch(error){var result={ok:false,code:error.adminCode||'UPSTREAM'};if(request&&request.action==='serviceTransition'&&book&&request.payload){try{var history=book.getSheetByName('BITACORA TICKETS');result.operationPending=history?history.getDataRange().getValues().slice(1).some(function(r){return r[0]===request.payload.operationId&&r[2]===request.actor;}):false;}catch(ignored){}}return result;}
+  clock.mark('work');
+  return ticketPerfReply({ok:true,data:data},request,clock);
+ }catch(error){var result={ok:false,code:error.adminCode||'UPSTREAM'};if(request&&request.action==='serviceTransition'&&book&&request.payload){try{var history=book.getSheetByName('BITACORA TICKETS');result.operationPending=history?history.getDataRange().getValues().slice(1).some(function(r){return r[0]===request.payload.operationId&&r[2]===request.actor;}):false;}catch(ignored){}}return ticketPerfReply(result,request,clock);}
  finally{if(typeof SERVICE_TABLE_CACHE!=='undefined')SERVICE_TABLE_CACHE=null;if(locked)lock.releaseLock();}
 }
 
@@ -787,8 +819,8 @@ function serviceElapsedHours(from,to,input){
 }
 
 var SERVICE_TABLE_CACHE=null;
-function serviceCachedRows(book,name,headers){if(SERVICE_TABLE_CACHE&&SERVICE_TABLE_CACHE[name])return SERVICE_TABLE_CACHE[name];var rows=adminTable(book,name,headers).rows;if(SERVICE_TABLE_CACHE)SERVICE_TABLE_CACHE[name]=rows;return rows;}
-function serviceInvalidate(name){if(SERVICE_TABLE_CACHE)delete SERVICE_TABLE_CACHE[name];}
+function serviceCachedRows(book,name,headers){if(SERVICE_TABLE_CACHE&&SERVICE_TABLE_CACHE[name])return SERVICE_TABLE_CACHE[name];var rows=adminTable(book,name,headers,true).rows;if(SERVICE_TABLE_CACHE)SERVICE_TABLE_CACHE[name]=rows;return rows;}
+function serviceInvalidate(name){if(SERVICE_TABLE_CACHE){delete SERVICE_TABLE_CACHE[name];if(name==='SEGUIMIENTO SERVICIO')delete SERVICE_TABLE_CACHE._serviceCaseIndex;}}
 /** Service configuration and recoverable lifecycle. All callers hold the signed protocol lock. */
 function serviceTable(book,name,headers){var sheet=book.getSheetByName(name);if(!sheet){sheet=book.insertSheet(name);sheet.appendRow(headers);}else if(sheet.getLastRow()===0)sheet.appendRow(headers);return adminTable(book,name,headers);}
 function serviceConfig(book){var sheet=book.getSheetByName('CONFIG SERVICIO');if(!sheet||sheet.getLastRow()===0)return null;var rows=serviceCachedRows(book,'CONFIG SERVICIO',['VERSION','REGLAS','ACTOR','FECHA','OPERACION','HASH']).slice(1);if(!rows.length)return null;var value=JSON.parse(rows[rows.length-1][1]);return serviceValidatePolicy(value);}
@@ -803,7 +835,27 @@ function servicePublish(book,actor,input){
 }
 function serviceNow(){return Utilities.formatDate(new Date(),'America/Cancun','yyyy-MM-dd HH:mm:ss');}
 function serviceDate(value){if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value))adminFail('VALIDATION');var date=new Date(value.replace(' ','T')+'-05:00');if(isNaN(date.getTime())||Utilities.formatDate(date,'America/Cancun','yyyy-MM-dd HH:mm:ss')!==value)adminFail('VALIDATION');return date;}
-function serviceCase(book,id){var sheet=book.getSheetByName('SEGUIMIENTO SERVICIO');if(!sheet||sheet.getLastRow()===0)return null;var rows=serviceCachedRows(book,'SEGUIMIENTO SERVICIO',['FOLIO','SEGUIMIENTO']).slice(1).filter(function(r){return r[0]===id;});if(rows.length>1)adminFail('DUPLICATE_ID');return rows.length?JSON.parse(rows[0][1]):null;}
+function serviceCase(book,id){
+ // Construir un índice por ejecución en lugar de releer y filtrar la
+ // misma tabla para cada solicitud. Conserva detección de duplicados.
+ var index=SERVICE_TABLE_CACHE&&SERVICE_TABLE_CACHE._serviceCaseIndex;
+ if(!index){
+  index={};
+  var sheet=book.getSheetByName('SEGUIMIENTO SERVICIO');
+  if(sheet&&sheet.getLastRow()>0){
+   serviceCachedRows(book,'SEGUIMIENTO SERVICIO',['FOLIO','SEGUIMIENTO'])
+    .slice(1).forEach(function(r){
+     var key=String(r[0]||'');
+     if(!index[key])index[key]=[];
+     index[key].push(r[1]);
+    });
+  }
+  if(SERVICE_TABLE_CACHE)SERVICE_TABLE_CACHE._serviceCaseIndex=index;
+ }
+ var matches=index[id]||[];
+ if(matches.length>1)adminFail('DUPLICATE_ID');
+ return matches.length?JSON.parse(matches[0]):null;
+}
 function serviceSaveCase(book,id,before,after){var table=serviceTable(book,'SEGUIMIENTO SERVICIO',['FOLIO','SEGUIMIENTO']),matches=[];table.rows.slice(1).forEach(function(r,i){if(r[0]===id)matches.push(i+2);});if(matches.length>1)adminFail('DUPLICATE_ID');var current=serviceCase(book,id);if(adminHash(current)!==adminHash(before)&&adminHash(current)!==adminHash(after))adminFail('CONFLICT');var raw=JSON.stringify(after);if(Utilities.newBlob(raw).getBytes().length>45000)adminFail('PAYLOAD_SIZE');if(matches.length)table.sheet.getRange(matches[0],2).setValue(raw);else table.sheet.appendRow([id,raw]);serviceInvalidate('SEGUIMIENTO SERVICIO');}
 function serviceAssignmentPlan(book,ticket,changes){var p=serviceConfig(book);if(!p)return null;var target=p.responsibles.filter(function(r){return r.name===changes.responsable;});if(target.length!==1)adminFail('RESPONSIBLE_ACCOUNT');portalCollaborator(target[0].email);var before=serviceCase(book,adminTicketView(ticket).id);if(!before&&['EN PROCESO','EN ESPERA'].indexOf(adminTicketView(ticket).estado)>=0)adminFail('SERVICE_MIGRATION_REQUIRED');var after=before?JSON.parse(JSON.stringify(before)):{policy:p,createdAt:serviceNow(),historical:true,cycles:[],waits:[]};p=after.policy;var now=serviceNow();after.email=target[0].email;after.responsible=changes.responsable;
  if(!after.assignedAt){after.assignedAt=now;after.firstAssignedAt=now;if(after.assignmentDeadline){var limit=serviceDeadline(serviceDate(after.createdAt),p.levels[changes.prioridad].assign,p);if(limit.getTime()<serviceDate(after.assignmentDeadline).getTime())after.assignmentDeadline=Utilities.formatDate(limit,'America/Cancun','yyyy-MM-dd HH:mm:ss');}after.priority=changes.prioridad;after.assignedBy=null;after.deadlines={start:Utilities.formatDate(serviceDeadline(serviceDate(now),p.levels[changes.prioridad].start,p),'America/Cancun','yyyy-MM-dd HH:mm:ss')};var level=p.levels[changes.prioridad];if(level.resolve)after.deadlines.resolve=Utilities.formatDate(serviceDeadline(serviceDate(now),level.resolve,p),'America/Cancun','yyyy-MM-dd HH:mm:ss');if(level.contain){after.deadlines.resolve=Utilities.formatDate(new Date(serviceWindow(serviceDate(changes.fechaCompromiso+' 00:00:00'),p).end),'America/Cancun','yyyy-MM-dd HH:mm:ss');}if(level.contain)after.deadlines.contain=Utilities.formatDate(serviceDeadline(serviceDate(now),level.contain,p),'America/Cancun','yyyy-MM-dd HH:mm:ss');}
@@ -841,7 +893,17 @@ function serviceTransition(book,actor,input){
  }
  var prior=JSON.parse(event.row[5]),target=JSON.parse(event.row[6]),data=JSON.parse(event.row[8]),current=adminSnapshot(raw);if(current.some(function(v,i){return JSON.stringify(v)!==JSON.stringify(prior[i])&&JSON.stringify(v)!==JSON.stringify(target[i]);}))adminFail('CONFLICT');target.forEach(function(v,i){if(JSON.stringify(v)===JSON.stringify(current[i]))return;if(v&&typeof v==='object'&&v.formula)adminFail('SCHEMA');if(['FECHA INICIO','FECHA TERMINACIÓN','FECHA COMPROMISO','ÚLTIMA ACTUALIZACIÓN'].indexOf(raw.table.headers[i])>=0&&v)v=serviceDate(v.length===10?v+' 00:00:00':v);raw.table.sheet.getRange(raw.rowNumber,i+1).setValue(v);});SpreadsheetApp.flush();serviceSaveCase(book,input.ticketId,data.service.before,data.service.after);if(adminHash(adminSnapshot(adminFindTicket(book,input.ticketId)))!==adminHash(target))adminFail('CONFLICT');journal.sheet.getRange(event.index,2).setValue('CONFIRMADO');SpreadsheetApp.flush();return serviceDetail(book,actor,input.ticketId);
 }
-function serviceList(book,actor,kind){var admin=adminPermission(actor);if(kind==='all'&&!admin)adminFail('FORBIDDEN');return adminTicketList(book).filter(function(t){var m=serviceCase(book,t.id);return kind==='all'||kind==='mine'&&t.correo.trim().toLowerCase()===actor||kind==='assigned'&&m&&m.email===actor;}).map(function(t){var m=serviceCase(book,t.id);return {ticket:t,service:m?serviceView(m,t):null};});}
+function serviceList(book,actor,kind){
+ var admin=adminPermission(actor);
+ if(kind==='all'&&!admin)adminFail('FORBIDDEN');
+ return adminTicketList(book).map(function(t){
+  return {ticket:t,meta:serviceCase(book,t.id)};
+ }).filter(function(item){
+  return kind==='all'||kind==='mine'&&item.ticket.correo.trim().toLowerCase()===actor||kind==='assigned'&&item.meta&&item.meta.email===actor;
+ }).map(function(item){
+  return {ticket:item.ticket,service:item.meta?serviceView(item.meta,item.ticket):null};
+ });
+}
 
 function serviceConfigVersion(book,version){var rows=serviceCachedRows(book,'CONFIG SERVICIO',['VERSION','REGLAS','ACTOR','FECHA','OPERACION','HASH']).slice(1).filter(function(r){return r[0]===version;});if(rows.length!==1)adminFail('SCHEMA');return serviceValidatePolicy(JSON.parse(rows[0][1]));}
 function serviceCreationPlan(book,request){var policy=serviceConfig(book);return policy?{version:policy.version,receivedAt:serviceNow(),urgent:request.prioridadSolicitada==='🔴 Urgente'}:null;}

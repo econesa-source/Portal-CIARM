@@ -1,7 +1,7 @@
 name: Verificar administrador de solicitudes internas
 on:
   push:
-    branches: [implementation/admin-solicitudes-internas]
+    branches: [main, implementation/admin-solicitudes-internas]
   pull_request:
 jobs:
   tickets:
@@ -12,10 +12,14 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci && npm test
+      - run: php tests/compras-config.php
+      - run: node tests/compras-http.mjs
+      - run: php -l compras-api.php && php -l compras-lib.php
       - run: php tests/tickets-auth.php
       - run: php tests/tickets-portal-auth.php
+      - run: php tests/tickets-direct-read.php
       - run: php tests/portal-permissions.php
       - run: php -l tickets-portal-lib.php && php -l auth-lib.php
-      - run: php -l tickets-lib.php && php -l tickets-api.php
+      - run: php -l tickets-lib.php && php -l tickets-direct-read.php && php -l tickets-api.php
       - run: php -l portal-permissions-lib.php && php -l portal-permissions.php && php -l voiceflow.php
       - run: node apps-script/build.mjs && git diff --exit-code apps-script/tickets-backend.gs

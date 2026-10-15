@@ -9,7 +9,7 @@ const TABS=[
 ];
 const value=x=>String(x??'');
 const escapeHtml=x=>value(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const errText=e=>({'SERVICE_UNAVAILABLE':'Compras aún no está habilitado en el Portal.','FORBIDDEN':'No tenés permiso para esta operación.','CSRF_NOT_READY':'Volvé a cargar esta sección antes de enviar.','REPLAY':'El servidor ya recibió esta petición. Consultá su estado antes de repetirla.'})[e?.code]||'No se pudo completar. Comprobá su estado antes de reintentar.';
+const errText=e=>({'READ_ONLY':'Compras está en verificación de solo lectura; todavía no se pueden registrar operaciones.','SERVICE_UNAVAILABLE':'Compras aún no está habilitado en el Portal.','FORBIDDEN':'No tenés permiso para esta operación.','CSRF_NOT_READY':'Volvé a cargar esta sección antes de enviar.','REPLAY':'El servidor ya recibió esta petición. Consultá su estado antes de repetirla.'})[e?.code]||'No se pudo completar. Comprobá su estado antes de reintentar.';
 const key=()=> 'PORTAL_'+crypto.randomUUID().replace(/-/g,'');
 const selectOptions=(a,selected='')=>(Array.isArray(a)?a:[]).map(x=>{
  const code=typeof x==='string'?x:value(x.codigo||x.id||x.valor);
@@ -313,7 +313,7 @@ export async function render(container,session){
  const nav=container.querySelector('.compras-tabs'),body=container.querySelector('.compras-body');
  let controller=null;
  async function choose(tab){
-  controller?.abort();controller=new AbortController();
+  controller?.abort();const requestController=new AbortController();controller=requestController;
   nav.querySelectorAll('button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===tab.id)));
   body.textContent='Consultando…';
   try{
@@ -321,14 +321,14 @@ export async function render(container,session){
    let extras=[];
    if(tab.id==='aprobar'){
     const jobs=[];
-    if(roles.has('COMPRAS_FIRMAR'))jobs.push(['ordinarias',requestCompras(tab.query,{},controller.signal)]);
-    if(roles.has('COMPRAS_PRORROGA_FIRMAR'))jobs.push(['prorrogas',requestCompras('prorrogasPendientes',{},controller.signal)]);
-    if(roles.has('COMPRAS_EXCEPCION_COT'))jobs.push(['excepciones',requestCompras('excepcionesPendientes',{},controller.signal)]);
+    if(roles.has('COMPRAS_FIRMAR'))jobs.push(['ordinarias',requestCompras(tab.query,{},requestController.signal)]);
+    if(roles.has('COMPRAS_PRORROGA_FIRMAR'))jobs.push(['prorrogas',requestCompras('prorrogasPendientes',{},requestController.signal)]);
+    if(roles.has('COMPRAS_EXCEPCION_COT'))jobs.push(['excepciones',requestCompras('excepcionesPendientes',{},requestController.signal)]);
     // Si falla una consulta autorizada, no mostrar una lista parcial como si fuera completa.
     extras=await Promise.all(jobs.map(async ([name,job])=>({name,data:await job})));
     data=extras.find(x=>x.name==='ordinarias')?.data||[];
-   }else data=await requestCompras(tab.query,{},controller.signal);
-   if(controller.signal.aborted)return;
+   }else data=await requestCompras(tab.query,{},requestController.signal);
+   if(requestController.signal.aborted)return;
    if(tab.id==='crear')renderCrear(body,data);
    if(tab.id==='mis')renderMis(body,data,session,roles);
    if(tab.id==='elegir')renderAlternativas(body,data);
@@ -340,7 +340,11 @@ export async function render(container,session){
     if(excepciones)renderExcepciones(body,excepciones.data);
    }
    if(tab.id==='recibir')renderRecepciones(body,data);
-  }catch(error){if(!controller.signal.aborted){body.textContent='';note(body,errText(error),true);}}
+   if(window.__CIARM_COMPRAS_WRITES_ENABLED__!==true){
+    body.querySelectorAll('button[type=submit],.compras-extras button').forEach(b=>{b.disabled=true;});
+    note(body,'Verificación de solo lectura: el registro de operaciones todavía no está habilitado.');
+   }
+  }catch(error){if(!requestController.signal.aborted){body.textContent='';note(body,errText(error),true);}}
  }
  tabs.forEach(tab=>{
   const button=document.createElement('button');button.type='button';button.textContent=tab.label;

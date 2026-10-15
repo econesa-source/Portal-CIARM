@@ -1,3 +1,15 @@
+/** Timing kept only within a signed request. Never stores ticket content or actor. */
+function ticketPerfClock(){
+ var started=Date.now(),previous=started,stages={};
+ return {
+  mark:function(name){var now=Date.now();stages[name]=now-previous;previous=now;},
+  snapshot:function(){var result={};Object.keys(stages).forEach(function(k){result[k]=stages[k];});result.total=Date.now()-started;return result;}
+ };
+}
+function ticketPerfReply(reply,request,clock){
+ if(request&&request.perfProbe===true)reply._perf=clock.snapshot();
+ return reply;
+}
 /** Administración de solicitudes internas. Requiere puente PHP firmado. */
 var ADMIN_TICKET_HEADERS = ['ID TICKET','FECHA SOLICITUD','HORA SOLICITUD','ÁREA SOLICITANTE','SOLICITANTE','CORREO SOLICITANTE','TIPO DE SOLICITUD','DESCRIPCIÓN','PRIORIDAD','RESPONSABLE','FECHA ASIGNACIÓN','FECHA COMPROMISO','ESTADO','FECHA INICIO','FECHA TERMINACIÓN','TIEMPO EJECUCIÓN','TIEMPO TOTAL','SLA','PUNTOS','OBSERVACIONES','ÚLTIMA ACTUALIZACIÓN','PRIORIDAD SOLICITADA','PLAZO SOLICITADO','ARCHIVOS ADJUNTOS'];
 var ADMIN_JOURNAL_HEADERS = ['OPERACION','ESTADO','ACTOR','PAYLOAD HASH','TICKET','ANTES','DESPUES','FECHA','PAYLOAD'];
@@ -6,34 +18,37 @@ function adminFail(code) { var error = new Error(code); error.adminCode = code; 
 function adminHex(bytes) { return bytes.map(function(b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join(''); }
 function adminHash(value) { return adminHex(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, JSON.stringify(value), Utilities.Charset.UTF_8)); }
 function adminEqual(a,b) { if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false; var diff=0; for(var i=0;i<a.length;i++) diff |= a.charCodeAt(i)^b.charCodeAt(i); return diff===0; }
-function adminTable(book,name,required) {
+function adminTable(book,name,required,valuesOnly) {
  var sheet=book.getSheetByName(name); if(!sheet) adminFail('SCHEMA');
- var range=sheet.getDataRange();var rows=range.getValues();var formulas=range.getFormulas();var headers=rows[0].map(function(v){return String(v).trim();});
+ // Catalogs and authorization tables never use formula text. Avoid an extra
+ // Spreadsheet service read in those paths. Ticket snapshots remain unchanged.
+ var range=sheet.getDataRange();var rows=range.getValues();var formulas=valuesOnly?null:range.getFormulas();var headers=rows[0].map(function(v){return String(v).trim();});
  required.forEach(function(h){if(headers.indexOf(h)<0 || headers.indexOf(h)!==headers.lastIndexOf(h)) adminFail('SCHEMA');});
  return {sheet:sheet,headers:headers,rows:rows,formulas:formulas};
 }
 function adminPermission(actor) {
  if(['d.lara@ciarm.edu.mx','e.conesa@ciarm.edu.mx'].indexOf(actor)<0) return false;
- var table=adminTable(SpreadsheetApp.openById(CONFIG.DM03_SPREADSHEET_ID),'Permisos de usuario',['Correo Ciarm','Status','Sistema de tickets']);
+ var table=adminTable(SpreadsheetApp.openById(CONFIG.DM03_SPREADSHEET_ID),'Permisos de usuario',['Correo Ciarm','Status','Sistema de tickets'],true);
  var matches=table.rows.slice(1).filter(function(row){return String(row[table.headers.indexOf('Correo Ciarm')]||'').trim().toLowerCase()===actor;});
  return matches.length===1 && String(matches[0][table.headers.indexOf('Status')]||'').trim().toLowerCase()==='activo' && String(matches[0][table.headers.indexOf('Sistema de tickets')]||'').trim()==='Administrador';
 }
 function handleAdminEnvelope(envelope,signature) {
- var lock=LockService.getScriptLock();var locked=false;
+ var lock=LockService.getScriptLock();var locked=false,request,clock=ticketPerfClock();
  try {
   var secret=PropertiesService.getScriptProperties().getProperty('TICKETS_ADMIN_SECRET');
   if(!secret) adminFail('NOT_CONFIGURED');
   if(typeof envelope!=='string'||envelope.length>50000) adminFail('INVALID_SIGNATURE');
   var expected=adminHex(Utilities.computeHmacSha256Signature(envelope,secret,Utilities.Charset.UTF_8));
   if(!adminEqual(expected,signature)) adminFail('INVALID_SIGNATURE');
-  var request=JSON.parse(envelope);var now=Math.floor(Date.now()/1000);
+  request=JSON.parse(envelope);var now=Math.floor(Date.now()/1000);
   if(!Number.isInteger(request.issuedAt)||Math.abs(now-request.issuedAt)>120) adminFail('EXPIRED');
   if(typeof request.nonce!=='string'||!/^[a-zA-Z0-9-]{16,80}$/.test(request.nonce)) adminFail('VALIDATION');
-  if(typeof request.actor!=='string'||!adminPermission(request.actor)) adminFail('FORBIDDEN');
-  locked=lock.tryLock(15000);if(!locked) adminFail('BUSY');
+  clock.mark('verify');
+  if(typeof request.actor!=='string'||!adminPermission(request.actor)) adminFail('FORBIDDEN');clock.mark('authorize');
+  locked=lock.tryLock(15000);clock.mark('lock');if(!locked) adminFail('BUSY');
   var cache=CacheService.getScriptCache();var nonceKey='ticket-admin-'+request.nonce;
-  if(cache.get(nonceKey)) adminFail('REPLAY');cache.put(nonceKey,'1',300);
-  var book=SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID);
+  if(cache.get(nonceKey)) adminFail('REPLAY');cache.put(nonceKey,'1',300);clock.mark('nonce');
+  var book=SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID);clock.mark('open');
   var data;
   switch(request.action) {
    case 'list': data=adminTicketList(book);break;
@@ -42,14 +57,14 @@ function handleAdminEnvelope(envelope,signature) {
    case 'assign': data=adminAssign(book,request.actor,request.payload);break;
    default:adminFail('VALIDATION');
   }
-  return {ok:true,data:data};
+  clock.mark('work');return ticketPerfReply({ok:true,data:data},request,clock);
  } catch(err) {
   var result={ok:false,code:err.adminCode||'UPSTREAM'};
   // Tell the client whether it must retain the operation ID for recovery.
   if(request&&request.action==='assign'&&book&&request.payload) {
    try {var history=book.getSheetByName('BITACORA TICKETS');result.operationPending=history?history.getDataRange().getValues().slice(1).some(function(row){return row[0]===request.payload.operationId&&row[2]===request.actor;}):false;}catch(ignored){}
   }
-  return result;
+  return ticketPerfReply(result,request,clock);
  }
  finally { if(locked)lock.releaseLock(); }
 }
@@ -81,7 +96,7 @@ function adminTicketList(book) {
  return table.rows.slice(1).map(function(row,i){return {row:row,table:table,formulas:table.formulas[i+1]};}).filter(function(ticket){return /^TKT-\d{4}-\d+$/.test(String(ticket.row[table.headers.indexOf('ID TICKET')]))&&!adminPurchase(ticket.row,table.headers)&&!pending[String(ticket.row[table.headers.indexOf('ID TICKET')])];}).map(adminTicketView);
 }
 function adminCatalogs(book) {
- var priorities=adminTable(book,'CATALOGOS',['PRIORIDADES']);var people=adminTable(book,'RESPONSABLES',['RESPONSABLE']);
+ var priorities=adminTable(book,'CATALOGOS',['PRIORIDADES'],true);var people=adminTable(book,'RESPONSABLES',['RESPONSABLE'],true);
  function unique(table,h){var seen={};return table.rows.slice(1).map(function(row){return String(row[table.headers.indexOf(h)]||'').trim();}).filter(function(v){if(!v||seen[v])return false;seen[v]=true;return true;});}
  return {prioridades:unique(priorities,'PRIORIDADES').filter(function(p){return ['CRITICA','URGENTE','ALTA','MEDIA','BAJA'].indexOf(p)>=0;}),responsables:unique(people,'RESPONSABLE').concat(typeof serviceConfig==='function'&&serviceConfig(book)?serviceConfig(book).responsibles.map(function(r){return r.name;}):[]).filter(function(v,i,a){return a.indexOf(v)===i;})};
 }

@@ -2,7 +2,30 @@
 declare(strict_types=1);
 require_once __DIR__ . '/portal-permissions-lib.php';
 
-/** SCGRC Compras V1. Este archivo vive en rama feature y NO está desplegado.
+/** Secrets use the existing private directory outside the web root. Environment
+ * values take precedence. Missing configuration and writes fail closed. */
+function ciarm_compras_config(): array {
+    $raw = @file_get_contents(ciarm_private_path('compras.json'));
+    $stored = $raw === false ? [] : json_decode($raw, true);
+    $config = is_array($stored) ? $stored : [];
+    foreach (['enabled'=>'CIARM_COMPRAS_ENABLED','writes_enabled'=>'CIARM_COMPRAS_WRITES_ENABLED',
+      'gas_url'=>'CIARM_COMPRAS_GAS_URL','hmac_key'=>'CIARM_COMPRAS_HMAC_KEY',
+      'origin'=>'CIARM_COMPRAS_ORIGIN'] as $field=>$env) {
+        $v=getenv($env);
+        if($v!==false)$config[$field]=$v;
+    }
+    return $config;
+}
+function ciarm_compras_config_valid(array $c): bool {
+    return ($c['enabled']??'')==='1' && is_string($c['hmac_key']??null) && strlen($c['hmac_key'])>=48 &&
+      is_string($c['gas_url']??null) && preg_match('~^https://script\.google\.com/macros/s/[a-zA-Z0-9_-]+/exec$~',$c['gas_url'])===1 &&
+      is_string($c['origin']??null) && preg_match('~^https://[a-z0-9.-]+\.ciarm\.edu\.mx$~i',$c['origin'])===1;
+}
+function ciarm_compras_writes_enabled(array $c): bool {
+    return ciarm_compras_config_valid($c) && ($c['writes_enabled']??'')==='1';
+}
+
+/** SCGRC Compras V1. Transporte autenticado del Portal.
  * El backend de HT06 revalidará identidad/centro/firma. No se entrega acceso a Sheets.
  */
 function ciarm_compras_actions(): array {
@@ -72,11 +95,11 @@ function ciarm_compras_shape(string $action,array $payload): array {
     return $payload;
 }
 function ciarm_compras_forward(array $user,string $action,array $payload): array {
-    $url=(string)(getenv('CIARM_COMPRAS_GAS_URL')?:'');
-    $key=(string)(getenv('CIARM_COMPRAS_HMAC_KEY')?:'');
-    if(getenv('CIARM_COMPRAS_ENABLED')!=='1'||strlen($key)<48||
-       !preg_match('~^https://script\.google\.com/macros/s/[a-zA-Z0-9_-]+/exec$~',$url))
+    $config=ciarm_compras_config();
+    if(!ciarm_compras_config_valid($config))throw new RuntimeException('SERVICE_UNAVAILABLE');
+    if((ciarm_compras_actions()[$action][0]??'')!=='GET' && !ciarm_compras_writes_enabled($config))
         throw new RuntimeException('SERVICE_UNAVAILABLE');
+    $url=$config['gas_url'];$key=$config['hmac_key'];
     $actor=strtolower(trim((string)($user['correo']??'')));
     if(!preg_match('/^[a-z0-9][a-z0-9._+\-]*@ciarm\.edu\.mx$/',$actor))throw new RuntimeException('FORBIDDEN');
     // No aceptar actor/rol desde el body: se toma exclusivamente de la sesión PHP.

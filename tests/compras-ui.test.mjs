@@ -19,6 +19,7 @@ function setup(responses={},enabled=true){
  Object.assign(globalThis,{window:dom.window,document:dom.window.document,FormData:dom.window.FormData});
  Object.defineProperty(globalThis,'crypto',{configurable:true,value:{randomUUID}});
  dom.window.__CIARM_COMPRAS_UI_ENABLED__=enabled;
+ dom.window.__CIARM_COMPRAS_WRITES_ENABLED__=true;
  dom.window.confirm=()=>true;
  const calls=[];
  globalThis.fetch=async(url,opts)=>{
@@ -193,5 +194,35 @@ test('Sin COMPRAS_REASIGNAR_ACAD no aparece la opción de reasignar',async()=>{
  try{
   await render(env.root,session([card,'COMPRAS_FIRMAR']));
   assert.equal(env.root.querySelector('option[value="Reasignar y aprobar"]'),null);
+ }finally{env.cleanup();}
+});
+
+test('Read-only verification allows GET and blocks submission without POST',async()=>{
+ const env=setup({contextoSolicitud:{tipos:['Compra - necesito cotización'],areas:[{codigo:'CC-03',etiqueta:'Primaria'}],unidades:['unidad'],email:'persona@ciarm.edu.mx'}});
+ try {
+  window.__CIARM_COMPRAS_WRITES_ENABLED__=false;
+  await render(env.root,session([card,'COMPRAS_CREAR']));
+  assert.equal(env.root.querySelector('button[type=submit]').disabled,true);
+  const {requestCompras}=await import('../src/services/comprasClient.js');
+  await assert.rejects(()=>requestCompras('elegirAlternativa',{idSolicitud:'SOL-000001',idAlternativa:'LCT-ABCD',motivo:'Prueba de bloqueo'}),e=>e.code==='READ_ONLY');
+  assert.equal(env.calls.filter(c=>c.method==='POST').length,0);
+ }finally{env.cleanup();}
+});
+
+test('A late response from the previous tab cannot overwrite the current tab',async()=>{
+ const env=setup();
+ try{
+  let finishFirst;
+  globalThis.fetch=(url)=>{
+   const action=new URL(url,window.location.href).searchParams.get('action');
+   if(action==='contextoSolicitud')return new Promise(resolve=>{finishFirst=()=>resolve({ok:true,status:200,json:async()=>({ok:true,version:'compras-v1',csrfToken:CSRF,data:{tipos:[],areas:[],unidades:[],email:'persona@ciarm.edu.mx'}})});});
+   return Promise.resolve({ok:true,status:200,json:async()=>({ok:true,version:'compras-v1',csrfToken:CSRF,data:[own]})});
+  };
+  const first=render(env.root,session([card,'COMPRAS_CREAR','COMPRAS_MIS']));
+  env.root.querySelector('[data-tab="mis"]').click();await settle();
+  assert.ok(env.root.querySelector('#compras-buscar'));
+  finishFirst();await first;await settle();
+  assert.ok(env.root.querySelector('#compras-buscar'),'current tab retained');
+  assert.equal(env.root.querySelector('#compras-crear'),null);
  }finally{env.cleanup();}
 });

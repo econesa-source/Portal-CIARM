@@ -10,6 +10,7 @@ export async function requestCompras(action,payload={},signal){
   if(!comprasUiEnabled())throw fail('SERVICE_UNAVAILABLE');
   const contract=validateComprasRequest(action,payload);
   const method=COMPRAS_OPERATIONS[action].method;
+  if(method==='POST'&&window.__CIARM_COMPRAS_WRITES_ENABLED__!==true)throw fail('READ_ONLY');
   if(method==='POST'&&!csrfToken)throw fail('CSRF_NOT_READY');
   const init={method,credentials:'same-origin',cache:'no-store',signal,headers:{'Accept':'application/json'}};
   const url='/compras-api.php'+(method==='GET'?'?action='+encodeURIComponent(action):'');

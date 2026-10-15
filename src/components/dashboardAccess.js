@@ -1,3 +1,4 @@
+import { comprasUiEnabled } from '../services/comprasClient.js';
 import { resolvePortalPermissions, canSeeCard, canSeeAction } from '../services/portalPermissions.js';
 
 const CARD_ORDER = ['solicitudes','biblioteca','normativa','comunicados','administracion','ib'];
@@ -34,23 +35,39 @@ export function applyDashboardAccess(container, response) {
       if (!canSeeAction(permissions, card, 'gestionar')) {
         element.querySelector('a[href="#admin-solicitudes"]')?.remove();
       }
+    } else if (card === 'ib') {
+      if (!canSeeAction(permissions, 'ib', 'acceder')) {
+        element.querySelector('a[href="#ib"]')?.remove();
+        element.querySelector('.exact-btn-disabled')?.remove();
+      }
     } else if (!canSeeAction(permissions, card, PENDING_BUTTON[card])) {
       element.querySelector('.exact-btn-disabled')?.remove();
     }
   });
+  if (comprasUiEnabled() && allowedRoute('#compras', response)) {
+    const card = document.createElement('div');
+    card.className = 'exact-card';
+    card.dataset.module = 'compras';
+    card.innerHTML = '<span class="exact-card-category">SCGRC</span><h3 class="exact-card-title">Compras</h3><p class="exact-card-desc">Solicita compras, elige cotizaciones y consulta sus avances.</p><a href="#compras" class="exact-btn gold">Gestionar compras</a>';
+    container.querySelector('.dashboard-grid-exact')?.append(card);
+  }
 }
 
 export function allowedRoute(hash, response) {
-  // Las compras requieren SIEMPRE una concesión verificada. No heredan el modo transitorio.
   if (hash === '#compras' && (response?.enforced !== true || response?.verified !== true)) return false;
   if (response?.enforced !== true) return true;
   const permissions = resolvePortalPermissions({ dm05: response });
   if (!permissions) return false;
-  if (hash === '#compras') return canSeeCard(permissions, 'compras') && ['crear','mis','area','todos','cancelar','firmar','prorroga','excepcion','elegir','recibir'].some(action=>canSeeAction(permissions,'compras',action));
+  if (hash === '#compras') return canSeeCard(permissions, 'compras') && ['crear','mis','area','todos','cancelar','firmar','prorroga','excepcion','elegir','recibir'].some(action => canSeeAction(permissions,'compras',action));
   if (hash === '#solicitudes') return canSeeAction(permissions, 'solicitudes', 'crear');
   if (hash === '#mis-solicitudes') return canSeeAction(permissions, 'solicitudes', 'mis');
+  // Las pantallas administrativas solicitan GET tickets-api.php?action=context
+  // y el servidor autoriza INT_GESTION desde DM05. No duplicar esta decisión.
   if (hash === '#admin-solicitudes' || hash === '#vision-gerencial') {
-    return canSeeAction(permissions, 'solicitudes', 'gestionar');
+    return true;
+  }
+  if (hash === '#ib') {
+    return canSeeAction(permissions, 'ib', 'acceder');
   }
   return true; // el resto de rutas conserva validaciones específicas del backend
 }

@@ -1,4 +1,4 @@
-DirectoryIndex index-v1782.html index.html
+DirectoryIndex index.html index-v1782.html
 # Configuración Apache cPanel / Neubox para ES6 Modules y SPA
 <IfModule mod_mime.c>
   AddType application/javascript .js

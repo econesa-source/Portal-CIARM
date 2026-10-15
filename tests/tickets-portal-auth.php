@@ -6,6 +6,16 @@ function check(bool $value,string $message):void {if(!$value)throw new RuntimeEx
 check(function_exists('ciarm_portal_collaborator'),'Collaborator policy is missing');
 $rows=[['Correo Ciarm','Nombre','Apellido','Área','Status'],['persona@ciarm.edu.mx','Persona','Prueba','Administración','Activo']];
 check(ciarm_portal_collaborator($rows,'persona@ciarm.edu.mx')['area']==='Administración','Canonical area');
+if(session_status()!==PHP_SESSION_ACTIVE)session_start();
+$_SESSION['ciarm_ticket_collaborator']=[
+ 'email'=>'persona@ciarm.edu.mx','expires'=>time()+30,
+ 'person'=>['correo'=>'persona@ciarm.edu.mx','nombre'=>'Persona Prueba','area'=>'Administración']
+];
+check(ciarm_portal_current_collaborator(['correo'=>'persona@ciarm.edu.mx'])['area']==='Administración',
+ 'Cached active identity avoids an unnecessary Google read');
+unset($_SESSION['ciarm_ticket_collaborator']);
+session_write_close();
+
 check(ciarm_portal_collaborator($rows,'other@ciarm.edu.mx')===null,'Unknown denied');
 $duplicate=$rows;$duplicate[]=$rows[1];check(ciarm_portal_collaborator($duplicate,'persona@ciarm.edu.mx')===null,'Duplicate denied');
 $inactive=$rows;$inactive[1][4]='Baja';check(ciarm_portal_collaborator($inactive,'persona@ciarm.edu.mx')===null,'Inactive denied');

@@ -1,27 +1,28 @@
 /**
  * Portal CIARM - Router SPA y Guardián de Autenticación
- * Versión: 18.7.0
+ * Versión: 18.7.8
  */
 
+import { comprasUiEnabled, clearComprasClient } from './services/comprasClient.js';
 import { getAuthenticatedUser, logout } from './services/authService.js';
 import { renderLoginWidget } from './components/loginWidget.js';
 import { getPortalPermissions, clearPortalPermissionsCache } from './services/portalPermissionsClient.js';
 import { applyDashboardAccess, allowedRoute } from './components/dashboardAccess.js';
-import { comprasUiEnabled } from './services/comprasClient.js';
 
-const APP_VERSION = '18.7.0';
+const APP_VERSION = '18.7.8';
 
 const routes = {
+  '#compras': () => import(`./components/comprasWidget.js?v=${APP_VERSION}`),
   '#vision-gerencial': () => import(`./components/ticketsManagementWidget.js?v=${APP_VERSION}`),
   '#inicio': () => import(`./components/dashboardWidget.js?v=${APP_VERSION}`),
-  '#compras': () => import(`./components/comprasWidget.js?v=${APP_VERSION}`),
   '#solicitudes': () => import(`./components/solicitudesWidget.js?v=${APP_VERSION}`),
   '#mis-solicitudes': () => import(`./components/misSolicitudesWidget.js?v=${APP_VERSION}`),
   '#mis-tareas': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
   '#validar-solicitudes': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
   '#seguimiento-servicio': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
   '#config-servicio': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
-  '#admin-solicitudes': () => import(`./components/adminSolicitudesWidget.js?v=${APP_VERSION}`)
+  '#admin-solicitudes': () => import(`./components/adminSolicitudesWidget.js?v=${APP_VERSION}`),
+  '#ib': () => import(`./components/ibWidget.js?v=${APP_VERSION}`)
 };
 
 function isMobileViewport() {
@@ -113,6 +114,7 @@ async function router() {
 
   if (!user) {
     clearPortalPermissionsCache();
+    clearComprasClient();
     syncComprasNavigation(null);
     if (sidebar) sidebar.style.display = 'none';
     if (sidebarToggle) sidebarToggle.style.display = 'none';
@@ -124,7 +126,7 @@ async function router() {
     mainContainer.innerHTML = '';
     renderLoginWidget(mainContainer, async () => {
       clearPortalPermissionsCache();
-      window.location.hash = '#inicio';
+      if (window.location.hash !== '#diagnostico-permisos') window.location.hash = '#inicio';
       await router();
     });
     return;
@@ -166,10 +168,24 @@ async function router() {
     }
   });
 
+  if (hash === '#diagnostico-permisos') {
+    try {
+      const { render } = await import(`./components/portalDiagnosticsWidget.js?v=${APP_VERSION}`);
+      if (navigationId !== latestNavigation) return;
+      await render(mainContainer);
+    } catch (error) {
+      console.error('Diagnóstico de permisos:', error);
+      mainContainer.textContent = 'No se pudo ejecutar la comprobación desde el Portal.';
+    }
+    return;
+  }
+
   if (routes[hash]) {
     try {
       const permissions = await getPortalPermissions();
       if (navigationId !== latestNavigation) return;
+      window.__CIARM_COMPRAS_UI_ENABLED__ = permissions?.comprasEnabled === true;
+      window.__CIARM_COMPRAS_WRITES_ENABLED__ = permissions?.comprasWritesEnabled === true;
       syncComprasNavigation(permissions);
       if ((hash === '#compras' && !comprasUiEnabled()) || !allowedRoute(hash, permissions)) {
         mainContainer.innerHTML = '<p role="alert">Esta función no está habilitada para tu perfil.</p>';

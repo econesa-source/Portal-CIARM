@@ -12,7 +12,8 @@ function compras_result(int $status,array $result): never {
   echo json_encode($result,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
   exit;
 }
-$expected=(string)(getenv('CIARM_COMPRAS_ORIGIN')?:'');
+$config=ciarm_compras_config();
+$expected=(string)($config['origin']??'');
 $origin=(string)($_SERVER['HTTP_ORIGIN']??'');
 $expectedHost=(string)(parse_url($expected,PHP_URL_HOST)?:'');
 $currentHost=strtolower((string)($_SERVER['HTTP_HOST']??''));
@@ -38,7 +39,7 @@ if($method==='OPTIONS'){
 }
 if(!in_array($method,['GET','POST'],true))
   compras_result(405,['ok'=>false,'version'=>'compras-v1','code'=>'METHOD_NOT_ALLOWED']);
-if(getenv('CIARM_COMPRAS_ENABLED')!=='1')
+if(!ciarm_compras_config_valid($config) || ($method==='POST'&&!ciarm_compras_writes_enabled($config)))
   compras_result(503,['ok'=>false,'version'=>'compras-v1','code'=>'SERVICE_UNAVAILABLE']);
 
 $user=ciarm_session_user();

@@ -92,3 +92,42 @@ test('compact assignment places request summary beside all editable fields',asyn
 test('lists distinguish request and assignment dates and include time',async()=>{const s=setup();s.ticket.estado='ASIGNADO';s.ticket.responsable='Daniel Lara';s.ticket.fechaAsignacion='2026-10-07 11:12:13';await render(s.root);s.root.querySelector('[data-state="ASIGNADO"]').click();const table=s.root.querySelector('#ticket-subset table');assert.match(table.textContent,/Fecha de solicitud/);assert.match(table.textContent,/Fecha de asignación/);assert.match(table.textContent,/10:00:00/);assert.match(table.textContent,/11:12:13/);s.dom.window.close();});
 test('state and distribution choices reveal focused list with scrolling',async()=>{const s=setup();let scrolled=0;const original=s.dom.window.HTMLElement.prototype.scrollIntoView;s.dom.window.HTMLElement.prototype.scrollIntoView=function(){if(this.id==='ticket-subset')scrolled++;};await render(s.root);s.root.querySelector('[data-state="NUEVO"]').click();assert.equal(scrolled,1);assert.equal(document.activeElement.id,'ticket-subset-title');s.root.querySelector('[data-group-value]').click();assert.equal(scrolled,2);s.dom.window.HTMLElement.prototype.scrollIntoView=original;s.dom.window.close();});
 test('unassigned subset offers assignment and both timestamps share markup',async()=>{const s=setup();s.ticket.fechaAsignacion='2026-10-07 11:12:13';await render(s.root);s.root.querySelector('[data-state="NUEVO"]').click();const row=s.root.querySelector('#ticket-subset-body tr');assert.ok([...row.querySelectorAll('button')].some(b=>b.textContent==='Asignar'));assert.equal(row.querySelectorAll('.ticket-date-time').length,2);const assign=[...row.querySelectorAll('button')].find(b=>b.textContent==='Asignar');assign.click();await s.flush();assert.equal(s.root.querySelector('dialog').open,true);s.dom.window.close();});
+
+test('detail preview appears immediately while current version is being checked',async()=>{
+ const s=setup('TKT-2026-00014');
+ const original=globalThis.fetch;
+ let release;
+ const wait=new Promise(resolve=>{release=resolve;});
+ globalThis.fetch=(url,options)=>{
+   if(String(url).includes('action=detail'))return wait;
+   return original(url,options);
+ };
+ await render(s.root);
+ s.root.querySelector('[data-id]').click();
+ const detail=s.root.querySelector('#ticket-detail');
+ assert.match(detail.textContent,/Persona/);
+ assert.match(detail.textContent,/Verificando versión actual/);
+ assert.equal(detail.querySelector('form'),null,'no editable form before version check');
+ assert.equal(detail.querySelector('img'),null,'preview remains escaped');
+ release({ok:true,status:200,json:async()=>({ok:true,data:s.ticket})});
+ await s.flush();
+ assert.ok(detail.querySelector('#ticket-assignment'),'form appears once fresh version is verified');
+ s.dom.window.close();
+});
+
+test('admin dashboard renders without waiting for assignment catalogs',async()=>{
+ const s=setup('TKT-2026-00015');
+ const original=globalThis.fetch;
+ let catalogCalls=0;
+ globalThis.fetch=(url,options)=>{
+   if(String(url).includes('action=catalogs'))catalogCalls++;
+   return original(url,options);
+ };
+ await render(s.root);
+ assert.match(s.root.textContent,/Estado de las solicitudes/);
+ assert.equal(catalogCalls,0,'catalog not needed to display dashboard');
+ s.root.querySelector('[data-id]').click();
+ await s.flush();
+ assert.equal(catalogCalls,1,'catalog loaded once when editing');
+ s.dom.window.close();
+});

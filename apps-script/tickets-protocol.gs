@@ -1,3 +1,15 @@
+/** Timing kept only within a signed request. Never stores ticket content or actor. */
+function ticketPerfClock(){
+ var started=Date.now(),previous=started,stages={};
+ return {
+  mark:function(name){var now=Date.now();stages[name]=now-previous;previous=now;},
+  snapshot:function(){var result={};Object.keys(stages).forEach(function(k){result[k]=stages[k];});result.total=Date.now()-started;return result;}
+ };
+}
+function ticketPerfReply(reply,request,clock){
+ if(request&&request.perfProbe===true)reply._perf=clock.snapshot();
+ return reply;
+}
 /** Signed self-service protocol; administrative operations retain their verifier. */
 var PORTAL_METADATA_LIMIT = 50000;
 var PORTAL_UPLOAD_LIMIT = 15 * 1024 * 1024;
@@ -15,15 +27,31 @@ function verifyTicketRequest(envelope,signature) {
  return request;
 }
 function handleTicketEnvelope(envelope,signature) {
- var lock,locked=false,request;
+ var lock,locked=false,request,clock=ticketPerfClock();
  try {
-  request=verifyTicketRequest(envelope,signature);if(typeof SERVICE_TABLE_CACHE!=='undefined')SERVICE_TABLE_CACHE={};
-  var collaborator=portalCollaborator(request.actor);
-  if(['list','detail','catalogs','assign'].indexOf(request.action)>=0)return handleAdminEnvelope(envelope,signature);
-  lock=LockService.getScriptLock();locked=lock.tryLock(15000);if(!locked)adminFail('BUSY');
+  request=verifyTicketRequest(envelope,signature);clock.mark('verify');if(typeof SERVICE_TABLE_CACHE!=='undefined')SERVICE_TABLE_CACHE={};
+  var collaborator=portalCollaborator(request.actor);clock.mark('identity');
+  if(['list','detail','catalogs','assign'].indexOf(request.action)>=0){
+   var delegated=handleAdminEnvelope(envelope,signature);
+   if(request.perfProbe===true){
+    var initial=clock.snapshot(),inner=delegated._perf||{};
+    delegated._perf={
+     verify:(initial.verify||0)+(inner.verify||0),
+     identity:initial.identity||0,
+     authorize:inner.authorize||0,
+     lock:inner.lock||0,
+     nonce:inner.nonce||0,
+     open:inner.open||0,
+     work:inner.work||0,
+     total:initial.total
+    };
+   }
+   return delegated;
+  }
+  lock=LockService.getScriptLock();locked=lock.tryLock(15000);clock.mark('lock');if(!locked)adminFail('BUSY');
   var cache=CacheService.getScriptCache(),key='ticket-admin-'+request.nonce;
-  if(cache.get(key))adminFail('REPLAY');cache.put(key,'1',300);
-  var book=SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID),data;
+  if(cache.get(key))adminFail('REPLAY');cache.put(key,'1',300);clock.mark('nonce');
+  var book=SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID),data;clock.mark('open');
   switch(request.action){
    case 'serviceContext':data={protocol:'tickets-service-v1',enabled:Boolean(serviceConfig(book)),canAdmin:adminPermission(request.actor)};break;
    case 'serviceSettings':data=serviceSettings(book,request.actor);break;
@@ -39,7 +67,8 @@ function handleTicketEnvelope(envelope,signature) {
    case 'creationStatus':data=portalCreationStatus(book,request.actor,(request.payload||{}).operationId);break;
    default:adminFail('VALIDATION');
   }
-  return {ok:true,data:data};
- }catch(error){var result={ok:false,code:error.adminCode||'UPSTREAM'};if(request&&request.action==='serviceTransition'&&book&&request.payload){try{var history=book.getSheetByName('BITACORA TICKETS');result.operationPending=history?history.getDataRange().getValues().slice(1).some(function(r){return r[0]===request.payload.operationId&&r[2]===request.actor;}):false;}catch(ignored){}}return result;}
+  clock.mark('work');
+  return ticketPerfReply({ok:true,data:data},request,clock);
+ }catch(error){var result={ok:false,code:error.adminCode||'UPSTREAM'};if(request&&request.action==='serviceTransition'&&book&&request.payload){try{var history=book.getSheetByName('BITACORA TICKETS');result.operationPending=history?history.getDataRange().getValues().slice(1).some(function(r){return r[0]===request.payload.operationId&&r[2]===request.actor;}):false;}catch(ignored){}}return ticketPerfReply(result,request,clock);}
  finally{if(typeof SERVICE_TABLE_CACHE!=='undefined')SERVICE_TABLE_CACHE=null;if(locked)lock.releaseLock();}
 }

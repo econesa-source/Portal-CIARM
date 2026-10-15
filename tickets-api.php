@@ -108,9 +108,9 @@ try {
     },$old);
     $direct=array_map(static function($ticket){unset($ticket['version']);return $ticket;},$direct);
    }
-   $same=$old===$direct;
-   $matched=$matched&&$same;
-   $results[$kind]=['same'=>$same,'count'=>count($direct)];
+   $report=ciarm_tickets_parity_report($kind,$old,$direct);
+   $matched=$matched&&$report['same'];
+   $results[$kind]=$report;
   }
   if($matched){
    $_SESSION['ciarm_ticket_direct_until']=time()+600;

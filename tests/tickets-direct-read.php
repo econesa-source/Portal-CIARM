@@ -50,4 +50,15 @@ $fake=function(array $ranges,string $render)use($headers,$ticket,$journal):array
 };
 assertRead(count(ciarm_tickets_direct_read('list',$fake))===1,'Read uses injected readonly sources');
 expectsReadError(fn()=>ciarm_tickets_direct_read('assign',$fake),'VALIDATION');
+$legacy=[['id'=>'TKT-2026-00001','fecha'=>'2026-10-02','observaciones'=>'private text']];
+$directDifferent=[['id'=>'TKT-2026-00001','fecha'=>'2026-10-03','observaciones'=>'different private text']];
+$parity=ciarm_tickets_parity_report('list',$legacy,$directDifferent);
+assertRead($parity['same']===false,'Mismatched values must block activation');
+assertRead(in_array('fecha',$parity['fields'],true),'Report must name differing field');
+assertRead(in_array('observaciones',$parity['fields'],true),'Report must name other field');
+assertRead(!str_contains(json_encode($parity),'private text'),'No private values in diagnostics');
+$match=ciarm_tickets_parity_report('catalogs',['prioridades'=>['ALTA']],['prioridades'=>['ALTA']]);
+assertRead($match['same']===true && !$match['fields'],'Identical catalogs can activate');
+$catalogDifference=ciarm_tickets_parity_report('catalogs',['prioridades'=>['ALTA']],['prioridades'=>['BAJA']]);
+assertRead($catalogDifference['fields']===['prioridades'],'Only approved schema keys are exposed');
 echo "Ticket direct read adapter checks passed\n";

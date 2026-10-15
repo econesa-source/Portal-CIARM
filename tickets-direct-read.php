@@ -171,3 +171,37 @@ function ciarm_tickets_direct_read(string $action,?callable $batch=null): array 
  return $action==='list'?ciarm_tickets_direct_list($sets[$ranges[0]],$sets[$ranges[1]])
    :ciarm_tickets_direct_catalogs($sets[$ranges[0]],$sets[$ranges[1]],$sets[$ranges[2]]);
 }
+
+/**
+ * Privacy-safe read parity report. Only reports schema key names and counts;
+ * neither ticket IDs, field values, names, emails, descriptions nor URLs leave
+ * the backend as diagnostics.
+ */
+function ciarm_tickets_parity_report(string $kind,array $legacy,array $direct): array {
+ if(!in_array($kind,['list','catalogs'],true))throw new RuntimeException('VALIDATION');
+ $report=['same'=>$legacy===$direct,'legacyCount'=>count($legacy),'directCount'=>count($direct),'fields'=>[]];
+ if($report['same'])return $report;
+ $fields=[];
+ if($kind==='list'){
+  foreach($legacy as $index=>$old){
+   $fresh=$direct[$index]??null;
+   if(!is_array($old)||!is_array($fresh)||($old['id']??null)!==($fresh['id']??null)){
+    $fields['rowCountOrOrder']=true;
+    continue;
+   }
+   foreach(array_unique(array_merge(array_keys($old),array_keys($fresh))) as $field){
+    if(!is_string($field)||!preg_match('/^[a-zA-Z]{2,30}$/',$field))continue;
+    if(!array_key_exists($field,$old)||!array_key_exists($field,$fresh)||$old[$field]!==$fresh[$field]){
+     $fields[$field]=true;
+    }
+   }
+  }
+  if(count($legacy)!==count($direct))$fields['rowCountOrOrder']=true;
+ }else{
+  foreach(['prioridades','responsables'] as $field){
+   if(($legacy[$field]??null)!==($direct[$field]??null))$fields[$field]=true;
+  }
+ }
+ $report['fields']=array_slice(array_keys($fields),0,18);
+ return $report;
+}

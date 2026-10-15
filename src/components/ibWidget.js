@@ -425,7 +425,7 @@ const QUICK_PROMPTS = [
   }
 ];
 
-export async function render(container, userSession) {
+async function render(container, userSession) {
   if (!container) return;
 
   const user = userSession || { nombre: "Docente CIARM", correo: "docente@ciarm.edu.mx" };

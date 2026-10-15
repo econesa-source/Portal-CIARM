@@ -31,6 +31,18 @@ $list=ciarm_tickets_direct_list([$headers,$ticket,$purchase,$pending],$journal);
 assertRead(count($list)===1,'Purchases and pending creations must not be exposed');
 assertRead($list[0]['fecha']==='2026-10-02','Formatted date must be normalized');
 assertRead(ciarm_tickets_date_text(46313.5,'FECHA ASIGNACIÓN')==='2026-10-18 12:00:00','DateTime serial formatted in Cancun wall time');
+
+// Incidencia real observada en TICKETS!W1002: PLAZO SOLICITADO es una celda
+// DATE cuyo valor Sheets API UNFORMATTED_VALUE es 46309. GAS la emite yyyy-MM-dd.
+assertRead(ciarm_tickets_date_text(46309,'PLAZO SOLICITADO')==='2026-10-14','Plazo DATE follows canonical GAS formatting');
+$datedTicket=$ticket;
+$datedTicket[$index('PLAZO SOLICITADO')]=46309;
+$datedList=ciarm_tickets_direct_list([$headers,$datedTicket],[$journal[0]]);
+assertRead(count($datedList)===1,'Plazo-date ticket must remain visible');
+assertRead($datedList[0]['plazo']==='2026-10-14','Plazo serial must match GAS adminTicketView');
+assertRead(ciarm_tickets_date_text('3 días','PLAZO SOLICITADO')==='3 días','Text plazo must not be modified');
+assertRead(ciarm_tickets_date_text('','PLAZO SOLICITADO')==='','Blank plazo stays blank');
+
 assertRead(ciarm_tickets_date_text(46313.5,'FECHA COMPROMISO')==='2026-10-18','Canonical commitment date discards time');
 assertRead(ciarm_tickets_date_text(0.5,'HORA SOLICITUD')==='12:00:00','Time serial formatted as clock');
 

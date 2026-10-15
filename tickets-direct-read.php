@@ -20,7 +20,7 @@ const CIARM_TICKETS_HEADERS = [
 function ciarm_tickets_batch_url(array $ranges, string $render): string {
  if (!in_array($render,['UNFORMATTED_VALUE','FORMULA'],true)) throw new RuntimeException('CONFIGURATION');
  // The REST API expects repeated "ranges" query keys (not PHP's ranges[0]).
- $query='valueRenderOption='.rawurlencode($render).'&dateTimeRenderOption=FORMATTED_STRING';
+ $query='valueRenderOption='.rawurlencode($render).'&dateTimeRenderOption=SERIAL_NUMBER';
  foreach($ranges as $range) $query.='&ranges='.rawurlencode($range);
  return 'https://sheets.googleapis.com/v4/spreadsheets/'.CIARM_TICKETS_SHEET_ID
     .'/values:batchGet?'.$query;
@@ -70,6 +70,20 @@ function ciarm_tickets_text(mixed $value): string {return $value===null?'':(stri
 /** Maps the GAS adminCellValue string rules. Used only for read presentation;
  * canonical mutation tokens are ALWAYS freshly acquired from GAS detail. */
 function ciarm_tickets_date_text(mixed $value,string $header): string {
+ if(is_float($value)||is_int($value)){
+  // Sheets serial numbers are local wall-clock days since 1899-12-30.
+  // Match the date/time formatting in the Apps Script read contract.
+  if($header==='HORA SOLICITUD'&&$value>=0&&$value<2)
+    return gmdate('H:i:s',(int)round(fmod((float)$value,1.0)*86400));
+  if($header==='ÚLTIMA ACTUALIZACIÓN'||str_starts_with($header,'FECHA')){
+   if($value>=20000&&$value<90000){
+    $seconds=(int)round(((float)$value-25569)*86400);
+    return gmdate(in_array($header,['FECHA ASIGNACIÓN','FECHA INICIO','FECHA TERMINACIÓN','ÚLTIMA ACTUALIZACIÓN'],true)
+      ?'Y-m-d H:i:s':'Y-m-d',$seconds);
+   }
+  }
+  return ciarm_tickets_text($value);
+ }
  if(!is_string($value))return ciarm_tickets_text($value);
  if($header!=='ÚLTIMA ACTUALIZACIÓN'&&!str_starts_with($header,'FECHA'))return $value;
  if(!preg_match('/^(\d{2})\/(\d{2})\/(\d{4})(?: (\d{2}:\d{2})(?::(\d{2}))?)?$/',$value,$m))return $value;

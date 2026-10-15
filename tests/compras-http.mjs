@@ -1,5 +1,6 @@
 import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 const server=spawn('php',['-S','127.0.0.1:18786'],{stdio:'ignore',env:{...process.env,
  CIARM_COMPRAS_ENABLED:'1',CIARM_COMPRAS_WRITES_ENABLED:'0',
  CIARM_COMPRAS_ORIGIN:'https://portal2.ciarm.edu.mx',
@@ -10,8 +11,13 @@ try{
   try{await fetch('http://127.0.0.1:18786/compras-api.php');break;}
   catch{await new Promise(r=>setTimeout(r,100));}
  }
- const request=(opts={})=>fetch('http://127.0.0.1:18786/compras-api.php?action=misPedidos',
-  {...opts,headers:{Host:'portal2.ciarm.edu.mx',...opts.headers}});
+ const request=(opts={})=>new Promise((resolve,reject)=>{
+  const req=http.request('http://127.0.0.1:18786/compras-api.php?action=misPedidos',
+   {method:opts.method||'GET',headers:{Host:'portal2.ciarm.edu.mx',...opts.headers}},res=>{
+    let body='';res.setEncoding('utf8');res.on('data',c=>body+=c);
+    res.on('end',()=>resolve({status:res.statusCode,json:async()=>JSON.parse(body)}));
+   });req.on('error',reject);req.end(opts.body);
+ });
  let r=await request();assert.equal(r.status,401);assert.equal((await r.json()).code,'UNAUTHENTICATED');
  r=await request({headers:{Origin:'https://evil.example'}});assert.equal(r.status,403);
  r=await request({headers:{'Sec-Fetch-Site':'cross-site'}});assert.equal(r.status,403);

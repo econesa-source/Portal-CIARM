@@ -1,5 +1,5 @@
 import {attachmentPayload} from '../services/comprasAttachment.js';
-import {requestCompras,comprasUiEnabled} from '../services/comprasClient.js';
+import {requestCompras,comprasUiEnabled} from '../services/comprasClient.js?v=18.7.11';
 
 const TABS=[
  {id:'crear',label:'Solicitar compra',query:'contextoSolicitud',permission:'COMPRAS_CREAR'},
@@ -10,7 +10,7 @@ const TABS=[
 ];
 const value=x=>String(x??'');
 const escapeHtml=x=>value(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const errText=e=>({'READ_ONLY':'Compras está en verificación de solo lectura; todavía no se pueden registrar operaciones.','SERVICE_UNAVAILABLE':'Compras aún no está habilitado en el Portal.','FORBIDDEN':'No tenés permiso para esta operación.','CSRF_NOT_READY':'Volvé a cargar esta sección antes de enviar.','REPLAY':'El servidor ya recibió esta petición. Consultá su estado antes de repetirla.'})[e?.code]||'No se pudo completar. Comprobá su estado antes de reintentar.';
+const errText=e=>({'READ_ONLY':'Compras está en verificación de solo lectura; todavía no se pueden registrar operaciones.','SERVICE_UNAVAILABLE':'Compras aún no está habilitado en el Portal.','FORBIDDEN':'No tenés permiso para esta operación.','CSRF_NOT_READY':'Volvé a cargar esta sección antes de enviar.','REPLAY':'El servidor ya recibió esta petición. Consultá su estado antes de repetirla.'})[e?.code]||('No se pudo completar. Comprobá su estado antes de reintentar.'+(/^[A-Z_]{3,50}$/.test(e?.code||'')?' Código: '+e.code:''));
 const key=()=> 'PORTAL_'+crypto.randomUUID().replace(/-/g,'');
 const selectOptions=(a,selected='')=>(Array.isArray(a)?a:[]).map(x=>{
  const code=typeof x==='string'?x:value(x.codigo||x.id||x.valor);

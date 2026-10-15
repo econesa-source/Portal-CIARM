@@ -1,4 +1,4 @@
-import {validateComprasRequest,COMPRAS_OPERATIONS} from './comprasContract.js';
+import {validateComprasRequest,COMPRAS_OPERATIONS} from './comprasContract.js?v=18.7.11';
 
 let csrfToken='';
 function fail(code){return Object.assign(new Error(code),{code});}

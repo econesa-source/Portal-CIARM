@@ -160,6 +160,17 @@ function ciarm_tickets_direct_catalogs(array $catalogs,array $people,array $conf
  }
  return ['prioridades'=>$priorities,'responsables'=>$names];
 }
+/**
+ * Eligibility is not authorization. tickets-api.php MUST validate the session
+ * and DM05 role before routing any read through this function.
+ * Set CIARM_TICKETS_DIRECT_READ=0 in hosting for emergency rollback.
+ */
+function ciarm_tickets_direct_eligible(string $method,string $action): bool {
+ return $method==='GET'
+   && in_array($action,['list','catalogs'],true)
+   && getenv('CIARM_TICKETS_DIRECT_READ')!=='0';
+}
+
 function ciarm_tickets_direct_read(string $action,?callable $batch=null): array {
  if(!in_array($action,['list','catalogs'],true))throw new RuntimeException('VALIDATION');
  $ranges=$action==='list'

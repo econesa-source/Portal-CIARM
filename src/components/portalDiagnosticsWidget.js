@@ -47,7 +47,7 @@ export async function render(container) {
   async function measured(label, query) {
     const started = performance.now();
     try {
-      const response = await fetch('/tickets-api.php?' + query, {
+      const response = await fetch('/tickets-api.php?' + query + '&perf=1', {
         method:'GET',credentials:'same-origin',cache:'no-store',
         headers:{ Accept:'application/json' }
       });
@@ -61,7 +61,15 @@ export async function render(container) {
         String(fmt('apps_script')).padStart(7) + '   ' +
         String(fmt('total')).padStart(7) +
         (response.ok && payload?.ok === true ? '' : '   HTTP ' + response.status);
-      return {line, data:response.ok && payload?.ok === true ? payload.data : null, ok:response.ok && payload?.ok === true};
+      const gas = backend.gas_total;
+      const stages = ['identity','authorize','lock','nonce','open','work'];
+      const interior = Number.isFinite(gas)
+        ? '    ↳ Apps Script (ms): ' + stages.map(name => name + '=' +
+            (Number.isFinite(backend['gas_'+name]) ? Math.round(backend['gas_'+name]) : '—')).join('  ') +
+          '  ejecución=' + Math.round(gas) +
+          '  transporte/inicio≈' + Math.max(0,Math.round((backend.apps_script ?? elapsed) - gas))
+        : null;
+      return {line, interior, data:response.ok && payload?.ok === true ? payload.data : null, ok:response.ok && payload?.ok === true};
     } catch(error) {
       return {line:label.padEnd(23) + ' ERROR de conexión',data:null,ok:false};
     }
@@ -90,6 +98,7 @@ export async function render(container) {
         print();
         const result=await measured(label,query);
         output[output.length-1]=result.line;
+        if(result.interior) output.push(result.interior);
         if(label==='Listado de tickets' && Array.isArray(result.data)) {
           const id=result.data.find(t => /^TKT-\d{4}-\d+$/.test(String(t?.id || '')))?.id;
           if(id) firstTicket=id;
@@ -106,10 +115,11 @@ export async function render(container) {
         print();
         const detail=await measured('Detalle de ticket','action=detail&id='+encodeURIComponent(firstTicket));
         output[output.length-1]=detail.line;
+        if(detail.interior) output.push(detail.interior);
       }
       output.push('');
       output.push('Navegador: solicitud completa. Puente GAS: PHP → Apps Script y su respuesta.');
-      output.push('Para separar Apps Script de Sheets harán falta mediciones internas del backend.');
+      output.push('Apps Script ejecución: no incluye inicio de instancia ni transporte. Trabajo incluye Sheets.');
       print();
     } finally {
       measure.disabled = false;

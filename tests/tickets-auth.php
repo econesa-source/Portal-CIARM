@@ -15,9 +15,14 @@ $signed=ciarm_ticket_envelope(['correo'=>'d.lara@ciarm.edu.mx'],'assign',['actor
 $decoded=json_decode($signed['envelope'],true,512,JSON_THROW_ON_ERROR);
 check($decoded['actor']==='d.lara@ciarm.edu.mx','Actor must come from session');
 check(hash_equals(hash_hmac('sha256',$signed['envelope'],'fixture-secret'),$signed['signature']),'Signature must bind exact JSON');
+check(!array_key_exists('perfProbe',$decoded),'Normal tickets do not request performance details');
+$probe=ciarm_ticket_envelope(['correo'=>'d.lara@ciarm.edu.mx'],'list',[],'fixture-secret',1700000000,'nonce-123456789012',true);
+$withProbe=json_decode($probe['envelope'],true,512,JSON_THROW_ON_ERROR);
+check(($withProbe['perfProbe']??false)===true,'Signed performance probe is explicit');
+check(hash_equals(hash_hmac('sha256',$probe['envelope'],'fixture-secret'),$probe['signature']),'Performance probe is HMAC-bound');
 check(ciarm_ticket_csrf_valid('stored','stored'),'Matching token');
 check(!ciarm_ticket_csrf_valid('stored','wrong'),'Invalid token');
 check(!ciarm_ticket_csrf_valid('',''),'Empty token');
 check(ciarm_ticket_origin_valid('https://portal2.ciarm.edu.mx','portal2.ciarm.edu.mx'),'Same origin');
 check(!ciarm_ticket_origin_valid('https://malicious.invalid','portal2.ciarm.edu.mx'),'Cross origin denied');
-echo "Tickets authorization: 15 checks passed\n";
+echo "Tickets authorization: checks passed\n";

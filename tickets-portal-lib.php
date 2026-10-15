@@ -84,9 +84,9 @@ function ciarm_portal_upload(array $files,array $input): array {
     if(!ciarm_portal_upload_supported())throw new RuntimeException('CONFIGURATION');
     return ciarm_portal_file_payload($files['file'],$input);
 }
-function ciarm_portal_bridge(array $user,string $action,array $payload): array {
+function ciarm_portal_bridge(array $user,string $action,array $payload,bool $perfProbe=false): array {
     $secret=@file_get_contents(ciarm_private_path('tickets-admin.key'));if($secret===false||strlen(trim($secret))<32)throw new RuntimeException('CONFIGURATION');
-    $signed=ciarm_ticket_envelope($user,$action,$payload,trim($secret));$limit=$action==='uploadAttachment'?15*1024*1024:50000;
+    $signed=ciarm_ticket_envelope($user,$action,$payload,trim($secret),null,null,$perfProbe);$limit=$action==='uploadAttachment'?15*1024*1024:50000;
     if(strlen($signed['envelope'])>$limit)throw new RuntimeException('PAYLOAD_SIZE');
     $response=ciarm_http_json(CIARM_TICKETS_WEBAPP,['post'=>true,'headers'=>['Accept: application/json','Content-Type: application/json'],'body'=>json_encode($signed,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),'timeout'=>in_array($action,['uploadAttachment','finalizeCreate'],true)?60:25]);
     if($response['status']!==200||!is_bool($response['body']['ok']??null))throw new RuntimeException('UPSTREAM');return $response['body'];

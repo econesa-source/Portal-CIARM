@@ -17,17 +17,21 @@ test('la medición usa sesión institucional y solo consulta acciones de lectura
       data={ok:true,data:action==='list'?[{id:'TKT-2026-00001',solicitante:'Dato privado'}]:action==='context'?{canAdmin:true}:{}};
     }
     return {ok:true,status:200,json:async()=>data,
-      headers:{get:()=> 'session;dur=1.0, identity;dur=2.0, rbac;dur=3.0, apps_script;dur=4.0, total;dur=5.0'}};
+      headers:{get:()=> 'session;dur=1.0, identity;dur=2.0, rbac;dur=3.0, apps_script;dur=4.0, total;dur=5.0, gas_identity;dur=52.0, gas_authorize;dur=14.0, gas_lock;dur=3.0, gas_nonce;dur=2.0, gas_open;dur=20.0, gas_work;dur=100.0, gas_total;dur=192.0'}};
   };
   const root=document.querySelector('main');
   await render(root);
   const button=[...root.querySelectorAll('button')].find(x=>/Medir velocidad/.test(x.textContent));
   assert.equal(button.disabled,false);
   button.click();
-  for(let i=0;i<100 && !root.textContent.includes('Para separar Apps Script');i++)
+  for(let i=0;i<100 && !root.textContent.includes('Apps Script ejecución');i++)
     await new Promise(resolve=>setImmediate(resolve));
   assert.match(root.textContent,/Detalle de ticket/);
   assert.match(root.textContent,/Puente GAS/);
+  assert.match(root.textContent,/Apps Script \(ms\)/);
+  assert.match(root.textContent,/transporte\/inicio/);
+  assert.ok(calls.slice(2).every(x => new URL(x.url,'https://portal2.ciarm.edu.mx').searchParams.get('perf')==='1'));
+
   assert.doesNotMatch(root.textContent,/Dato privado/);
   const actions=calls.slice(2).map(x=>new URL(x.url,'https://portal2.ciarm.edu.mx').searchParams.get('action'));
   assert.deepEqual(actions,['context','list','catalogs','serviceContext','serviceList','detail']);

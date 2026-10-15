@@ -61,3 +61,18 @@ test('assignment confirms typed dates from real Sheets coercion',()=>{const s=se
 test('derived formula recalculation does not conflict with assignment',()=>{const s=setup();s.calculate();const r=s.call('assign',s.payload());assert.equal(r.ok,true);assert.equal(s.sheets.get('TICKETS').rows[1][17],'CALCULATED SLA');assert.equal(s.sheets.get('BITACORA TICKETS').rows[1][1],'CONFIRMADO');});
 test('time-valued cells show the request time',()=>{const s=setup();s.sheets.get('TICKETS').rows[1][2]=new Date('1899-12-30T15:30:00Z');assert.equal(s.call('detail',{id:s.row[0]}).data.hora,'10:30:00');});
 test('assignment exposes its recorded date and time without changing source fields',()=>{const s=setup(),r=s.call('assign',s.payload());assert.equal(r.ok,true);assert.equal(r.data.ticket.fechaAsignacion,'2026-10-07 10:00:00');assert.equal(s.call('detail',{id:r.data.ticket.id}).data.fechaAsignacion,r.data.ticket.fechaAsignacion);});
+
+test('signed performance probe only exposes numeric stages; ordinary responses unchanged',()=>{
+ const fixture=setup();
+ const normal=fixture.call('list');
+ assert.equal(normal.ok,true);
+ assert.equal('_perf' in normal,false);
+ const timed=fixture.call('list',{},'d.lara@ciarm.edu.mx',{perfProbe:true});
+ assert.equal(timed.ok,true);
+ for(const name of ['verify','authorize','lock','nonce','open','work','total']){
+   assert.equal(typeof timed._perf[name],'number');
+   assert.ok(timed._perf[name]>=0);
+ }
+ assert.equal('identity' in timed._perf,false);
+ assert.deepEqual(JSON.parse(JSON.stringify(normal.data)),JSON.parse(JSON.stringify(timed.data)));
+});

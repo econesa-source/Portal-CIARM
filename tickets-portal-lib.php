@@ -12,11 +12,30 @@ function ciarm_portal_collaborator(array $rows,string $email): ?array {
     $r=$matches[0];return ['correo'=>$email,'nombre'=>trim(($r[$columns['Nombre']]??'').' '.($r[$columns['Apellido']]??'')),'area'=>trim((string)($r[$columns['Área']]??''))];
 }
 function ciarm_portal_current_collaborator(array $user): array {
+    // Resuelve identidad en DM03 una vez por sesión durante un intervalo corto:
+    // no vuelve a intercambiar un JWT OAuth ni a leer toda la tabla en cada clic.
+    // Las autorizaciones DM05 se siguen verificando de forma independiente.
+    $email = strtolower(trim((string)($user['correo'] ?? '')));
+    if ($email === '') throw new RuntimeException('FORBIDDEN');
+    $cached = $_SESSION['ciarm_ticket_collaborator'] ?? null;
+    if (session_status() === PHP_SESSION_ACTIVE && is_array($cached)
+        && ($cached['email'] ?? '') === $email
+        && (int)($cached['expires'] ?? 0) > time()
+        && is_array($cached['person'] ?? null)) {
+        return $cached['person'];
+    }
     $raw=@file_get_contents(ciarm_private_path('service-account.json'));if($raw===false)throw new RuntimeException('CONFIGURATION');
     $account=json_decode($raw,true,512,JSON_THROW_ON_ERROR);if(!is_array($account))throw new RuntimeException('CONFIGURATION');
     $response=ciarm_http_json('https://sheets.googleapis.com/v4/spreadsheets/'.CIARM_DM03_SPREADSHEET_ID.'/values/'.rawurlencode(CIARM_DM03_RANGE),['headers'=>['Accept: application/json','Authorization: Bearer '.ciarm_google_access_token($account)]]);
     if($response['status']!==200)throw new RuntimeException('UPSTREAM');
-    $person=ciarm_portal_collaborator($response['body']['values']??[],(string)($user['correo']??''));if($person===null)throw new RuntimeException('FORBIDDEN');return $person;
+    $person=ciarm_portal_collaborator($response['body']['values']??[],$email);
+    if($person===null)throw new RuntimeException('FORBIDDEN');
+    if(session_status() === PHP_SESSION_ACTIVE) {
+        $_SESSION['ciarm_ticket_collaborator']=[
+            'email'=>$email, 'expires'=>time()+45, 'person'=>$person
+        ];
+    }
+    return $person;
 }
 function ciarm_portal_ini_bytes(string $value): int {
     $value=trim($value);if($value==='-1')return -1;
@@ -65,9 +84,9 @@ function ciarm_portal_upload(array $files,array $input): array {
     if(!ciarm_portal_upload_supported())throw new RuntimeException('CONFIGURATION');
     return ciarm_portal_file_payload($files['file'],$input);
 }
-function ciarm_portal_bridge(array $user,string $action,array $payload): array {
+function ciarm_portal_bridge(array $user,string $action,array $payload,bool $perfProbe=false): array {
     $secret=@file_get_contents(ciarm_private_path('tickets-admin.key'));if($secret===false||strlen(trim($secret))<32)throw new RuntimeException('CONFIGURATION');
-    $signed=ciarm_ticket_envelope($user,$action,$payload,trim($secret));$limit=$action==='uploadAttachment'?15*1024*1024:50000;
+    $signed=ciarm_ticket_envelope($user,$action,$payload,trim($secret),null,null,$perfProbe);$limit=$action==='uploadAttachment'?15*1024*1024:50000;
     if(strlen($signed['envelope'])>$limit)throw new RuntimeException('PAYLOAD_SIZE');
     $response=ciarm_http_json(CIARM_TICKETS_WEBAPP,['post'=>true,'headers'=>['Accept: application/json','Content-Type: application/json'],'body'=>json_encode($signed,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),'timeout'=>in_array($action,['uploadAttachment','finalizeCreate'],true)?60:25]);
     if($response['status']!==200||!is_bool($response['body']['ok']??null))throw new RuntimeException('UPSTREAM');return $response['body'];

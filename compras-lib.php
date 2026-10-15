@@ -68,7 +68,7 @@ function ciarm_compras_shape(string $action,array $payload): array {
     ];
     $keys=array_keys($payload);$expected=$allowed[$action]??[];
     if(array_diff($keys,$expected)!==[])throw new RuntimeException('INVALID_REQUEST');
-    if(strlen(json_encode($payload,JSON_THROW_ON_ERROR))>(($action==='crearSolicitud'&&isset($payload['adjuntoArchivo']))?2900000:24576))throw new RuntimeException('INVALID_REQUEST');
+    if(strlen(json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR))>(($action==='crearSolicitud'&&isset($payload['adjuntoArchivo']))?2900000:24576))throw new RuntimeException('INVALID_REQUEST');
     if($action==='crearSolicitud') {
         if(isset($payload['adjuntoArchivo']))ciarm_compras_validate_attachment($payload['adjuntoArchivo']);
         if(!preg_match('/^[A-Za-z0-9_-]{16,100}$/',(string)($payload['claveEnvio']??''))||
@@ -111,7 +111,7 @@ function ciarm_compras_forward(array $user,string $action,array $payload): array
     $signed=['envelope'=>$envelope,'signature'=>hash_hmac('sha256',$envelope,$key)];
     $resp=ciarm_http_json($url,['post'=>true,'headers'=>[
       'Accept: application/json','Content-Type: application/json'
-    ],'body'=>json_encode($signed,JSON_THROW_ON_ERROR),'timeout'=>30]);
+    ],'body'=>json_encode($signed,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),'timeout'=>30]);
     if($resp['status']!==200||!is_array($resp['body'])||
       ($resp['body']['version']??'')!=='compras-v1'||!is_bool($resp['body']['ok']??null))
       throw new RuntimeException('UPSTREAM_ERROR');

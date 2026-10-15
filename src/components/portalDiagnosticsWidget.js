@@ -10,7 +10,7 @@ export async function render(container) {
   title.textContent = 'Comprobación de permisos DM03–DM05';
   article.append(title);
   const description = document.createElement('p');
-  description.textContent = 'Verificación desde la sesión del propio Portal. No activa ni modifica permisos.';
+  description.textContent = 'Verificación desde la sesión del Portal. No modifica permisos. La lectura rápida solo se habilita si coincide con Apps Script.';
   article.append(description);
   const status = document.createElement('pre');
   status.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f7fa;padding:16px;border-radius:8px;font:13px/1.6 monospace';
@@ -29,6 +29,35 @@ export async function render(container) {
   measure.style.cssText = 'padding:9px 16px;margin:12px 0 0 10px;background:#2eb1a0;color:#152b43;border:0;border-radius:6px;cursor:pointer';
   measure.disabled = true;
   article.append(measure);
+
+  const verifyDirect=document.createElement('button');
+  verifyDirect.type='button';
+  verifyDirect.textContent='Validar lectura rápida';
+  verifyDirect.style.cssText='padding:9px 16px;margin:12px 0 0 10px;border-radius:6px;background:#26487f;color:white;border:0;cursor:pointer';
+  verifyDirect.disabled=true;
+  article.append(verifyDirect);
+  const directStatus=document.createElement('p');
+  directStatus.setAttribute('role','status');
+  directStatus.textContent='Las lecturas de tickets siguen en Apps Script hasta verificar equivalencia.';
+  article.append(directStatus);
+  verifyDirect.addEventListener('click',async()=>{
+    verifyDirect.disabled=true;
+    directStatus.textContent='Comparando datos de Sheets y Apps Script. Puede demorar aproximadamente 20 segundos…';
+    try{
+      const response=await fetch('/tickets-api.php?action=validateDirectReads',{
+        method:'GET',credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}
+      });
+      const body=await response.json();
+      if(!response.ok||body?.ok!==true)throw Error('HTTP '+response.status);
+      if(body?.data?.enabled===true){
+        directStatus.textContent='Lectura rápida activada para esta sesión (10 minutos). Listado y catálogos coinciden con Apps Script. Volvé a medir.';
+      }else{
+        directStatus.textContent='No se activó: existe una diferencia entre las lecturas. Se conserva el circuito anterior.';
+      }
+    }catch(error){
+      directStatus.textContent='No se pudo validar. Se conserva el circuito anterior ('+String(error.message||'error')+').';
+    }finally{verifyDirect.disabled=false;}
+  });
   const timings = document.createElement('pre');
   timings.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f7fa;padding:16px;border-radius:8px;font:13px/1.6 monospace';
   timings.setAttribute('role', 'status');
@@ -156,6 +185,9 @@ export async function render(container) {
         'Política DM05 activa: ' + (payload?.data?.enforced === true ? 'SÍ' : 'NO (modo seguro)') + '\n' +
         'Funciones efectivas reconocidas: ' + (Array.isArray(payload?.data?.codes) ? payload.data.codes.length : 'SIN DATOS') + '\n' +
         'Dominio: ' + window.location.hostname;
+      verifyDirect.disabled = payload?.data?.verified !== true ||
+        !Array.isArray(payload?.data?.codes) ||
+        !payload.data.codes.includes('INT_GESTION');
       measure.disabled = payload?.data?.verified !== true ||
         !Array.isArray(payload?.data?.codes) ||
         !payload.data.codes.includes('INT_GESTION');

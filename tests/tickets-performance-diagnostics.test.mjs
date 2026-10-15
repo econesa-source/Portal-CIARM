@@ -53,3 +53,25 @@ test('el usuario sin INT_GESTION no puede iniciar el diagnóstico de tickets',as
   assert.deepEqual(calls,['/auth-session.php','/portal-permissions.php?preflight=1']);
   dom.window.close();
 });
+
+test('activar lectura rápida requiere verificación y nunca envía modificaciones',async()=>{
+ const dom=new JSDOM('<main></main>',{url:'https://portal2.ciarm.edu.mx/#diagnostico-permisos'});
+ Object.assign(globalThis,{document:dom.window.document,window:dom.window});
+ const calls=[];
+ globalThis.fetch=async(url,opts)=>{
+  calls.push({url,opts});
+  return {ok:true,status:200,json:async()=>url==='/auth-session.php'?{ok:true}:
+   url.startsWith('/portal-permissions.php')?{ok:true,data:{verified:true,enforced:true,codes:['INT_GESTION']}}:
+   {ok:true,data:{enabled:true,checks:{catalogs:{same:true},list:{same:true}}}}};
+ };
+ await render(document.querySelector('main'));
+ const button=[...document.querySelectorAll('button')].find(x=>/Validar lectura rápida/.test(x.textContent));
+ assert.equal(button.disabled,false);
+ button.click();
+ for(let i=0;i<100&&!document.querySelector('main').textContent.includes('Lectura rápida activada');i++)
+  await new Promise(resolve=>setImmediate(resolve));
+ assert.match(document.querySelector('main').textContent,/Lectura rápida activada/);
+ assert.deepEqual(calls.slice(2).map(x=>x.url),['/tickets-api.php?action=validateDirectReads']);
+ assert.ok(calls.every(x=>x.opts.method==='GET'&&x.opts.credentials==='same-origin'));
+ dom.window.close();
+});

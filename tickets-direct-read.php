@@ -1,0 +1,173 @@
+<?php
+declare(strict_types=1);
+require_once __DIR__ . '/tickets-lib.php';
+
+/**
+ * Read-only adapter for the authoritative BD Sistema de Tickets.
+ * PHP authenticates via DM03/DM05 before calling this adapter.
+ * Never changes Sheets; mutations and their canonical version validation stay in GAS.
+ */
+const CIARM_TICKETS_SHEET_ID = '1o33Gw6xWsH64SXmaxaN7EDlSsW0fUExDjPE4cGpnPbs';
+const CIARM_TICKETS_HEADERS = [
+ 'ID TICKET','FECHA SOLICITUD','HORA SOLICITUD','ÁREA SOLICITANTE',
+ 'SOLICITANTE','CORREO SOLICITANTE','TIPO DE SOLICITUD','DESCRIPCIÓN',
+ 'PRIORIDAD','RESPONSABLE','FECHA ASIGNACIÓN','FECHA COMPROMISO','ESTADO',
+ 'FECHA INICIO','FECHA TERMINACIÓN','TIEMPO EJECUCIÓN','TIEMPO TOTAL',
+ 'SLA','PUNTOS','OBSERVACIONES','ÚLTIMA ACTUALIZACIÓN',
+ 'PRIORIDAD SOLICITADA','PLAZO SOLICITADO','ARCHIVOS ADJUNTOS'
+];
+
+function ciarm_tickets_batch_url(array $ranges, string $render): string {
+ if (!in_array($render,['UNFORMATTED_VALUE','FORMULA'],true)) throw new RuntimeException('CONFIGURATION');
+ // The REST API expects repeated "ranges" query keys (not PHP's ranges[0]).
+ $query='valueRenderOption='.rawurlencode($render).'&dateTimeRenderOption=SERIAL_NUMBER';
+ foreach($ranges as $range) $query.='&ranges='.rawurlencode($range);
+ return 'https://sheets.googleapis.com/v4/spreadsheets/'.CIARM_TICKETS_SHEET_ID
+    .'/values:batchGet?'.$query;
+}
+
+/** $http injection only for deterministic tests; never from request parameters. */
+function ciarm_tickets_batch_get(array $ranges, string $render='UNFORMATTED_VALUE', ?callable $http=null): array {
+ $raw=@file_get_contents(ciarm_private_path('service-account.json'));
+ if ($raw===false) throw new RuntimeException('CONFIGURATION');
+ $account=json_decode($raw,true,512,JSON_THROW_ON_ERROR);
+ if (!is_array($account)) throw new RuntimeException('CONFIGURATION');
+ $token=ciarm_google_access_token($account);
+ $fetch=$http??'ciarm_http_json';
+ $response=$fetch(ciarm_tickets_batch_url($ranges,$render),[
+  'headers'=>['Accept: application/json','Authorization: Bearer '.$token],
+  'timeout'=>12
+ ]);
+ if (($response['status']??0)!==200||!is_array($response['body']['valueRanges']??null)
+     ||count($response['body']['valueRanges'])!==count($ranges))throw new RuntimeException('UPSTREAM');
+ $result=[];
+ foreach($ranges as $i=>$range){
+  $values=$response['body']['valueRanges'][$i]['values']??[];
+  if(!is_array($values))throw new RuntimeException('UPSTREAM');
+  $result[$range]=$values;
+ }
+ return $result;
+}
+
+function ciarm_tickets_table(array $values,array $required): array {
+ if(!$values || !is_array($values[0]))throw new RuntimeException('SCHEMA');
+ $headers=array_map(static fn($v)=>trim((string)$v),$values[0]);
+ foreach($required as $header) {
+  if(count(array_keys($headers,$header,true))!==1) throw new RuntimeException('SCHEMA');
+ }
+ return ['headers'=>$headers,'rows'=>array_slice($values,1)];
+}
+function ciarm_tickets_column(array $table,string $name): int {
+ $index=array_search($name,$table['headers'],true);
+ if($index===false) throw new RuntimeException('SCHEMA');
+ return $index;
+}
+function ciarm_tickets_value(array $row,array $table,string $name): mixed {
+ return $row[ciarm_tickets_column($table,$name)]??'';
+}
+function ciarm_tickets_text(mixed $value): string {return $value===null?'':(string)$value;}
+
+/** Maps the GAS adminCellValue string rules. Used only for read presentation;
+ * canonical mutation tokens are ALWAYS freshly acquired from GAS detail. */
+function ciarm_tickets_date_text(mixed $value,string $header): string {
+ if(is_float($value)||is_int($value)){
+  // Sheets serial numbers are local wall-clock days since 1899-12-30.
+  // Match the date/time formatting in the Apps Script read contract.
+  if($header==='HORA SOLICITUD'&&$value>=0&&$value<2)
+    return gmdate('H:i:s',(int)round(fmod((float)$value,1.0)*86400));
+  if($header==='ÚLTIMA ACTUALIZACIÓN'||str_starts_with($header,'FECHA')){
+   if($value>=20000&&$value<90000){
+    $seconds=(int)round(((float)$value-25569)*86400);
+    return gmdate(in_array($header,['FECHA ASIGNACIÓN','FECHA INICIO','FECHA TERMINACIÓN','ÚLTIMA ACTUALIZACIÓN'],true)
+      ?'Y-m-d H:i:s':'Y-m-d',$seconds);
+   }
+  }
+  return ciarm_tickets_text($value);
+ }
+ if(!is_string($value))return ciarm_tickets_text($value);
+ if($header!=='ÚLTIMA ACTUALIZACIÓN'&&!str_starts_with($header,'FECHA'))return $value;
+ if(!preg_match('/^(\d{2})\/(\d{2})\/(\d{4})(?: (\d{2}:\d{2})(?::(\d{2}))?)?$/',$value,$m))return $value;
+ return $m[3].'-'.$m[2].'-'.$m[1].(!empty($m[4])?' '.$m[4].':'.($m[5]??'00'):'');
+}
+function ciarm_tickets_ticket_view(array $row,array $table): array {
+ $get=static function(string $name)use($row,$table): string {
+  $value=ciarm_tickets_date_text(ciarm_tickets_value($row,$table,$name),$name);
+  // Canonical backend strips protection characters for read presentation.
+  return preg_replace('/^\x{200B}(?=[=+@\x27-])/u','',$value)??$value;
+ };
+ return [
+  'id'=>$get('ID TICKET'),'fecha'=>$get('FECHA SOLICITUD'),
+  'hora'=>$get('HORA SOLICITUD'),'solicitante'=>$get('SOLICITANTE'),
+  'correo'=>$get('CORREO SOLICITANTE'),'area'=>$get('ÁREA SOLICITANTE'),
+  'tipo'=>$get('TIPO DE SOLICITUD'),'descripcion'=>$get('DESCRIPCIÓN'),
+  'urgencia'=>$get('PRIORIDAD SOLICITADA'),'plazo'=>$get('PLAZO SOLICITADO'),
+  'prioridad'=>$get('PRIORIDAD'),'responsable'=>$get('RESPONSABLE'),
+  'fechaAsignacion'=>$get('FECHA ASIGNACIÓN'),
+  'fechaCompromiso'=>$get('FECHA COMPROMISO'),'estado'=>$get('ESTADO'),
+  'observaciones'=>$get('OBSERVACIONES'),'adjuntos'=>$get('ARCHIVOS ADJUNTOS')
+ ];
+}
+function ciarm_tickets_pending_ids(array $values): array {
+ $table=ciarm_tickets_table($values,['ESTADO','TICKET','ACCIÓN']);
+ $out=[];
+ foreach($table['rows'] as $row){
+  if(ciarm_tickets_value($row,$table,'ACCIÓN')==='CREAR'
+     &&ciarm_tickets_value($row,$table,'ESTADO')==='PENDIENTE'){
+   $id=ciarm_tickets_text(ciarm_tickets_value($row,$table,'TICKET'));
+   if($id!=='')$out[$id]=true;
+  }
+ }
+ return $out;
+}
+function ciarm_tickets_direct_list(array $tickets,array $journal): array {
+ $table=ciarm_tickets_table($tickets,CIARM_TICKETS_HEADERS);
+ $pending=ciarm_tickets_pending_ids($journal);
+ $out=[];
+ foreach($table['rows'] as $row){
+  $ticket=ciarm_tickets_ticket_view($row,$table);
+  $id=$ticket['id'];
+  if(!preg_match('/^TKT-\d{4}-\d+$/',$id))continue;
+  if(strtolower(trim($ticket['tipo']))==='compras'||isset($pending[$id]))continue;
+  // A list is a read-only projection: its version is intentionally not trusted
+  // for writes. A fresh GAS detail supplies canonical expectedVersion.
+  $ticket['version']=null;
+  $out[]=$ticket;
+ }
+ return $out;
+}
+function ciarm_tickets_direct_catalogs(array $catalogs,array $people,array $config): array {
+ $catalogs=ciarm_tickets_table($catalogs,['PRIORIDADES']);
+ $people=ciarm_tickets_table($people,['RESPONSABLE']);
+ $config=ciarm_tickets_table($config,['VERSION','REGLAS','ACTOR','FECHA','OPERACION','HASH']);
+ $priorityAllowed=['CRITICA','URGENTE','ALTA','MEDIA','BAJA'];
+ $priorities=[];$names=[];
+ foreach($catalogs['rows'] as $row){
+  $v=trim(ciarm_tickets_text(ciarm_tickets_value($row,$catalogs,'PRIORIDADES')));
+  if($v!==''&&in_array($v,$priorityAllowed,true)&&!in_array($v,$priorities,true))$priorities[]=$v;
+ }
+ foreach($people['rows'] as $row){
+  $v=trim(ciarm_tickets_text(ciarm_tickets_value($row,$people,'RESPONSABLE')));
+  if($v!==''&&!in_array($v,$names,true))$names[]=$v;
+ }
+ if($config['rows']){
+  $last=end($config['rows']);
+  $policy=json_decode(ciarm_tickets_text(ciarm_tickets_value($last,$config,'REGLAS')),true,512,JSON_THROW_ON_ERROR);
+  if(!is_array($policy)||!isset($policy['responsibles'])||!is_array($policy['responsibles']))throw new RuntimeException('SCHEMA');
+  foreach($policy['responsibles'] as $person) {
+   $name=trim(ciarm_tickets_text($person['name']??''));
+   if($name!==''&&!in_array($name,$names,true))$names[]=$name;
+  }
+ }
+ return ['prioridades'=>$priorities,'responsables'=>$names];
+}
+function ciarm_tickets_direct_read(string $action,?callable $batch=null): array {
+ if(!in_array($action,['list','catalogs'],true))throw new RuntimeException('VALIDATION');
+ $ranges=$action==='list'
+  ? ["'TICKETS'!A:X","'BITACORA TICKETS'!A:J"]
+  : ["'CATALOGOS'!A:E","'RESPONSABLES'!A:B","'CONFIG SERVICIO'!A:F"];
+ $load=$batch??'ciarm_tickets_batch_get';
+ $sets=$load($ranges,'UNFORMATTED_VALUE');
+ foreach($ranges as $r)if(!array_key_exists($r,$sets))throw new RuntimeException('UPSTREAM');
+ return $action==='list'?ciarm_tickets_direct_list($sets[$ranges[0]],$sets[$ranges[1]])
+   :ciarm_tickets_direct_catalogs($sets[$ranges[0]],$sets[$ranges[1]],$sets[$ranges[2]]);
+}

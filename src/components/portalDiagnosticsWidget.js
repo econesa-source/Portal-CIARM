@@ -10,7 +10,7 @@ export async function render(container) {
   title.textContent = 'Comprobación de permisos DM03–DM05';
   article.append(title);
   const description = document.createElement('p');
-  description.textContent = 'Verificación desde la sesión del Portal. No modifica permisos. La lectura rápida solo se habilita si coincide con Apps Script.';
+  description.textContent = 'Verificación desde la sesión del Portal. El listado y los catálogos consultan Sheets directamente; Apps Script permanece para escrituras y como respaldo.';
   article.append(description);
   const status = document.createElement('pre');
   status.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f7fa;padding:16px;border-radius:8px;font:13px/1.6 monospace';
@@ -32,13 +32,13 @@ export async function render(container) {
 
   const verifyDirect=document.createElement('button');
   verifyDirect.type='button';
-  verifyDirect.textContent='Validar lectura rápida';
+  verifyDirect.textContent='Comparar datos (opcional)';
   verifyDirect.style.cssText='padding:9px 16px;margin:12px 0 0 10px;border-radius:6px;background:#26487f;color:white;border:0;cursor:pointer';
   verifyDirect.disabled=true;
   article.append(verifyDirect);
   const directStatus=document.createElement('p');
   directStatus.setAttribute('role','status');
-  directStatus.textContent='Las lecturas de tickets siguen en Apps Script hasta verificar equivalencia.';
+  directStatus.textContent='Lectura directa automática activa para listados y catálogos. No hace falta pulsar ningún botón.';
   article.append(directStatus);
   verifyDirect.addEventListener('click',async()=>{
     let sessionExpired=false;
@@ -55,7 +55,7 @@ export async function render(container) {
         sessionExpired=true;
         measure.disabled=true;
         status.textContent='Sesión PHP: NO VERIFICADA. La sesión institucional venció o dejó de estar disponible.';
-        directStatus.textContent='La lectura rápida no se activó. Volvé a iniciar sesión para continuar.';
+        directStatus.textContent='La sesión venció. Volvé a iniciar sesión para continuar.';
         const login=document.createElement('button');
         login.type='button';
         login.textContent='Volver a iniciar sesión';
@@ -66,7 +66,7 @@ export async function render(container) {
       }
       if(!response.ok||body?.ok!==true)throw Error('HTTP '+response.status+' ('+String(body?.code||'UNKNOWN')+')');
       if(body?.data?.enabled===true){
-        directStatus.textContent='Lectura rápida activada para esta sesión (10 minutos). Listado y catálogos coinciden con Apps Script. Volvé a medir.';
+        directStatus.textContent='Coinciden: listado y catálogos consultan Sheets directamente, sin activación manual.';
       }else{
         const checks=body?.data?.checks||{};
         const rows=['list','catalogs'].map(key=>{
@@ -81,10 +81,10 @@ export async function render(container) {
             parts.push('campos diferentes: '+check.fields.join(', '));
           return name+': DIFERENTE'+(parts.length?' ('+parts.join('; ')+')':'');
         }).filter(Boolean);
-        directStatus.textContent='No se activó; se conserva Apps Script. '+rows.join(' | ');
+        directStatus.textContent='La comparación detectó diferencias; esta sesión usa Apps Script hasta corregirlas. '+rows.join(' | ');
       }
     }catch(error){
-      directStatus.textContent='No se pudo validar. Se conserva el circuito anterior ('+String(error.message||'error')+').';
+      directStatus.textContent='La comparación no pudo completarse ('+String(error.message||'error')+'). La lectura normal conserva respaldo de Apps Script.';
     }finally{verifyDirect.disabled=sessionExpired;}
   });
   const timings = document.createElement('pre');
@@ -113,11 +113,16 @@ export async function render(container) {
       const elapsed = performance.now() - started;
       const backend = parseServerTiming(response.headers?.get('Server-Timing'));
       const fmt = name => Number.isFinite(backend[name]) ? backend[name].toFixed(0) : '—';
+      const source=response.headers?.get('X-CIARM-Tickets-Read-Source')||'';
+      const backendTime=Number.isFinite(backend.sheets_direct)
+        ? fmt('sheets_direct') : fmt('apps_script');
+      const sourceLabel=source==='sheets-direct'?'   Sheets API':
+        source==='apps-script-fallback'?'   Apps Script respaldo':'';
       const line = label.padEnd(23) + ' ' + String(Math.round(elapsed)).padStart(7) +
         '   ' + String(fmt('identity')).padStart(7) + '   ' +
         String(fmt('rbac')).padStart(7) + '   ' +
-        String(fmt('apps_script')).padStart(7) + '   ' +
-        String(fmt('total')).padStart(7) +
+        String(backendTime).padStart(7) + '   ' +
+        String(fmt('total')).padStart(7) + sourceLabel +
         (response.ok && payload?.ok === true ? '' : '   HTTP ' + response.status);
       const gas = backend.gas_total;
       const stages = ['identity','authorize','lock','nonce','open','work'];
@@ -137,7 +142,7 @@ export async function render(container) {
     rerun.disabled = true;
     const output=[
       'Tiempos en milisegundos (ms). No se muestran datos personales.',
-      'Operación                Navegador  Identidad   Permisos   Puente GAS   PHP total',
+      'Operación                Navegador  Identidad   Permisos   Lectura     PHP total',
       '--------------------------------------------------------------------------'
     ];
     const print = () => {timings.textContent=output.join('\n')};

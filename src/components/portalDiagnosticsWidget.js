@@ -68,7 +68,20 @@ export async function render(container) {
       if(body?.data?.enabled===true){
         directStatus.textContent='Lectura rápida activada para esta sesión (10 minutos). Listado y catálogos coinciden con Apps Script. Volvé a medir.';
       }else{
-        directStatus.textContent='No se activó: existe una diferencia entre las lecturas. Se conserva el circuito anterior.';
+        const checks=body?.data?.checks||{};
+        const rows=['list','catalogs'].map(key=>{
+          const check=checks[key];
+          if(!check)return null;
+          const name=key==='list'?'Listado':'Catálogos';
+          if(check.same===true)return name+': coincide';
+          const parts=[];
+          if(Number.isInteger(check.legacyCount)&&Number.isInteger(check.directCount))
+            parts.push('filas: Apps Script '+check.legacyCount+' / Sheets '+check.directCount);
+          if(Array.isArray(check.fields)&&check.fields.length)
+            parts.push('campos diferentes: '+check.fields.join(', '));
+          return name+': DIFERENTE'+(parts.length?' ('+parts.join('; ')+')':'');
+        }).filter(Boolean);
+        directStatus.textContent='No se activó; se conserva Apps Script. '+rows.join(' | ');
       }
     }catch(error){
       directStatus.textContent='No se pudo validar. Se conserva el circuito anterior ('+String(error.message||'error')+').';

@@ -73,4 +73,18 @@ $match=ciarm_tickets_parity_report('catalogs',['prioridades'=>['ALTA']],['priori
 assertRead($match['same']===true && !$match['fields'],'Identical catalogs can activate');
 $catalogDifference=ciarm_tickets_parity_report('catalogs',['prioridades'=>['ALTA']],['prioridades'=>['BAJA']]);
 assertRead($catalogDifference['fields']===['prioridades'],'Only approved schema keys are exposed');
+// Direct reads are available without session flags. They remain GET-only.
+assertRead(ciarm_tickets_direct_eligible('GET','list'),'List GET should use Sheets by default');
+assertRead(ciarm_tickets_direct_eligible('GET','catalogs'),'Catalogs GET should use Sheets by default');
+foreach(['assign','detail','mine','serviceList','serviceDetail','saveServicePolicy','serviceTransition'] as $action)
+ assertRead(!ciarm_tickets_direct_eligible('GET',$action),'Non-projection '.$action.' must stay in GAS');
+foreach(['assign','list','catalogs','serviceTransition'] as $action)
+ assertRead(!ciarm_tickets_direct_eligible('POST',$action),'POST '.$action.' must stay out of Sheets');
+putenv('CIARM_TICKETS_DIRECT_READ=0');
+try {
+ assertRead(!ciarm_tickets_direct_eligible('GET','list'),'Emergency rollback must disable direct reads');
+ assertRead(!ciarm_tickets_direct_eligible('GET','catalogs'),'Emergency rollback must disable catalogs');
+} finally {
+ putenv('CIARM_TICKETS_DIRECT_READ');
+}
 echo "Ticket direct read adapter checks passed\n";

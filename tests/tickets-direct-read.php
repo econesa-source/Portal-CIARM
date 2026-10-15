@@ -9,7 +9,7 @@ function expectsReadError(callable $run,string $code): void{
 $url=ciarm_tickets_batch_url(["'TICKETS'!A:X","'BITACORA TICKETS'!A:J"],'UNFORMATTED_VALUE');
 assertRead(substr_count($url,'&ranges=')===2,'BatchGet must repeat ranges');
 assertRead(!str_contains($url,'ranges%5B0%5D'),'No PHP encoded range indexes');
-assertRead(str_contains($url,'dateTimeRenderOption=FORMATTED_STRING'),'Sheets date option must be explicit');
+assertRead(str_contains($url,'dateTimeRenderOption=SERIAL_NUMBER'),'Sheets date option must be explicit');
 $headers=CIARM_TICKETS_HEADERS;
 $index=static function(string $name)use($headers):int{return array_search($name,$headers,true);};
 $ticket=array_fill(0,count($headers),'');
@@ -30,6 +30,10 @@ $journal=[['OPERACION','ESTADO','ACTOR','PAYLOAD HASH','TICKET','ANTES','DESPUES
 $list=ciarm_tickets_direct_list([$headers,$ticket,$purchase,$pending],$journal);
 assertRead(count($list)===1,'Purchases and pending creations must not be exposed');
 assertRead($list[0]['fecha']==='2026-10-02','Formatted date must be normalized');
+assertRead(ciarm_tickets_date_text(46313.5,'FECHA ASIGNACIÓN')==='2026-10-18 12:00:00','DateTime serial formatted in Cancun wall time');
+assertRead(ciarm_tickets_date_text(46313.5,'FECHA COMPROMISO')==='2026-10-18','Canonical commitment date discards time');
+assertRead(ciarm_tickets_date_text(0.5,'HORA SOLICITUD')==='12:00:00','Time serial formatted as clock');
+
 assertRead($list[0]['observaciones']==='=1+1','Literal protection character hidden from presentation');
 assertRead(array_key_exists('version',$list[0])&&$list[0]['version']===null,'List version must never be used as canonical write token');
 expectsReadError(fn()=>ciarm_tickets_direct_list([['bad','headers']],$journal),'SCHEMA');

@@ -4,6 +4,8 @@
  * Versión: 18.8.0
  */
 
+const IB_SHARED_DRIVE_URL = "https://drive.google.com/drive/folders/0APjAPL7f_pxtUk9PVA?hl=es";
+
 const CURATED_SAMPLE_CATALOG = [
   // CORE
   {
@@ -446,7 +448,7 @@ export async function render(container, userSession) {
         </div>
 
         <div style="display:flex; gap:10px; align-items:center;">
-          <a href="https://drive.google.com/drive/u/0/shared-drives" target="_blank" rel="noopener noreferrer" 
+          <a href="${IB_SHARED_DRIVE_URL}" target="_blank" rel="noopener noreferrer" 
              style="display:inline-flex; align-items:center; gap:8px; background:#0A192F; color:#FFF; text-decoration:none; padding:10px 16px; border-radius:6px; font-weight:700; font-size:0.85rem; box-shadow:0 2px 4px rgba(0,0,0,0.1); transition:all 0.2s ease;">
             <span>📂</span> Abrir Unidad Compartida en Drive
           </a>

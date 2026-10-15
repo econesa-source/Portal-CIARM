@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/portal-permissions-lib.php';
+require_once __DIR__ . '/compras-lib.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
     ciarm_json_response(405, ['ok' => false, 'code' => 'METHOD']);
@@ -14,6 +15,9 @@ try {
     // Modo diagnóstico autenticado: comprueba Sheets sin activar permisos nuevos.
     $preflight = ($_GET['preflight'] ?? '') === '1';
     $result = ciarm_rbac_effective($user, $preflight);
+    $comprasConfig = ciarm_compras_config();
+    $result['comprasEnabled'] = ciarm_compras_config_valid($comprasConfig);
+    $result['comprasWritesEnabled'] = ciarm_compras_writes_enabled($comprasConfig);
     ciarm_json_response(200, ['ok' => true, 'data' => $result]);
 } catch (Throwable $error) {
     error_log('Portal DM05 permissions unavailable: ' . $error->getMessage());

@@ -12,6 +12,9 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci && npm test
+      - run: php tests/compras-config.php
+      - run: node tests/compras-http.mjs
+      - run: php -l compras-api.php && php -l compras-lib.php
       - run: php tests/tickets-auth.php
       - run: php tests/tickets-portal-auth.php
       - run: php tests/tickets-direct-read.php

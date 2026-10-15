@@ -19,10 +19,11 @@ const CIARM_TICKETS_HEADERS = [
 
 function ciarm_tickets_batch_url(array $ranges, string $render): string {
  if (!in_array($render,['UNFORMATTED_VALUE','FORMULA'],true)) throw new RuntimeException('CONFIGURATION');
- $params=['valueRenderOption'=>$render,'dateTimeRenderOption'=>'FORMATTED_STRING'];
- foreach($ranges as $range) $params['ranges'][]=$range;
+ // The REST API expects repeated "ranges" query keys (not PHP's ranges[0]).
+ $query='valueRenderOption='.rawurlencode($render).'&dateTimeRenderOption=FORMATTED_STRING';
+ foreach($ranges as $range) $query.='&ranges='.rawurlencode($range);
  return 'https://sheets.googleapis.com/v4/spreadsheets/'.CIARM_TICKETS_SHEET_ID
-    .'/values:batchGet?'.http_build_query($params,'','&',PHP_QUERY_RFC3986);
+    .'/values:batchGet?'.$query;
 }
 
 /** $http injection only for deterministic tests; never from request parameters. */

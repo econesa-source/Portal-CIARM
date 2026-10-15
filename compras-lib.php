@@ -142,3 +142,31 @@ function ciarm_compras_validate_attachment(mixed $a): void {
  $magic=['application/pdf'=>"%PDF-",'image/jpeg'=>"\xFF\xD8\xFF",'image/png'=>"\x89PNG\r\n\x1a\n"];
  if(!str_starts_with($bytes,$magic[$a['mime']]))throw new RuntimeException('INVALID_REQUEST');
 }
+
+/** Standard browser upload; rebuild the unchanged compras-v1 attachment for HT06. */
+function ciarm_compras_request_body(): array {
+ $length=(int)($_SERVER['CONTENT_LENGTH']??0);
+ $type=strtolower((string)($_SERVER['CONTENT_TYPE']??''));
+ if($length<1||$length>3000000)throw new RuntimeException('INVALID_REQUEST');
+ if(str_starts_with($type,'application/json')){
+  $data=json_decode((string)file_get_contents('php://input'),true,64,JSON_THROW_ON_ERROR);
+ }elseif(str_starts_with($type,'multipart/form-data;')){
+  if(array_keys($_POST)!==['request']||array_keys($_FILES)!==['adjunto']||
+    !is_string($_POST['request'])||strlen($_POST['request'])>32768)throw new RuntimeException('INVALID_REQUEST');
+  $data=json_decode($_POST['request'],true,64,JSON_THROW_ON_ERROR);
+  if(!is_array($data)||($data['action']??'')!=='crearSolicitud'||!is_array($data['payload']??null)||
+    array_key_exists('adjuntoArchivo',$data['payload']))throw new RuntimeException('INVALID_REQUEST');
+  $f=$_FILES['adjunto'];
+  if(!is_array($f)||($f['error']??-1)!==UPLOAD_ERR_OK||!is_int($f['size']??null)||
+    $f['size']<4||$f['size']>2097152||!is_string($f['tmp_name']??null)||
+    !is_uploaded_file($f['tmp_name'])||!is_string($f['name']??null)||!is_string($f['type']??null))
+    throw new RuntimeException('INVALID_REQUEST');
+  $bytes=file_get_contents($f['tmp_name']);
+  if($bytes===false||strlen($bytes)!==$f['size'])throw new RuntimeException('INVALID_REQUEST');
+  $attachment=['nombre'=>$f['name'],'mime'=>$f['type'],'base64'=>base64_encode($bytes)];
+  ciarm_compras_validate_attachment($attachment);
+  $data['payload']['adjuntoArchivo']=$attachment;
+ }else throw new RuntimeException('INVALID_REQUEST');
+ if(!is_array($data))throw new RuntimeException('INVALID_REQUEST');
+ return $data;
+}

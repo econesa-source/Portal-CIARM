@@ -14,6 +14,7 @@ jobs:
       - run: npm ci && npm test
       - run: php tests/compras-config.php
       - run: node tests/compras-http.mjs
+      - run: node tests/compras-multipart-http.mjs
       - run: php -l compras-api.php && php -l compras-lib.php
       - run: php tests/tickets-auth.php
       - run: php tests/tickets-portal-auth.php

@@ -49,10 +49,7 @@ try{
   if($method==='GET'){
     $action=$_GET['action']??null;$payload=[];
   }else{
-    $length=(int)($_SERVER['CONTENT_LENGTH']??0);
-    if($length<1||$length>3000000||stripos((string)($_SERVER['CONTENT_TYPE']??''),'application/json')!==0)
-      throw new RuntimeException('INVALID_REQUEST');
-    $data=json_decode((string)file_get_contents('php://input'),true,64,JSON_THROW_ON_ERROR);
+    $data=ciarm_compras_request_body();
     if(!is_array($data)||array_is_list($data)||array_diff(array_keys($data),['action','payload','csrfToken'])!==[])
       throw new RuntimeException('INVALID_REQUEST');
     $action=$data['action']??null;$payload=$data['payload']??null;

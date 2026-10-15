@@ -134,7 +134,7 @@ try {
  // DM03/DM05 authorization has already passed above, and mutation/version
  // operations continue through the signed Apps Script endpoint.
  // The legacy GAS path is only used if the Sheets read fails.
- $readDirect = $method==='GET' && in_array($action,['list','catalogs'],true);
+ $readDirect = ciarm_tickets_direct_eligible($method,$action);
  session_write_close();
  $stamp=microtime(true);
  $result=null;

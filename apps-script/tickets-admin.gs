@@ -1,3 +1,15 @@
+/** Timing kept only within a signed request. Never stores ticket content or actor. */
+function ticketPerfClock(){
+ var started=Date.now(),previous=started,stages={};
+ return {
+  mark:function(name){var now=Date.now();stages[name]=now-previous;previous=now;},
+  snapshot:function(){var result={};Object.keys(stages).forEach(function(k){result[k]=stages[k];});result.total=Date.now()-started;return result;}
+ };
+}
+function ticketPerfReply(reply,request,clock){
+ if(request&&request.perfProbe===true)reply._perf=clock.snapshot();
+ return reply;
+}
 /** Administración de solicitudes internas. Requiere puente PHP firmado. */
 var ADMIN_TICKET_HEADERS = ['ID TICKET','FECHA SOLICITUD','HORA SOLICITUD','ÁREA SOLICITANTE','SOLICITANTE','CORREO SOLICITANTE','TIPO DE SOLICITUD','DESCRIPCIÓN','PRIORIDAD','RESPONSABLE','FECHA ASIGNACIÓN','FECHA COMPROMISO','ESTADO','FECHA INICIO','FECHA TERMINACIÓN','TIEMPO EJECUCIÓN','TIEMPO TOTAL','SLA','PUNTOS','OBSERVACIONES','ÚLTIMA ACTUALIZACIÓN','PRIORIDAD SOLICITADA','PLAZO SOLICITADO','ARCHIVOS ADJUNTOS'];
 var ADMIN_JOURNAL_HEADERS = ['OPERACION','ESTADO','ACTOR','PAYLOAD HASH','TICKET','ANTES','DESPUES','FECHA','PAYLOAD'];

@@ -27,7 +27,7 @@ test('la medición usa sesión institucional y solo consulta acciones de lectura
   for(let i=0;i<100 && !root.textContent.includes('Apps Script ejecución');i++)
     await new Promise(resolve=>setImmediate(resolve));
   assert.match(root.textContent,/Detalle de ticket/);
-  assert.match(root.textContent,/Puente GAS/);
+  assert.match(root.textContent,/Lectura/);
   assert.match(root.textContent,/Apps Script \(ms\)/);
   assert.match(root.textContent,/transporte\/inicio/);
   assert.ok(calls.slice(2).every(x => new URL(x.url,'https://portal2.ciarm.edu.mx').searchParams.get('perf')==='1'));
@@ -36,6 +36,7 @@ test('la medición usa sesión institucional y solo consulta acciones de lectura
   const actions=calls.slice(2).map(x=>new URL(x.url,'https://portal2.ciarm.edu.mx').searchParams.get('action'));
   assert.deepEqual(actions,['context','list','catalogs','serviceContext','serviceList','detail']);
   assert.ok(calls.every(x=>x.method==='GET' && x.credentials==='same-origin'));
+  assert.match(root.textContent,/Lectura directa automática activa/);
   dom.window.close();
 });
 
@@ -54,7 +55,7 @@ test('el usuario sin INT_GESTION no puede iniciar el diagnóstico de tickets',as
   dom.window.close();
 });
 
-test('activar lectura rápida requiere verificación y nunca envía modificaciones',async()=>{
+test('comparación opcional sólo usa GET y no cambia permisos',async()=>{
  const dom=new JSDOM('<main></main>',{url:'https://portal2.ciarm.edu.mx/#diagnostico-permisos'});
  Object.assign(globalThis,{document:dom.window.document,window:dom.window});
  const calls=[];
@@ -65,12 +66,12 @@ test('activar lectura rápida requiere verificación y nunca envía modificacion
    {ok:true,data:{enabled:true,checks:{catalogs:{same:true},list:{same:true}}}}};
  };
  await render(document.querySelector('main'));
- const button=[...document.querySelectorAll('button')].find(x=>/Validar lectura rápida/.test(x.textContent));
+ const button=[...document.querySelectorAll('button')].find(x=>/Comparar datos \(opcional\)/.test(x.textContent));
  assert.equal(button.disabled,false);
  button.click();
- for(let i=0;i<100&&!document.querySelector('main').textContent.includes('Lectura rápida activada');i++)
+ for(let i=0;i<100&&!document.querySelector('main').textContent.includes('Coinciden: listado');i++)
   await new Promise(resolve=>setImmediate(resolve));
- assert.match(document.querySelector('main').textContent,/Lectura rápida activada/);
+ assert.match(document.querySelector('main').textContent,/Coinciden: listado/);
  assert.deepEqual(calls.slice(2).map(x=>x.url),['/tickets-api.php?action=validateDirectReads']);
  assert.ok(calls.every(x=>x.opts.method==='GET'&&x.opts.credentials==='same-origin'));
  dom.window.close();
@@ -87,7 +88,7 @@ test('HTTP 401 al validar lectura rápida se informa como sesión vencida, no co
    return {ok:false,status:401,json:async()=>({ok:false,code:'UNAUTHENTICATED'})};
  };
  await render(document.querySelector('main'));
- const button=[...document.querySelectorAll('button')].find(x=>x.textContent==='Validar lectura rápida');
+ const button=[...document.querySelectorAll('button')].find(x=>x.textContent==='Comparar datos (opcional)');
  assert.equal(button.disabled,false);
  button.click();
  for(let n=0;n<50&&!document.querySelector('main').textContent.includes('La sesión institucional venció');n++)
@@ -99,5 +100,32 @@ test('HTTP 401 al validar lectura rápida se informa como sesión vencida, no co
  assert.equal(button.disabled,true);
  assert.equal([...document.querySelectorAll('button')].find(x=>x.textContent==='Medir velocidad de tickets').disabled,true);
  assert.deepEqual(calls,['/auth-session.php','/portal-permissions.php?preflight=1','/tickets-api.php?action=validateDirectReads']);
+ dom.window.close();
+});
+
+test('lecturas Sheets muestran la fuente real, sin contabilizarlas como GAS',async()=>{
+ const dom=new JSDOM('<main></main>',{url:'https://portal2.ciarm.edu.mx/#diagnostico-permisos'});
+ Object.assign(globalThis,{document:dom.window.document,window:dom.window});
+ globalThis.fetch=async(url,opts)=>{
+  if(url==='/auth-session.php')return {ok:true,status:200,json:async()=>({ok:true})};
+  if(url.startsWith('/portal-permissions.php'))return {ok:true,status:200,json:async()=>({ok:true,data:{verified:true,enforced:true,codes:['INT_GESTION']}})};
+  const action=new URL(url,'https://portal2.ciarm.edu.mx').searchParams.get('action');
+  const direct=action==='list'||action==='catalogs';
+  return {
+   ok:true,status:200,
+   json:async()=>({ok:true,data:action==='list'?[{id:'TKT-2026-00001'}]:{}}),
+   headers:{get:name=>name==='X-CIARM-Tickets-Read-Source'?(direct?'sheets-direct':'apps-script'):
+    name==='Server-Timing'?(direct?'session;dur=2.0, sheets_direct;dur=480.0, apps_script;dur=0.0, total;dur=510.0':'apps_script;dur=1800.0, total;dur=1900.0'):null}
+  };
+ };
+ const root=document.querySelector('main');
+ await render(root);
+ const measure=[...root.querySelectorAll('button')].find(x=>/Medir velocidad/.test(x.textContent));
+ measure.click();
+ for(let i=0;i<80 && !root.textContent.includes('Apps Script ejecución');i++)await new Promise(resolve=>setImmediate(resolve));
+ const text=root.textContent;
+ assert.match(text,/Listado de tickets[^\n]*Sheets API/);
+ assert.match(text,/Catálogos[^\n]*Sheets API/);
+ assert.match(text,/Lectura directa automática activa/);
  dom.window.close();
 });

@@ -88,8 +88,8 @@ try {
   else $payload=$action==='detail'?['id'=>$input['id']??null]:[];
   if($action==='detail'&&!is_string($payload['id']))throw new RuntimeException('VALIDATION');
  }
- // Canary per authenticated session: compare authoritative GAS projections with
- // the direct Sheets API. Enable read-only fast path only after exact field parity.
+ // Optional authenticated parity audit: compare GAS with Sheets and
+ // disable direct reads for the session if any mismatch is detected.
  // Version tokens on the list are excluded: the detail endpoint remains canonical GAS.
  if($action==='validateDirectReads'){
   if($method!=='GET'||!ciarm_ticket_current_permission($user))throw new RuntimeException('FORBIDDEN');
@@ -112,11 +112,10 @@ try {
    $matched=$matched&&$report['same'];
    $results[$kind]=$report;
   }
-  if($matched){
-   $_SESSION['ciarm_ticket_direct_until']=time()+600;
-  }else{
-   unset($_SESSION['ciarm_ticket_direct_until']);
-  }
+  // An explicit failed parity check stops fast reads in this session.
+  // Normal reads never depend on pressing a diagnostic button or a TTL.
+  if($matched)unset($_SESSION['ciarm_ticket_direct_blocked']);
+  else $_SESSION['ciarm_ticket_direct_blocked']=true;
   ciarm_ticket_perf_headers($ticketPerf,$ticketPerfStart);
   ciarm_json_response(200,['ok'=>true,'data'=>[
    'enabled'=>$matched,'checks'=>$results,'elapsedMs'=>(int)round((microtime(true)-$started)*1000)
@@ -130,19 +129,32 @@ try {
   if(empty($_SESSION['ciarm_ticket_csrf']))$_SESSION['ciarm_ticket_csrf']=bin2hex(random_bytes(32));
   $serviceContextCsrf=$_SESSION['ciarm_ticket_csrf'];
  }
- $readDirect = $method==='GET' && in_array($action,['list','catalogs'],true)
-   && (int)($_SESSION['ciarm_ticket_direct_until']??0)>time();
+ // Read-only operations use the authoritative Google Sheets API by default.
+ // DM03/DM05 authorization has already passed above, and mutation/version
+ // operations continue through the signed Apps Script endpoint.
+ // The legacy GAS path is only used if the Sheets read fails.
+ $readDirect = ciarm_tickets_direct_eligible($method,$action)
+   && empty($_SESSION['ciarm_ticket_direct_blocked']);
  session_write_close();
  $stamp=microtime(true);
+ $result=null;
  if($readDirect){
-  // Failure is fail-closed: never return a partial view as if authoritative.
-  // The normal GAS path remains available for immediate rollback.
-  $result=['ok'=>true,'data'=>ciarm_tickets_direct_read($action)];
-  $ticketPerf['sheets_direct']=(microtime(true)-$stamp)*1000;
-  header('X-CIARM-Tickets-Read-Source: sheets-direct');
- }else{
+  try{
+   $result=['ok'=>true,'data'=>ciarm_tickets_direct_read($action)];
+   $ticketPerf['sheets_direct']=(microtime(true)-$stamp)*1000;
+   header('X-CIARM-Tickets-Read-Source: sheets-direct');
+  }catch(Throwable $directReadError){
+   // Never show partial or unvalidated data. Fallback retains the same
+   // authorization already checked above and the canonical GAS behavior.
+   $ticketPerf['sheets_direct']=(microtime(true)-$stamp)*1000;
+   header('X-CIARM-Tickets-Read-Source: apps-script-fallback');
+  }
+ }
+ if($result===null){
+  $gasStamp=microtime(true);
   $result=$selfService?ciarm_portal_bridge($user,$action,$payload,$perfProbe):ciarm_ticket_bridge($user,$action,$payload,$perfProbe);
-  header('X-CIARM-Tickets-Read-Source: apps-script');
+  $ticketPerf['apps_script']=(microtime(true)-$gasStamp)*1000;
+  if(!$readDirect)header('X-CIARM-Tickets-Read-Source: apps-script');
  }
  $gasPerf=$result['_perf']??null;
  unset($result['_perf']);
@@ -154,7 +166,6 @@ try {
    }
   }
  }
- $ticketPerf['apps_script']=(microtime(true)-$stamp)*1000;
  if($action==='serviceContext'&&($result['ok']??false)===true&&is_array($result['data']??null)){
   $result['data']['csrfToken']=$serviceContextCsrf;
  }

@@ -185,7 +185,7 @@ function ciarm_tickets_parity_report(string $kind,array $legacy,array $direct): 
  if($kind==='list'){
   foreach($legacy as $index=>$old){
    $fresh=$direct[$index]??null;
-   if(!is_array($old)||!is_array($fresh)){
+   if(!is_array($old)||!is_array($fresh)||($old['id']??null)!==($fresh['id']??null)){
     $fields['rowCountOrOrder']=true;
     continue;
    }

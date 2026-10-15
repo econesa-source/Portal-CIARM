@@ -250,6 +250,13 @@ function ciarm_start_session(): void {
         return;
     }
 
+    // El TTL institucional es de ocho horas. Sin esta configuración,
+    // PHP puede borrar el archivo de sesión con su GC predeterminado
+    // (~24 minutos), incluso antes de ciarm_expires_at.
+    // No extiende la caducidad autorizada ni la cookie del navegador.
+    if ((int)ini_get('session.gc_maxlifetime') < CIARM_SESSION_TTL) {
+        ini_set('session.gc_maxlifetime', (string)CIARM_SESSION_TTL);
+    }
     session_name('CIARM_PORTAL');
     session_set_cookie_params([
         'lifetime' => 0,

@@ -8,7 +8,7 @@ test('La raiz del Portal usa el router con permisos DM05', () => {
   const primary = readFileSync('index.html', 'utf8');
   const legacy = readFileSync('index-v1782.html', 'utf8');
   for (const html of [primary, legacy]) {
-    assert.match(html, /src="src\/main\.js\?v=18\.7\.9"/);
+    assert.match(html, /src="src\/main\.js\?v=18\.7\.10"/);
     assert.doesNotMatch(html, /main-v1782\.js/);
   }
 });
@@ -17,5 +17,5 @@ test('El router autenticado consulta DM05 antes de construir el dashboard', () =
   const script = readFileSync('src/main.js', 'utf8');
   assert.match(script, /await getPortalPermissions\(\)/);
   assert.match(script, /applyDashboardAccess\(mainContainer, permissions\)/);
-  assert.match(script, /const APP_VERSION = '18\.7\.9'/);
+  assert.match(script, /const APP_VERSION = '18\.7\.10'/);
 });

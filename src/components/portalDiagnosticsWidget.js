@@ -41,6 +41,7 @@ export async function render(container) {
   directStatus.textContent='Las lecturas de tickets siguen en Apps Script hasta verificar equivalencia.';
   article.append(directStatus);
   verifyDirect.addEventListener('click',async()=>{
+    let sessionExpired=false;
     verifyDirect.disabled=true;
     directStatus.textContent='Comparando datos de Sheets y Apps Script. Puede demorar aproximadamente 20 segundos…';
     try{
@@ -48,7 +49,22 @@ export async function render(container) {
         method:'GET',credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}
       });
       const body=await response.json();
-      if(!response.ok||body?.ok!==true)throw Error('HTTP '+response.status);
+      if(response.status===401){
+        // The page may still show the result of an earlier session check.
+        // Never keep displaying it as a current authenticated state.
+        sessionExpired=true;
+        measure.disabled=true;
+        status.textContent='Sesión PHP: NO VERIFICADA. La sesión institucional venció o dejó de estar disponible.';
+        directStatus.textContent='La lectura rápida no se activó. Volvé a iniciar sesión para continuar.';
+        const login=document.createElement('button');
+        login.type='button';
+        login.textContent='Volver a iniciar sesión';
+        login.style.cssText='margin-left:8px;padding:7px 12px;background:#26487f;color:white;border:0;border-radius:5px;cursor:pointer';
+        login.addEventListener('click',()=>window.location.reload());
+        directStatus.append(login);
+        return;
+      }
+      if(!response.ok||body?.ok!==true)throw Error('HTTP '+response.status+' ('+String(body?.code||'UNKNOWN')+')');
       if(body?.data?.enabled===true){
         directStatus.textContent='Lectura rápida activada para esta sesión (10 minutos). Listado y catálogos coinciden con Apps Script. Volvé a medir.';
       }else{
@@ -56,7 +72,7 @@ export async function render(container) {
       }
     }catch(error){
       directStatus.textContent='No se pudo validar. Se conserva el circuito anterior ('+String(error.message||'error')+').';
-    }finally{verifyDirect.disabled=false;}
+    }finally{verifyDirect.disabled=sessionExpired;}
   });
   const timings = document.createElement('pre');
   timings.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f7fa;padding:16px;border-radius:8px;font:13px/1.6 monospace';

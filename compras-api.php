@@ -44,6 +44,7 @@ if(!ciarm_compras_config_valid($config) || ($method==='POST'&&!ciarm_compras_wri
 
 $user=ciarm_session_user();
 if(!is_array($user))compras_result(401,['ok'=>false,'version'=>'compras-v1','code'=>'UNAUTHENTICATED']);
+$phase='PARSE';
 try{
   if($method==='GET'){
     $action=$_GET['action']??null;$payload=[];
@@ -60,15 +61,18 @@ try{
   }
   if(!is_string($action)||!isset(ciarm_compras_actions()[$action])||!is_array($payload)||
       ($payload!==[]&&array_is_list($payload)))throw new RuntimeException('INVALID_REQUEST');
+  $phase='PERMISSION';
   ciarm_compras_require_permission($user,$action,$method);
+  $phase='VALIDATION';
   $payload=ciarm_compras_shape($action,$payload);
   $csrf=ciarm_compras_csrf_token();
   session_write_close();
+  $phase='TRANSPORT';
   $reply=ciarm_compras_forward($user,$action,$payload);
   if(($reply['ok']??false)!==true){
     $code=(string)($reply['code']??'UPSTREAM_ERROR');
     $allowed=['INVALID_REQUEST','REPLAY','SERVICE_UNAVAILABLE'];
-    if(!in_array($code,$allowed,true))$code='UPSTREAM_ERROR';
+    if(!in_array($code,$allowed,true))$code='UPSTREAM_ERROR_GAS';
     $status=$code==='INVALID_REQUEST'?422:($code==='REPLAY'?409:503);
     compras_result($status,['ok'=>false,'version'=>'compras-v1','code'=>$code]);
   }
@@ -80,6 +84,9 @@ try{
   $code=$e->getMessage();
   $allowed=['INVALID_REQUEST'=>422,'FORBIDDEN'=>403,'UNAUTHENTICATED'=>401,
     'SERVICE_UNAVAILABLE'=>503];
-  if(!isset($allowed[$code]))$code='UPSTREAM_ERROR';
+  if(!isset($allowed[$code])){
+    $transportCodes=['upstream_unreachable'=>'UPSTREAM_UNREACHABLE','upstream_invalid_json'=>'UPSTREAM_INVALID_JSON'];
+    $code=$transportCodes[$code]??('UPSTREAM_ERROR_'.$phase);
+  }
   compras_result($allowed[$code]??502,['ok'=>false,'version'=>'compras-v1','code'=>$code]);
 }

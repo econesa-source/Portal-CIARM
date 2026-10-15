@@ -1,15 +1,3 @@
-/** Timing kept only within a signed request. Never stores ticket content or actor. */
-function ticketPerfClock(){
- var started=Date.now(),previous=started,stages={};
- return {
-  mark:function(name){var now=Date.now();stages[name]=now-previous;previous=now;},
-  snapshot:function(){var result={};Object.keys(stages).forEach(function(k){result[k]=stages[k];});result.total=Date.now()-started;return result;}
- };
-}
-function ticketPerfReply(reply,request,clock){
- if(request&&request.perfProbe===true)reply._perf=clock.snapshot();
- return reply;
-}
 /** Signed self-service protocol; administrative operations retain their verifier. */
 var PORTAL_METADATA_LIMIT = 50000;
 var PORTAL_UPLOAD_LIMIT = 15 * 1024 * 1024;

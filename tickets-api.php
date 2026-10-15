@@ -130,19 +130,31 @@ try {
   if(empty($_SESSION['ciarm_ticket_csrf']))$_SESSION['ciarm_ticket_csrf']=bin2hex(random_bytes(32));
   $serviceContextCsrf=$_SESSION['ciarm_ticket_csrf'];
  }
- $readDirect = $method==='GET' && in_array($action,['list','catalogs'],true)
-   && (int)($_SESSION['ciarm_ticket_direct_until']??0)>time();
+ // Read-only operations use the authoritative Google Sheets API by default.
+ // DM03/DM05 authorization has already passed above, and mutation/version
+ // operations continue through the signed Apps Script endpoint.
+ // The legacy GAS path is only used if the Sheets read fails.
+ $readDirect = $method==='GET' && in_array($action,['list','catalogs'],true);
  session_write_close();
  $stamp=microtime(true);
+ $result=null;
  if($readDirect){
-  // Failure is fail-closed: never return a partial view as if authoritative.
-  // The normal GAS path remains available for immediate rollback.
-  $result=['ok'=>true,'data'=>ciarm_tickets_direct_read($action)];
-  $ticketPerf['sheets_direct']=(microtime(true)-$stamp)*1000;
-  header('X-CIARM-Tickets-Read-Source: sheets-direct');
- }else{
+  try{
+   $result=['ok'=>true,'data'=>ciarm_tickets_direct_read($action)];
+   $ticketPerf['sheets_direct']=(microtime(true)-$stamp)*1000;
+   header('X-CIARM-Tickets-Read-Source: sheets-direct');
+  }catch(Throwable $directReadError){
+   // Never show partial or unvalidated data. Fallback retains the same
+   // authorization already checked above and the canonical GAS behavior.
+   $ticketPerf['sheets_direct']=(microtime(true)-$stamp)*1000;
+   header('X-CIARM-Tickets-Read-Source: apps-script-fallback');
+  }
+ }
+ if($result===null){
+  $gasStamp=microtime(true);
   $result=$selfService?ciarm_portal_bridge($user,$action,$payload,$perfProbe):ciarm_ticket_bridge($user,$action,$payload,$perfProbe);
-  header('X-CIARM-Tickets-Read-Source: apps-script');
+  $ticketPerf['apps_script']=(microtime(true)-$gasStamp)*1000;
+  if(!$readDirect)header('X-CIARM-Tickets-Read-Source: apps-script');
  }
  $gasPerf=$result['_perf']??null;
  unset($result['_perf']);
@@ -154,7 +166,6 @@ try {
    }
   }
  }
- $ticketPerf['apps_script']=(microtime(true)-$stamp)*1000;
  if($action==='serviceContext'&&($result['ok']??false)===true&&is_array($result['data']??null)){
   $result['data']['csrfToken']=$serviceContextCsrf;
  }

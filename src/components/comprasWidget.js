@@ -1,3 +1,4 @@
+import {attachmentPayload} from '../services/comprasAttachment.js';
 import {requestCompras,comprasUiEnabled} from '../services/comprasClient.js';
 
 const TABS=[
@@ -35,7 +36,9 @@ function renderCrear(p,ctx){
  '<label>Responsable de recepción<input name="responsableRecepcion" type="email" value="'+escapeHtml(ctx.email)+'" required></label></div>'+
  '<label>Área o contexto de uso<textarea name="areaContexto" maxlength="200"></textarea></label><h4>Artículos</h4>'+
  '<div id="compras-lineas">'+line(ctx.unidades)+'</div><button class="btn-secondary" type="button" id="compras-add">+ Artículo</button>'+
- '<label>Vínculo HTTPS del comprobante o cotización (si corresponde)<input name="adjuntosVinculos" type="url" placeholder="https://"></label>'+
+ '<label>Adjuntar cotización o comprobante (PDF, JPG o PNG; hasta 2 MB)<input name="adjuntoArchivo" type="file" accept=".pdf,.jpg,.jpeg,.png"'+(ctx.adjuntosArchivo===true?'':' disabled')+'></label>'+
+ (ctx.adjuntosArchivo===true?'':'<p>La carga de archivos requiere actualizar HT06.</p>')+
+ '<label>O pegar un enlace de la cotización (opcional)<input name="adjuntosVinculos" type="url" placeholder="https://"></label>'+
  '<button type="submit">Enviar solicitud</button></form>';
  const form=p.querySelector('form'),container=p.querySelector('#compras-lineas');let clave=key();
  const isReintegro=()=>form.elements.tipoSolicitud.value==='Reintegro de gasto';
@@ -58,15 +61,17 @@ function renderCrear(p,ctx){
    responsableRecepcion:fields.responsableRecepcion,areaContexto:fields.areaContexto,renglones,claveEnvio:clave};
   if(fields.adjuntosVinculos)payload.adjuntosVinculos=fields.adjuntosVinculos;
   if((isReintegro()||fields.tipoSolicitud==='Compra - ya tengo cotización')&&
-    !/^https:\/\//i.test(fields.adjuntosVinculos||'')){
-   note(p,'Adjuntá un vínculo HTTPS del comprobante o cotización correspondiente.',true);return;
+    !fields.adjuntoArchivo?.size&&!/^https:\/\//i.test(fields.adjuntosVinculos||'')){
+   note(p,'Seleccioná el archivo de la cotización o comprobante.',true);return;
   }
   const button=form.querySelector('[type=submit]');button.disabled=true;
   try{
+   const attachment=await attachmentPayload(fields.adjuntoArchivo);
+   if(attachment)payload.adjuntoArchivo=attachment;
    const result=await requestCompras('crearSolicitud',payload);
    note(p,'Solicitud registrada'+(result?.idSolicitud?' · '+result.idSolicitud:''));clave=key();
    form.reset();container.innerHTML=line(ctx.unidades);syncAmounts();
-  }catch(error){note(p,errText(error),true);}
+  }catch(error){note(p,error?.code?errText(error):error.message,true);}
   finally{button.disabled=false;}
  });
 }

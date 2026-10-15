@@ -58,7 +58,7 @@ function ciarm_compras_require_permission(array $user,string $action,string $met
 }
 function ciarm_compras_shape(string $action,array $payload): array {
     $allowed=[
-      'crearSolicitud'=>['tipoSolicitud','centroCostos','fechaGeneral','responsableRecepcion','areaContexto','renglones','adjuntosVinculos','claveEnvio'],
+      'crearSolicitud'=>['tipoSolicitud','centroCostos','fechaGeneral','responsableRecepcion','areaContexto','renglones','adjuntosVinculos','adjuntoArchivo','claveEnvio'],
       'elegirAlternativa'=>['idSolicitud','idAlternativa','motivo'],
       'decidirSolicitud'=>['idSolicitud','decision','motivo','reasignacion'],
       'declararRecepcion'=>['idSolicitud','idRenglon','cantidadRecibida','cantidadConforme','fechaRecepcion','observacion','claveEnvio'],
@@ -68,8 +68,9 @@ function ciarm_compras_shape(string $action,array $payload): array {
     ];
     $keys=array_keys($payload);$expected=$allowed[$action]??[];
     if(array_diff($keys,$expected)!==[])throw new RuntimeException('INVALID_REQUEST');
-    if(strlen(json_encode($payload,JSON_THROW_ON_ERROR))>24576)throw new RuntimeException('INVALID_REQUEST');
+    if(strlen(json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR))>(($action==='crearSolicitud'&&isset($payload['adjuntoArchivo']))?2900000:24576))throw new RuntimeException('INVALID_REQUEST');
     if($action==='crearSolicitud') {
+        if(isset($payload['adjuntoArchivo']))ciarm_compras_validate_attachment($payload['adjuntoArchivo']);
         if(!preg_match('/^[A-Za-z0-9_-]{16,100}$/',(string)($payload['claveEnvio']??''))||
             !is_array($payload['renglones']??null)||count($payload['renglones'])<1||count($payload['renglones'])>20)
             throw new RuntimeException('INVALID_REQUEST');
@@ -110,7 +111,7 @@ function ciarm_compras_forward(array $user,string $action,array $payload): array
     $signed=['envelope'=>$envelope,'signature'=>hash_hmac('sha256',$envelope,$key)];
     $resp=ciarm_http_json($url,['post'=>true,'headers'=>[
       'Accept: application/json','Content-Type: application/json'
-    ],'body'=>json_encode($signed,JSON_THROW_ON_ERROR),'timeout'=>30]);
+    ],'body'=>json_encode($signed,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),'timeout'=>30]);
     if($resp['status']!==200||!is_array($resp['body'])||
       ($resp['body']['version']??'')!=='compras-v1'||!is_bool($resp['body']['ok']??null))
       throw new RuntimeException('UPSTREAM_ERROR');
@@ -128,4 +129,16 @@ function ciarm_compras_public_data(string $action,mixed $data): mixed {
       if(!is_array($r))return [];
       return array_intersect_key($r,array_flip($fields));
     },$data);
+}
+
+/** Validate bytes independently of the browser; storage stays in HT06. */
+function ciarm_compras_validate_attachment(mixed $a): void {
+ if(!is_array($a)||count($a)!==3||array_diff(array_keys($a),['nombre','mime','base64'])!==[]||
+    !is_string($a['nombre']??null)||$a['nombre']===''||strlen($a['nombre'])>720||
+    !in_array($a['mime']??null,['application/pdf','image/jpeg','image/png'],true)||
+    !is_string($a['base64']??null)||strlen($a['base64'])>2796204)throw new RuntimeException('INVALID_REQUEST');
+ $bytes=base64_decode($a['base64'],true);
+ if($bytes===false||strlen($bytes)<4||strlen($bytes)>2097152||base64_encode($bytes)!==$a['base64'])throw new RuntimeException('INVALID_REQUEST');
+ $magic=['application/pdf'=>"%PDF-",'image/jpeg'=>"\xFF\xD8\xFF",'image/png'=>"\x89PNG\r\n\x1a\n"];
+ if(!str_starts_with($bytes,$magic[$a['mime']]))throw new RuntimeException('INVALID_REQUEST');
 }

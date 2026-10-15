@@ -15,3 +15,17 @@ try{ciarm_compras_shape('misPedidos',['actor'=>'other@ciarm.edu.mx']);throw new 
 check(ciarm_compras_actions()['crearSolicitud'][0]==='POST','create is write');
 check(ciarm_compras_actions()['misPedidos'][0]==='GET','list is read');
 echo "Compras configuration: PASS\n";
+
+$attachment=['nombre'=>'cotizacion.pdf','mime'=>'application/pdf','base64'=>base64_encode('%PDF-test')];
+ciarm_compras_validate_attachment($attachment);
+foreach([
+ array_replace($attachment,['base64'=>base64_encode('<script>bad</script>')]),
+ array_replace($attachment,['base64'=>'invalid!']),
+ array_replace($attachment,['mime'=>'text/html']),
+ array_replace($attachment,['base64'=>base64_encode('%PDF-'.str_repeat('a',2097152))]),
+ $attachment+['actor'=>'another@example.com']
+] as $bad){
+ try{ciarm_compras_validate_attachment($bad);throw new Exception('accepted invalid attachment');}
+ catch(RuntimeException $e){check($e->getMessage()==='INVALID_REQUEST','invalid attachment rejected');}
+}
+echo "Compras attachments: PASS\n";

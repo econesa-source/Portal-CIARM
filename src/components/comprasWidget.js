@@ -1,5 +1,5 @@
 import {attachmentPayload} from '../services/comprasAttachment.js';
-import {requestCompras,comprasUiEnabled} from '../services/comprasClient.js?v=18.7.12';
+import {requestCompras,comprasUiEnabled} from '../services/comprasClient.js?v=18.7.13';
 
 const TABS=[
  {id:'crear',label:'Solicitar compra',query:'contextoSolicitud',permission:'COMPRAS_CREAR'},

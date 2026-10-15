@@ -8,7 +8,8 @@ $ticketPerf=['session'=>0.0,'identity'=>0.0,'rbac'=>0.0,'apps_script'=>0.0];
 function ciarm_ticket_perf_headers(array $durations, float $start): void {
  $durations['total']=(microtime(true)-$start)*1000;
  $parts=[];
- foreach(['session','identity','rbac','apps_script','total'] as $stage){
+ foreach(array_merge(['session','identity','rbac','apps_script','total'],['gas_verify','gas_identity','gas_authorize','gas_lock','gas_nonce','gas_open','gas_work','gas_total']) as $stage){
+  if(!array_key_exists($stage,$durations))continue;
   $ms=max(0.0,(float)($durations[$stage]??0));
   $parts[]=$stage.';dur='.number_format($ms,1,'.','');
  }
@@ -56,6 +57,9 @@ try {
   if(!ciarm_ticket_csrf_valid((string)($_SESSION['ciarm_ticket_csrf']??''),is_string($input['csrfToken']??null)?$input['csrfToken']:''))throw new RuntimeException('CSRF');
  }
  $selfService=in_array($action,['mine','creationStatus','beginCreate','uploadAttachment','finalizeCreate','serviceContext','serviceSettings','serviceList','serviceDetail','saveServicePolicy','serviceTransition'],true);
+ // Métricas sólo cuando las solicita explícitamente un gestor autorizado.
+ // Nunca reenvíe el indicador sin una firma HMAC del backend.
+ $perfProbe=$method==='GET'&&($_GET['perf']??'')==='1'&&ciarm_ticket_current_permission($user);
 
  // Protección de acciones directas; la visibilidad del dashboard no es autorización.
  if(ciarm_rbac_enforced()){
@@ -93,7 +97,17 @@ try {
  }
  session_write_close();
  $stamp=microtime(true);
- $result=$selfService?ciarm_portal_bridge($user,$action,$payload):ciarm_ticket_bridge($user,$action,$payload);
+ $result=$selfService?ciarm_portal_bridge($user,$action,$payload,$perfProbe):ciarm_ticket_bridge($user,$action,$payload,$perfProbe);
+ $gasPerf=$result['_perf']??null;
+ unset($result['_perf']);
+ if($perfProbe&&is_array($gasPerf)){
+  foreach(['verify','identity','authorize','lock','nonce','open','work','total'] as $stage){
+   $value=$gasPerf[$stage]??null;
+   if(is_numeric($value)&&is_finite((float)$value)&&(float)$value>=0&&(float)$value<=60000){
+    $ticketPerf['gas_'.$stage]=(float)$value;
+   }
+  }
+ }
  $ticketPerf['apps_script']=(microtime(true)-$stamp)*1000;
  if($action==='serviceContext'&&($result['ok']??false)===true&&is_array($result['data']??null)){
   $result['data']['csrfToken']=$serviceContextCsrf;

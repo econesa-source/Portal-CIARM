@@ -2,6 +2,9 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../tickets-lib.php';
 function check(bool $condition,string $message): void { if(!$condition) throw new RuntimeException($message); }
+ciarm_start_session();
+check((int)ini_get('session.gc_maxlifetime') >= CIARM_SESSION_TTL,'Session GC cannot expire earlier than authorized TTL');
+session_write_close();
 $rows=[['Correo Ciarm','Status','Portal','Sistema de tickets'],['d.lara@ciarm.edu.mx','Activo','','Administrador'],['e.conesa@ciarm.edu.mx','Activo','Administrador','Administrador'],['r.valencia@ciarm.edu.mx','Activo','Director','']];
 check(ciarm_ticket_permission($rows,'d.lara@ciarm.edu.mx'),'Dany should administer tickets');
 check(ciarm_ticket_permission($rows,'e.conesa@ciarm.edu.mx'),'Ezequiel should administer tickets');

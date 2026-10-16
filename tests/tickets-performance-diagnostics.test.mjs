@@ -34,7 +34,7 @@ test('la medición usa sesión institucional y solo consulta acciones de lectura
 
   assert.doesNotMatch(root.textContent,/Dato privado/);
   const actions=calls.slice(2).map(x=>new URL(x.url,'https://portal2.ciarm.edu.mx').searchParams.get('action'));
-  assert.deepEqual(actions,['context','list','catalogs','serviceContext','serviceList','detail']);
+  assert.deepEqual(actions,['context','list','catalogs','serviceContext','serviceListRaw','detail']);
   assert.ok(calls.every(x=>x.method==='GET' && x.credentials==='same-origin'));
   assert.match(root.textContent,/Lectura directa automática activa/);
   dom.window.close();

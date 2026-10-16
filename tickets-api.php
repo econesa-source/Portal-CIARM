@@ -41,7 +41,7 @@ try {
    ciarm_ticket_perf_headers($ticketPerf,$ticketPerfStart);
    ciarm_json_response(200,['ok'=>true,'data'=>$data]);
   }
-  if(!in_array($action,['mine','creationStatus','list','catalogs','detail','serviceContext','serviceSettings','serviceList','serviceDetail','validateDirectReads'],true))throw new RuntimeException('VALIDATION');
+  if(!in_array($action,['mine','creationStatus','list','catalogs','detail','serviceContext','serviceSettings','serviceList','serviceListRaw','serviceDetail','validateDirectReads'],true))throw new RuntimeException('VALIDATION');
   $input=$_GET;
  } else {
   if(!ciarm_ticket_origin_valid($_SERVER['HTTP_ORIGIN']??'',$_SERVER['HTTP_HOST']??''))throw new RuntimeException('ORIGIN');
@@ -57,7 +57,7 @@ try {
   if(in_array($action,['uploadAttachment','uploadEvidence'],true)!==($contentType==='multipart/form-data'))throw new RuntimeException('CONTENT_TYPE');
   if(!ciarm_ticket_csrf_valid((string)($_SESSION['ciarm_ticket_csrf']??''),is_string($input['csrfToken']??null)?$input['csrfToken']:''))throw new RuntimeException('CSRF');
  }
- $selfService=in_array($action,['mine','creationStatus','beginCreate','uploadAttachment','uploadEvidence','finalizeCreate','serviceContext','serviceSettings','serviceList','serviceDetail','saveServicePolicy','serviceTransition'],true);
+ $selfService=in_array($action,['mine','creationStatus','beginCreate','uploadAttachment','uploadEvidence','finalizeCreate','serviceContext','serviceSettings','serviceList','serviceListRaw','serviceDetail','saveServicePolicy','serviceTransition'],true);
  // Métricas sólo cuando las solicita explícitamente un gestor autorizado.
  // Nunca reenvíe el indicador sin una firma HMAC del backend.
  $perfProbe=$method==='GET'&&($_GET['perf']??'')==='1'&&ciarm_ticket_current_permission($user);
@@ -85,7 +85,7 @@ try {
    $res=ciarm_upload_evidence_to_drive($file,$user);
    ciarm_json_response(200,['ok'=>true,'data'=>$res]);
   }
-  if(in_array($action,['serviceSettings','saveServicePolicy'],true)||($action==='serviceList'&&($input['kind']??'')==='all')){
+  if(in_array($action,['serviceSettings','saveServicePolicy'],true)||(in_array($action,['serviceList','serviceListRaw'],true)&&($input['kind']??'')==='all')){
    $stamp=microtime(true);
    $allowed=ciarm_ticket_current_permission($user);
    $ticketPerf['rbac']=(microtime(true)-$stamp)*1000;
@@ -163,6 +163,17 @@ try {
     $context=ciarm_tickets_direct_service_context($sets[$configRange],(bool)$serviceContextCanAdmin);
     $context['csrfToken']=$serviceContextCsrf;
     $result=['ok'=>true,'data'=>$context];
+   }elseif($action==='serviceListRaw'){
+    if(!in_array($payload['kind']??null,['all','mine','assigned'],true))throw new RuntimeException('VALIDATION');
+    $ranges=["'TICKETS'!A:X","'BITACORA TICKETS'!A:J","'SEGUIMIENTO SERVICIO'!A:B"];
+    $sets=ciarm_tickets_batch_get($ranges);
+    foreach($ranges as $range){
+     if(!isset($sets[$range])||!is_array($sets[$range]))throw new RuntimeException('SCHEMA');
+    }
+    $actor=strtolower(trim((string)($user['correo']??'')));
+    $result=['ok'=>true,'data'=>ciarm_tickets_direct_service_list(
+     $sets[$ranges[0]],$sets[$ranges[1]],$sets[$ranges[2]],$actor,$payload['kind']
+    )];
    }else{
     $result=['ok'=>true,'data'=>ciarm_tickets_direct_read($action)];
    }
@@ -177,7 +188,10 @@ try {
  }
  if($result===null){
   $gasStamp=microtime(true);
-  $result=$selfService?ciarm_portal_bridge($user,$action,$payload,$perfProbe):ciarm_ticket_bridge($user,$action,$payload,$perfProbe);
+  $bridgeAction=$action==='serviceListRaw'?'serviceList':$action;
+  $result=$selfService?ciarm_portal_bridge($user,$bridgeAction,$payload,$perfProbe):ciarm_ticket_bridge($user,$bridgeAction,$payload,$perfProbe);
+  if($action==='serviceListRaw'&&($result['ok']??false)===true&&is_array($result['data']??null))
+    $result['data']=['computed'=>true,'items'=>$result['data']];
   $ticketPerf['apps_script']=(microtime(true)-$gasStamp)*1000;
   if(!$readDirect)header('X-CIARM-Tickets-Read-Source: apps-script');
  }

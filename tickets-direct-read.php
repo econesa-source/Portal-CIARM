@@ -167,7 +167,7 @@ function ciarm_tickets_direct_catalogs(array $catalogs,array $people,array $conf
  */
 function ciarm_tickets_direct_eligible(string $method,string $action): bool {
  return $method==='GET'
-   && in_array($action,['list','catalogs','serviceContext'],true)
+   && in_array($action,['list','catalogs','serviceContext','serviceListRaw'],true)
    && getenv('CIARM_TICKETS_DIRECT_READ')!=='0';
 }
 
@@ -237,4 +237,35 @@ function ciarm_tickets_direct_service_context(array $configRows,bool $canAdmin):
   $enabled=true;
  }
  return ['protocol'=>'tickets-service-v1','enabled'=>$enabled,'canAdmin'=>$canAdmin];
+}
+
+/**
+ * Read-only service projection. The canonical service metadata is stored in
+ * SEGUIMIENTO SERVICIO. The business calculations are sourced from GAS in the
+ * generated browser module, not reimplemented in PHP.
+ */
+function ciarm_tickets_direct_service_list(array $ticketRows,array $journalRows,array $serviceRows,string $actor,string $kind): array {
+ if(!in_array($kind,['all','mine','assigned'],true))throw new RuntimeException('VALIDATION');
+ if(!preg_match('/^[a-z0-9._+\-]+@ciarm\.edu\.mx$/',$actor))throw new RuntimeException('FORBIDDEN');
+ $table=ciarm_tickets_table($serviceRows,['FOLIO','SEGUIMIENTO']);
+ $cases=[];
+ foreach($table['rows'] as $row){
+  $id=trim(ciarm_tickets_text(ciarm_tickets_value($row,$table,'FOLIO')));
+  if($id==='')continue;
+  if(array_key_exists($id,$cases))throw new RuntimeException('DUPLICATE_ID');
+  $raw=ciarm_tickets_value($row,$table,'SEGUIMIENTO');
+  if(!is_string($raw)||trim($raw)==='')throw new RuntimeException('SCHEMA');
+  $meta=json_decode($raw,true,512,JSON_THROW_ON_ERROR);
+  if(!is_array($meta)||array_is_list($meta))throw new RuntimeException('SCHEMA');
+  $cases[$id]=$meta;
+ }
+ $items=[];
+ foreach(ciarm_tickets_direct_list($ticketRows,$journalRows) as $ticket){
+  $meta=$cases[$ticket['id']]??null;
+  $owner=strtolower(trim($ticket['correo']))===$actor;
+  $executor=is_array($meta)&&($meta['email']??null)===$actor;
+  if($kind==='mine'&&!$owner||$kind==='assigned'&&!$executor)continue;
+  $items[]=['ticket'=>$ticket,'meta'=>$meta];
+ }
+ return ['items'=>$items,'serverNow'=>gmdate('Y-m-d\TH:i:s\Z')];
 }

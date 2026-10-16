@@ -125,9 +125,12 @@ try {
  // Entregar el CSRF en esta respuesta evita pedir primero selfContext
  // (que generaba otra lectura a DM03 y otra ejecución Apps Script).
  $serviceContextCsrf = null;
+ $serviceContextCanAdmin = null;
  if($action==='serviceContext'){
   if(empty($_SESSION['ciarm_ticket_csrf']))$_SESSION['ciarm_ticket_csrf']=bin2hex(random_bytes(32));
   $serviceContextCsrf=$_SESSION['ciarm_ticket_csrf'];
+  // DM05 is the sole source of Portal authorization; do not copy GAS allowlists.
+  $serviceContextCanAdmin=ciarm_ticket_current_permission($user);
  }
  // Read-only operations use the authoritative Google Sheets API by default.
  // DM03/DM05 authorization has already passed above, and mutation/version
@@ -140,7 +143,16 @@ try {
  $result=null;
  if($readDirect){
   try{
-   $result=['ok'=>true,'data'=>ciarm_tickets_direct_read($action)];
+   if($action==='serviceContext'){
+    $configRange="'CONFIG SERVICIO'!A:F";
+    $sets=ciarm_tickets_batch_get([$configRange]);
+    if(!isset($sets[$configRange])||!is_array($sets[$configRange]))throw new RuntimeException('SCHEMA');
+    $context=ciarm_tickets_direct_service_context($sets[$configRange],(bool)$serviceContextCanAdmin);
+    $context['csrfToken']=$serviceContextCsrf;
+    $result=['ok'=>true,'data'=>$context];
+   }else{
+    $result=['ok'=>true,'data'=>ciarm_tickets_direct_read($action)];
+   }
    $ticketPerf['sheets_direct']=(microtime(true)-$stamp)*1000;
    header('X-CIARM-Tickets-Read-Source: sheets-direct');
   }catch(Throwable $directReadError){

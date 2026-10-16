@@ -152,7 +152,7 @@ export async function render(container) {
       ['Listado de tickets','action=list'],
       ['Catálogos','action=catalogs'],
       ['Contexto del servicio','action=serviceContext'],
-      ['Seguimiento general','action=serviceList&kind=all']
+      ['Seguimiento general','action=serviceListRaw&kind=all']
     ];
     try {
       let firstTicket = null;

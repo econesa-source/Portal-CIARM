@@ -114,6 +114,7 @@ putenv('CIARM_TICKETS_DIRECT_READ=0');
 try {
  assertRead(!ciarm_tickets_direct_eligible('GET','list'),'Emergency rollback must disable direct reads');
  assertRead(!ciarm_tickets_direct_eligible('GET','catalogs'),'Emergency rollback must disable catalogs');
+ assertRead(!ciarm_tickets_direct_eligible('GET','serviceListRaw'),'Emergency rollback must disable raw service list');
 } finally {
  putenv('CIARM_TICKETS_DIRECT_READ');
 }

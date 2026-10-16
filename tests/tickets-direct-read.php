@@ -76,6 +76,17 @@ assertRead($catalogDifference['fields']===['prioridades'],'Only approved schema 
 // Direct reads are available without session flags. They remain GET-only.
 assertRead(ciarm_tickets_direct_eligible('GET','list'),'List GET should use Sheets by default');
 assertRead(ciarm_tickets_direct_eligible('GET','catalogs'),'Catalogs GET should use Sheets by default');
+assertRead(ciarm_tickets_direct_eligible('GET','serviceContext'),'Context GET should use Sheets by default');
+$servicePolicy=['version'=>1,'responsibles'=>[['name'=>'Persona Prueba','email'=>'p@ciarm.edu.mx']],'levels'=>['ALTA'=>['start'=>8]]];
+$serviceConfig=[['VERSION','REGLAS','ACTOR','FECHA','OPERACION','HASH'],[1,json_encode($servicePolicy),'actor','2026-10-16','PUBLISH','hash']];
+assertRead(ciarm_tickets_direct_service_context($serviceConfig,true)===
+ ['protocol'=>'tickets-service-v1','enabled'=>true,'canAdmin'=>true],'Context for admin must match protocol');
+assertRead(ciarm_tickets_direct_service_context($serviceConfig,false)===
+ ['protocol'=>'tickets-service-v1','enabled'=>true,'canAdmin'=>false],'Context cannot elevate normal user');
+assertRead(ciarm_tickets_direct_service_context([$serviceConfig[0]],false)===
+ ['protocol'=>'tickets-service-v1','enabled'=>false,'canAdmin'=>false],'Unpublished policy stays disabled');
+expectsReadError(fn()=>ciarm_tickets_direct_service_context([['WRONG','HEADERS']],false),'SCHEMA');
+
 foreach(['assign','detail','mine','serviceList','serviceDetail','saveServicePolicy','serviceTransition'] as $action)
  assertRead(!ciarm_tickets_direct_eligible('GET',$action),'Non-projection '.$action.' must stay in GAS');
 foreach(['assign','list','catalogs','serviceTransition'] as $action)

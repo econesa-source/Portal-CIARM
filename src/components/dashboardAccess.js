@@ -1,4 +1,4 @@
-import { comprasUiEnabled } from '../services/comprasClient.js';
+export const HT06_MVP_URL = 'https://docs.google.com/spreadsheets/d/1sw5ZK2-8DzrfdDJV_5VQcknzobYgXKaq89hMaJY0i_M/edit';
 import { resolvePortalPermissions, canSeeCard, canSeeAction } from '../services/portalPermissions.js';
 
 const PENDING_BUTTON = {
@@ -48,12 +48,21 @@ export function applyDashboardAccess(container, response) {
       element.querySelector('.exact-btn-disabled')?.remove();
     }
   });
-  if (comprasUiEnabled() && allowedRoute('#compras', response)) {
+  // MVP: la tarjeta de Compras abre HT06 Sheets, sin hacer llamadas al proxy GAS del Portal.
+  // Conservar la autorización visual DM05: tarjeta madre más una función permitida.
+  if (allowedRoute('#compras', response) && !container.querySelector('[data-card="compras"]')) {
     const card = document.createElement('div');
     card.className = 'exact-card';
     card.dataset.module = 'compras';
     card.dataset.card = 'compras';
-    card.innerHTML = '<span class="exact-card-category">SCGRC</span><h3 class="exact-card-title">Compras</h3><p class="exact-card-desc">Solicita compras, elige cotizaciones y consulta sus avances.</p><a href="#compras" class="exact-btn gold">Gestionar compras</a>';
+    card.innerHTML = '<span class="exact-card-category">SCGRC</span><h3 class="exact-card-title">Compras</h3><p class="exact-card-desc">Accedé a las solicitudes y autorizaciones desde HT06.</p>';
+    const link = document.createElement('a');
+    link.href = HT06_MVP_URL;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.className = 'exact-btn gold';
+    link.textContent = 'Abrir HT06';
+    card.append(link);
     container.querySelector('.dashboard-grid-exact')?.append(card);
   }
 }

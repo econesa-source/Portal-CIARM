@@ -40,7 +40,7 @@ function renderCrear(p,ctx,onCreated){
  (ctx.adjuntosArchivo===true?'':'<p>La carga de archivos requiere actualizar HT06.</p>')+
  '<label>O pegar un enlace de la cotización (opcional)<input name="adjuntosVinculos" type="url" placeholder="https://"></label>'+
  '<button type="submit">Enviar solicitud</button></form>';
- const form=p.querySelector('form'),container=p.querySelector('#compras-lineas');let clave=key();
+ const form=p.querySelector('form'),container=p.querySelector('#compras-lineas');let clave=key(),sending=false;
  const isReintegro=()=>form.elements.tipoSolicitud.value==='Reintegro de gasto';
  function syncAmounts(){[...container.querySelectorAll('.compras-importe')].forEach(label=>{label.hidden=!isReintegro();label.querySelector('input').required=isReintegro();});}
  form.elements.tipoSolicitud.addEventListener('change',syncAmounts);syncAmounts();
@@ -64,6 +64,8 @@ function renderCrear(p,ctx,onCreated){
     !fields.adjuntoArchivo?.size&&!/^https:\/\//i.test(fields.adjuntosVinculos||'')){
    note(p,'Seleccioná el archivo de la cotización o comprobante.',true);return;
   }
+  if(sending)return;
+  sending=true;
   const button=form.querySelector('[type=submit]');
   const originalText=button.textContent;
   button.disabled=true;button.textContent='Enviando…';
@@ -76,7 +78,7 @@ function renderCrear(p,ctx,onCreated){
    clave=key();
    await onCreated(result.idSolicitud);
   }catch(error){if(p.isConnected)note(p,error?.code?errText(error):error.message,true);}
-  finally{button.disabled=false;button.textContent=originalText;}
+  finally{sending=false;button.disabled=false;button.textContent=originalText;}
  });
 }
 function renderMis(p,data,session,codes){
@@ -348,7 +350,7 @@ export async function render(container,session){
      body.innerHTML='<h3>Solicitud registrada</h3><p>El pedido quedó guardado y no necesitás volver a enviarlo.</p>';
      note(body,message);
     }
-    body.scrollIntoView({block:'start',behavior:'smooth'});
+    body.scrollIntoView?.({block:'start',behavior:'smooth'});
    });
    if(tab.id==='mis')renderMis(body,data,session,roles);
    if(tab.id==='elegir')renderAlternativas(body,data);

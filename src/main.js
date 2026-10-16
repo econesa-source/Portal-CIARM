@@ -1,15 +1,15 @@
 /**
  * Portal CIARM - Router SPA y Guardián de Autenticación
- * Versión: 18.7.14
+ * Versión: 18.7.15
  */
 
-import { comprasUiEnabled, clearComprasClient } from './services/comprasClient.js';
+import { clearComprasClient } from './services/comprasClient.js';
 import { getAuthenticatedUser, logout } from './services/authService.js';
 import { renderLoginWidget } from './components/loginWidget.js';
 import { getPortalPermissions, clearPortalPermissionsCache } from './services/portalPermissionsClient.js';
-import { applyDashboardAccess, allowedRoute, syncIbNavigation } from './components/dashboardAccess.js';
+import { applyDashboardAccess, allowedRoute, syncIbNavigation, HT06_MVP_URL } from './components/dashboardAccess.js';
 
-const APP_VERSION = '18.7.14';
+const APP_VERSION = '18.7.15';
 
 const routes = {
   '#compras': () => import(`./components/comprasWidget.js?v=${APP_VERSION}`),
@@ -67,13 +67,15 @@ function setupSidebarControls() {
 function syncComprasNavigation(permissions){
   const nav=document.querySelector('#main-sidebar .sidebar-nav');
   if(!nav)return;
-  let link=nav.querySelector('[href="#compras"]');
-  const codes=permissions?.enforced===true&&permissions?.verified===true?permissions.codes||[]:[];
-  const eligible=comprasUiEnabled()&&codes.includes('COMPRAS_TARJETA')&&
-    ['COMPRAS_CREAR','COMPRAS_MIS','COMPRAS_AREA','COMPRAS_TODOS','COMPRAS_FIRMAR','COMPRAS_PRORROGA_FIRMAR','COMPRAS_EXCEPCION_COT','COMPRAS_ELEGIR','COMPRAS_RECIBIR_ASIGNADA'].some(c=>codes.includes(c));
+  // El acceso del MVP usa DM05, pero no depende de comprasEnabled ni del proxy GAS.
+  const eligible=allowedRoute('#compras', permissions);
+  nav.querySelector('a[href="#compras"]')?.remove();
+  let link=nav.querySelector('a[data-module="compras-mvp"]');
   if(!eligible){link?.remove();return;}
   if(link)return;
-  link=document.createElement('a');link.href='#compras';link.className='nav-link';
+  link=document.createElement('a');link.href=HT06_MVP_URL;
+  link.target='_blank';link.rel='noopener noreferrer';
+  link.dataset.module='compras-mvp';link.className='nav-link';
   const icon=document.createElement('span');icon.className='nav-icon';icon.textContent='▤';
   const label=document.createElement('span');label.className='nav-label';label.textContent='Compras';
   link.append(icon,label);nav.append(link);
@@ -190,8 +192,17 @@ async function router() {
       window.__CIARM_COMPRAS_WRITES_ENABLED__ = permissions?.comprasWritesEnabled === true;
       syncComprasNavigation(permissions);
       syncIbNavigation(document, permissions);
-      if ((hash === '#compras' && !comprasUiEnabled()) || !allowedRoute(hash, permissions)) {
+      if (!allowedRoute(hash, permissions)) {
         mainContainer.innerHTML = '<p role="alert">Esta función no está habilitada para tu perfil.</p>';
+        return;
+      }
+      // Enlaces antiguos #compras no deben reactivar la integración del Portal.
+      if (hash === '#compras') {
+        mainContainer.innerHTML = '<section style="padding:24px"><h2>Compras</h2><p>Durante el MVP, la gestión de compras se realiza directamente en HT06.</p></section>';
+        const link=document.createElement('a');link.href=HT06_MVP_URL;
+        link.target='_blank';link.rel='noopener noreferrer';
+        link.textContent='Abrir HT06';
+        mainContainer.querySelector('section').append(link);
         return;
       }
       const module = await routes[hash]();

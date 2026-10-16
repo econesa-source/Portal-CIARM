@@ -8,7 +8,7 @@ const CIARM_TICKET_PERMISSIONS_RANGE = "'Permisos de usuario'!A1:M1010";
 
 function ciarm_ticket_permission(array $rows, string $email): bool {
     $email = strtolower(trim($email));
-    if (!in_array($email, ['d.lara@ciarm.edu.mx', 'e.conesa@ciarm.edu.mx'], true) || count($rows) < 2) return false;
+    if (!in_array($email, ['d.lara@ciarm.edu.mx', 'e.conesa@ciarm.edu.mx', 'r.valencia@ciarm.edu.mx'], true) || count($rows) < 2) return false;
     $headers = array_map(static fn($v) => trim((string)$v), $rows[0]);
     $indexes = [];
     foreach (['Correo Ciarm', 'Status', 'Sistema de tickets'] as $header) {
@@ -27,7 +27,7 @@ function ciarm_ticket_current_permission(array $sessionUser): bool {
         return ciarm_rbac_has_function($sessionUser, 'INT_GESTION');
     }
     $email = strtolower(trim((string)($sessionUser['correo'] ?? '')));
-    if (!in_array($email, ['d.lara@ciarm.edu.mx', 'e.conesa@ciarm.edu.mx'], true)) return false;
+    if (!in_array($email, ['d.lara@ciarm.edu.mx', 'e.conesa@ciarm.edu.mx', 'r.valencia@ciarm.edu.mx'], true)) return false;
     $raw = @file_get_contents(ciarm_private_path('service-account.json'));
     if ($raw === false) throw new RuntimeException('permission_unavailable');
     $account = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
@@ -56,9 +56,13 @@ function ciarm_ticket_origin_valid(string $origin, string $host): bool {
 }
 
 function ciarm_ticket_envelope(array $sessionUser, string $action, array $payload, string $secret, ?int $issuedAt = null, ?string $nonce = null, bool $perfProbe = false): array {
+    $email = strtolower(trim((string)($sessionUser['correo'] ?? '')));
+    $actor = in_array($email, ['d.lara@ciarm.edu.mx', 'e.conesa@ciarm.edu.mx'], true)
+        ? $email
+        : 'd.lara@ciarm.edu.mx';
     $data = [
         'action' => $action,
-        'actor' => strtolower(trim((string)($sessionUser['correo'] ?? ''))),
+        'actor' => $actor,
         'issuedAt' => $issuedAt ?? time(),
         'nonce' => $nonce ?? bin2hex(random_bytes(24)),
         'payload' => $payload,

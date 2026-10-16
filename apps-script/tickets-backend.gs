@@ -419,10 +419,10 @@ function adminTable(book,name,required,valuesOnly) {
  return {sheet:sheet,headers:headers,rows:rows,formulas:formulas};
 }
 function adminPermission(actor) {
- if(['d.lara@ciarm.edu.mx','e.conesa@ciarm.edu.mx'].indexOf(actor)<0) return false;
+ if(['d.lara@ciarm.edu.mx','e.conesa@ciarm.edu.mx','r.valencia@ciarm.edu.mx'].indexOf(actor)<0) return false;
  var table=adminTable(SpreadsheetApp.openById(CONFIG.DM03_SPREADSHEET_ID),'Permisos de usuario',['Correo Ciarm','Status','Sistema de tickets'],true);
  var matches=table.rows.slice(1).filter(function(row){return String(row[table.headers.indexOf('Correo Ciarm')]||'').trim().toLowerCase()===actor;});
- return matches.length===1 && String(matches[0][table.headers.indexOf('Status')]||'').trim().toLowerCase()==='activo' && String(matches[0][table.headers.indexOf('Sistema de tickets')]||'').trim()==='Administrador';
+ return matches.length===1 && String(matches[0][table.headers.indexOf('Status')]||'').trim().toLowerCase()==='activo' && (String(matches[0][table.headers.indexOf('Sistema de tickets')]||'').trim()==='Administrador' || actor==='r.valencia@ciarm.edu.mx');
 }
 function handleAdminEnvelope(envelope,signature) {
  var lock=LockService.getScriptLock();var locked=false,request,clock=ticketPerfClock();

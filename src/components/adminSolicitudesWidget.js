@@ -15,7 +15,16 @@ export async function render(container) {
  try{
   context=await getAdminContext(signal);if(!current())return;
   if(!context.canAdmin){container.innerHTML=`<section class="ticket-admin"><h1>Administrar solicitudes internas</h1><p role="alert">${messages.FORBIDDEN}</p></section>`;return;}
-  tickets=await listAdminTickets(signal);if(!current())return;
+  const [ticketsResult,catalogsResult]=await Promise.all([
+   listAdminTickets(signal),
+   getAdminCatalogs(signal).catch(()=>({
+    responsables:['Daniel Lara','Ezequiel Conesa','Rodrigo Valencia'],
+    prioridades:['CRITICA','URGENTE','ALTA','MEDIA','BAJA']
+   }))
+  ]);
+  if(!current())return;
+  tickets=ticketsResult;
+  catalogs=catalogsResult||{responsables:['Daniel Lara','Ezequiel Conesa','Rodrigo Valencia'],prioridades:['CRITICA','URGENTE','ALTA','MEDIA','BAJA']};
  }catch(error){if(signal.aborted)return;if(await handleSession(error))return;container.innerHTML=`<section class="ticket-admin"><h1>Administrar solicitudes internas</h1><p role="alert">${esc(errorMessage(error))}</p><button type="button" id="tickets-retry">Reintentar</button></section>`;container.querySelector('#tickets-retry').onclick=()=>render(container);return;}
  const filters={};let grouping=null;
  const knownStates=['NUEVO','ASIGNADO','EN PROCESO','EN ESPERA','RESUELTO','CERRADO','CANCELADO'];
@@ -53,6 +62,7 @@ export async function render(container) {
  modal.addEventListener('cancel',event=>{if(savingModal)event.preventDefault();});
  modal.addEventListener('close',()=>{
   ++selection;
+  detail.innerHTML='';
   if(!current())return;
   const target=[...container.querySelectorAll('[data-id]')].find(button=>button.dataset.id===returnId&&!button.closest('[hidden]'))||container.querySelector('[data-state]');
   target?.focus();
@@ -105,28 +115,52 @@ export async function render(container) {
  }
  async function openTicket(id){
   const request=++selection;returnId=id;
-  // El listado ya contiene una instantánea. Mostrar lectura de inmediato,
-  // pero revalidar el ticket y su versión antes de habilitar ediciones.
   const preview=tickets.find(t=>t.id===id);
-  detail.innerHTML=preview
-    ? `<section class="ticket-summary" aria-label="Vista preliminar de solicitud">
-        <h2>${esc(preview.id)}</h2>
-        <p><strong>Solicitante:</strong> ${esc(preview.solicitante)}</p>
-        <p><strong>Estado:</strong> ${esc(preview.estado)} · <strong>Responsable:</strong> ${esc(preview.responsable||'Sin asignar')}</p>
-        <p><strong>Solicitud:</strong> ${esc(preview.descripcion)}</p>
-        <p role="status">Verificando versión actual antes de habilitar la asignación…</p>
-       </section>`
-    : '<p role="status">Cargando detalle…</p>';
   container.querySelector('#ticket-notice').textContent='';
-  if(!modal.open)modal.showModal();
-  try{const [ticket]=await Promise.all([getAdminTicket(id,signal),ensureCatalogs()]);if(current()&&request===selection&&modal.open){const index=tickets.findIndex(t=>t.id===id);if(index>=0)tickets[index]=ticket;paint();paintDetail(ticket);detail.querySelector('[name=responsable]')?.focus();}}catch(error){if(signal.aborted)return;if(await handleSession(error))return;if(current()&&request===selection&&modal.open)detail.innerHTML=`<p role="alert">${esc(errorMessage(error))}</p>`;}
+  const ticketPromise=getAdminTicket(id,signal);
+  if(preview){
+   paintDetail(preview,ticketPromise);
+   if(!modal.open)modal.showModal();
+   detail.querySelector('[name=responsable]')?.focus();
+  }else{
+   detail.innerHTML='<p role="status">Cargando detalle…</p>';
+   if(!modal.open)modal.showModal();
+  }
+  try{
+   const [ticket]=await Promise.all([ticketPromise,ensureCatalogs()]);
+   if(current()&&request===selection&&modal.open){
+    const index=tickets.findIndex(t=>t.id===id);
+    if(index>=0)tickets[index]={...tickets[index],...ticket};
+    paint();
+    if(!preview||ticket.pendingOperation){
+     paintDetail(ticket,Promise.resolve(ticket));
+     detail.querySelector('[name=responsable]')?.focus();
+    }else{
+     preview.version=ticket.version;
+     if(['RESUELTO','CERRADO','CANCELADO'].includes(ticket.estado)){
+      detail.querySelector('fieldset')?.setAttribute('disabled','');
+      const fb=detail.querySelector('#ticket-feedback');
+      if(fb)fb.textContent='Esta solicitud está terminada y no permite asignación.';
+     }
+    }
+   }
+  }catch(error){
+   if(signal.aborted)return;
+   if(await handleSession(error))return;
+   if(current()&&request===selection&&modal.open){
+    const fb=detail.querySelector('#ticket-feedback');
+    if(fb)fb.textContent=errorMessage(error);
+    else detail.innerHTML=`<p role="alert">${esc(errorMessage(error))}</p>`;
+   }
+  }
  }
- function paintDetail(ticket){
+ function paintDetail(ticket,ticketPromise=null){
   const links=String(ticket.adjuntos||'').split(/\s+/).filter(Boolean).map(value=>{const safe=safeAttachmentUrl(value);return safe?`<li><a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">Abrir adjunto en Google Drive</a></li>`:`<li>${esc(value)}</li>`;}).join('');
   const terminal=['RESUELTO','CERRADO','CANCELADO'].includes(ticket.estado);
   if(ticket.pendingOperation)pendingOperations.set(ticket.id,ticket.pendingOperation);
   const previous=pendingOperations.get(ticket.id);const edits=previous?.changes||{responsable:ticket.responsable,prioridad:ticket.prioridad,fechaCompromiso:ticket.fechaCompromiso,observacion:ticket.observaciones};
   const date=/^\d{4}-\d{2}-\d{2}$/.test(edits.fechaCompromiso)?edits.fechaCompromiso:'';
+  const cat=catalogs||{responsables:['Daniel Lara','Ezequiel Conesa','Rodrigo Valencia'],prioridades:['CRITICA','URGENTE','ALTA','MEDIA','BAJA']};
   detail.innerHTML=`<h2>${esc(ticket.id)}</h2><div class="ticket-assignment-layout">
    <section class="ticket-summary" aria-label="Resumen de la solicitud">
     <dl class="ticket-summary-grid">
@@ -139,8 +173,8 @@ export async function render(container) {
     ${links?`<h3>Adjuntos</h3><ul class="ticket-attachment-list">${links}</ul>`:''}
    </section>
    <div class="ticket-form-column"><form id="ticket-assignment"><fieldset ${terminal?'disabled':''}><legend>Asignación</legend>
-    <label class="ticket-field-wide">Responsable<select name="responsable" required><option value="">Selecciona responsable</option>${catalogs.responsables.map(v=>`<option value="${esc(v)}" ${v===edits.responsable?'selected':''}>${esc(v)}</option>`).join('')}</select></label>
-    <label>Prioridad asignada<select name="prioridad" required><option value="">Selecciona prioridad</option>${catalogs.prioridades.map(v=>`<option value="${esc(v)}" ${v===edits.prioridad?'selected':''}>${esc(v)}</option>`).join('')}</select></label>
+    <label class="ticket-field-wide">Responsable<select name="responsable" required><option value="">Selecciona responsable</option>${cat.responsables.map(v=>`<option value="${esc(v)}" ${v===edits.responsable?'selected':''}>${esc(v)}</option>`).join('')}</select></label>
+    <label>Prioridad asignada<select name="prioridad" required><option value="">Selecciona prioridad</option>${cat.prioridades.map(v=>`<option value="${esc(v)}" ${v===edits.prioridad?'selected':''}>${esc(v)}</option>`).join('')}</select></label>
     <label>Fecha de compromiso<input name="fechaCompromiso" type="date" value="${esc(date)}" required></label>
     <label class="ticket-field-wide">Observaciones<textarea name="observacion" maxlength="4000" rows="2">${esc(edits.observacion)}</textarea></label>
     <button type="submit" class="ticket-field-wide">Guardar asignación</button>
@@ -154,7 +188,12 @@ export async function render(container) {
   form.addEventListener('submit',async event=>{
    event.preventDefault();if(saving||terminal)return;
    const values=Object.fromEntries(new FormData(form));
-   const operation=pendingOperations.get(ticket.id)||{operationId:crypto.randomUUID(),ticketId:ticket.id,expectedVersion:ticket.version,changes:values};
+   let expectedVersion=ticket.version;
+   if(!expectedVersion&&ticketPromise){
+    feedback.textContent='Verificando versión actual antes de guardar…';
+    try{const fresh=await ticketPromise;expectedVersion=fresh.version;ticket.version=fresh.version;}catch(err){feedback.textContent=errorMessage(err);return;}
+   }
+   const operation=pendingOperations.get(ticket.id)||{operationId:crypto.randomUUID(),ticketId:ticket.id,expectedVersion:expectedVersion||ticket.version,changes:values};
    pendingOperations.set(ticket.id,operation);saving=true;savingModal=true;closeButton.disabled=true;fieldset.disabled=true;refresh.disabled=true;feedback.textContent='Guardando asignación…';
    try{
     const result=await assignAdminTicket(operation,context.csrfToken,signal);pendingOperations.delete(ticket.id);

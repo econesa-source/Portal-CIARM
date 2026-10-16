@@ -77,6 +77,25 @@ assertRead($catalogDifference['fields']===['prioridades'],'Only approved schema 
 assertRead(ciarm_tickets_direct_eligible('GET','list'),'List GET should use Sheets by default');
 assertRead(ciarm_tickets_direct_eligible('GET','catalogs'),'Catalogs GET should use Sheets by default');
 assertRead(ciarm_tickets_direct_eligible('GET','serviceContext'),'Context GET should use Sheets by default');
+
+assertRead(ciarm_tickets_direct_eligible('GET','serviceListRaw'),'Raw service list is a GET-only projection');
+$serviceMeta=['email'=>'d.lara@ciarm.edu.mx','createdAt'=>'2026-10-15 08:00:00','waits'=>[],'cycles'=>[],
+ 'policy'=>['version'=>1,'timeZone'=>'America/Cancun']];
+$serviceRows=[['FOLIO','SEGUIMIENTO'],
+ ['TKT-2026-00001',json_encode($serviceMeta,JSON_THROW_ON_ERROR)]];
+$serviceTickets=[$headers,$ticket];
+$journalHeader=[$journal[0]];
+$all=ciarm_tickets_direct_service_list($serviceTickets,$journalHeader,$serviceRows,'d.lara@ciarm.edu.mx','all');
+assertRead(count($all['items'])===1&&$all['items'][0]['meta']===$serviceMeta,'All cases must use authoritative sheet metadata');
+assertRead($all['items'][0]['ticket']['version']===null,'Read-only projection never supplies write token');
+assertRead(count(ciarm_tickets_direct_service_list($serviceTickets,$journalHeader,$serviceRows,'d.lara@ciarm.edu.mx','assigned')['items'])===1,'Assigned view checks email');
+assertRead(count(ciarm_tickets_direct_service_list($serviceTickets,$journalHeader,$serviceRows,'solicitante@ciarm.edu.mx','mine')['items'])===1,'Mine view checks original requester');
+assertRead(count(ciarm_tickets_direct_service_list($serviceTickets,$journalHeader,$serviceRows,'solicitante@ciarm.edu.mx','assigned')['items'])===0,'Requester cannot view unrelated assigned cases');
+$duplicateServiceRows=[$serviceRows[0],$serviceRows[1],$serviceRows[1]];
+expectsReadError(fn()=>ciarm_tickets_direct_service_list($serviceTickets,$journalHeader,$duplicateServiceRows,'d.lara@ciarm.edu.mx','all'),'DUPLICATE_ID');
+expectsReadError(fn()=>ciarm_tickets_direct_service_list($serviceTickets,$journalHeader,$serviceRows,'d.lara@ciarm.edu.mx','arbitrary'),'VALIDATION');
+expectsReadError(fn()=>ciarm_tickets_direct_service_list($serviceTickets,$journalHeader,$serviceRows,'unauthorized@example.com','mine'),'FORBIDDEN');
+
 $servicePolicy=['version'=>1,'responsibles'=>[['name'=>'Persona Prueba','email'=>'p@ciarm.edu.mx']],'levels'=>['ALTA'=>['start'=>8]]];
 $serviceConfig=[['VERSION','REGLAS','ACTOR','FECHA','OPERACION','HASH'],[1,json_encode($servicePolicy),'actor','2026-10-16','PUBLISH','hash']];
 assertRead(ciarm_tickets_direct_service_context($serviceConfig,true)===
@@ -95,6 +114,7 @@ putenv('CIARM_TICKETS_DIRECT_READ=0');
 try {
  assertRead(!ciarm_tickets_direct_eligible('GET','list'),'Emergency rollback must disable direct reads');
  assertRead(!ciarm_tickets_direct_eligible('GET','catalogs'),'Emergency rollback must disable catalogs');
+ assertRead(!ciarm_tickets_direct_eligible('GET','serviceListRaw'),'Emergency rollback must disable raw service list');
 } finally {
  putenv('CIARM_TICKETS_DIRECT_READ');
 }

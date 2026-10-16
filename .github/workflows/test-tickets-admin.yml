@@ -11,7 +11,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm ci && npm test
+      - run: npm ci && node scripts/build-ticket-service-projector.mjs && git diff --exit-code src/generated/tickets-service-projector.js && npm test
       - run: php tests/compras-config.php
       - run: node tests/compras-http.mjs
       - run: node tests/compras-multipart-http.mjs

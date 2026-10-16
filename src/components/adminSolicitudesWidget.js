@@ -1,5 +1,5 @@
 import {ticketDate} from './ticketDate.js';
-import {getAdminContext,listAdminTickets,getAdminCatalogs,getAdminTicket,assignAdminTicket,escapeText as esc,safeAttachmentUrl,filterTickets} from '../services/ticketsAdminService.js';
+import {getAdminContext,listAdminTickets,getAdminCatalogs,getAdminTicket,getAdminTicketPreview,assignAdminTicket,escapeText as esc,safeAttachmentUrl,filterTickets} from '../services/ticketsAdminService.js';
 
 const pendingOperations=new Map();
 const messages={SERVICE_MIGRATION_REQUIRED:'Esta tarea histórica ya está en ejecución o espera. Requiere incorporación explícita al seguimiento; no se modificaron sus datos.',RESPONSIBLE_ACCOUNT:'Configura el correo activo de este responsable en Configuración del servicio.',FORBIDDEN:'No tienes permiso para administrar solicitudes internas.',CONFLICT:'Otro administrador modificó esta solicitud. Tu edición se conserva; carga la versión actual antes de guardar.',PENDING_OPERATION:'Hay una asignación pendiente de confirmar. Reintenta la operación original.',VALIDATION:'Revisa responsable, prioridad y fecha de compromiso.',NOT_FOUND:'La solicitud ya no está disponible.',DUPLICATE_ID:'El folio está duplicado en la fuente. Requiere revisión.',OPERATION_REUSED:'La operación ya está registrada con otros datos.',BUSY:'El sistema está ocupado. Reintenta en unos segundos.'};
@@ -60,7 +60,7 @@ export async function render(container) {
  });
  function ticketRows(found,pending=false){return found.map(t=>pending?
   `<tr><td>${esc(t.id)}${ticketDate(t.fecha,t.hora)}</td><td>${esc(t.solicitante)}<span>${esc(t.area)}</span></td><td><div class="ticket-pending-description">${esc(t.descripcion)}</div><span>${esc(t.tipo)}</span></td><td>${esc(t.urgencia)}</td><td><button type="button" data-id="${esc(t.id)}" aria-label="Asignar solicitud ${esc(t.id)}">Asignar</button></td></tr>`:
-  `<tr><td><button type="button" class="ticket-open" data-id="${esc(t.id)}">${esc(t.id)}</button><span>${esc(t.tipo)}</span></td><td>${ticketDate(t.fecha,t.hora)}</td><td>${ticketDate(t.fechaAsignacion)}</td><td>${esc(t.solicitante)}<span>${esc(t.area)}</span></td><td>${esc(t.estado)}</td><td>${esc(t.urgencia)}</td><td>${esc(t.prioridad)}</td><td>${esc(t.responsable||'Sin responsable')}</td><td>${esc(t.fechaCompromiso||'Sin fecha')}</td><td>${isPending(t)?`<button type="button" data-id="${esc(t.id)}" aria-label="Asignar solicitud ${esc(t.id)}">Asignar</button>`:`<button type="button" class="ticket-secondary" data-id="${esc(t.id)}">Ver detalle</button>`}</td></tr>`).join('');}
+  `<tr><td><button type="button" class="ticket-open" data-id="${esc(t.id)}">${esc(t.id)}</button><span>${esc(t.tipo)}</span></td><td>${ticketDate(t.fecha,t.hora)}</td><td>${ticketDate(t.fechaAsignacion)}</td><td>${esc(t.solicitante)}<span>${esc(t.area)}</span></td><td>${esc(t.estado)}</td><td>${esc(t.urgencia)}</td><td>${esc(t.prioridad)}</td><td>${esc(t.responsable||'Sin responsable')}</td><td>${esc(t.fechaCompromiso||'Sin fecha')}</td><td>${isPending(t)?`<button type="button" data-id="${esc(t.id)}" aria-label="Asignar solicitud ${esc(t.id)}">Asignar</button>`:`<button type="button" class="ticket-secondary" data-id="${esc(t.id)}" data-mode="view">Ver detalle</button>`}</td></tr>`).join('');}
  function paint(){
   container.querySelector('#ticket-total').textContent=`${tickets.length} solicitudes`;
   const states=[...new Set([...knownStates,...tickets.map(stateOf)])];
@@ -89,7 +89,7 @@ export async function render(container) {
  container.querySelectorAll('[data-filter]').forEach(select=>select.addEventListener('change',()=>{filters[select.dataset.filter]=select.value;paint();}));
  container.querySelector('#ticket-clear-group').addEventListener('click',()=>{grouping=null;resetFilters();paint();container.querySelector('[data-state]')?.focus();});
  container.querySelector('.ticket-admin').addEventListener('click',e=>{
-  const button=e.target.closest('[data-id]');if(button){openTicket(button.dataset.id);return;}
+  const button=e.target.closest('[data-id]');if(button){openTicket(button.dataset.id,button.dataset.mode==='view'?'view':'edit');return;}
   const state=e.target.closest('[data-state]');const group=e.target.closest('[data-group-value]');
   if(state||group){grouping=state?{key:'estado',value:state.dataset.state}:{key:container.querySelector('#ticket-group').value,value:group.dataset.groupValue};resetFilters();paint();const title=container.querySelector('#ticket-subset-title');title.focus({preventScroll:true});container.querySelector('#ticket-subset').scrollIntoView?.({behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});}
  });
@@ -104,7 +104,7 @@ export async function render(container) {
   }
   return catalogPromise;
  }
- async function openTicket(id){
+ async function openTicket(id,mode='edit'){
   const request=++selection;returnId=id;
   // El listado ya contiene una instantánea. Mostrar lectura de inmediato,
   // pero revalidar el ticket y su versión antes de habilitar ediciones.
@@ -121,19 +121,46 @@ export async function render(container) {
   container.querySelector('#ticket-notice').textContent='';
   if(!modal.open)modal.showModal();
   try{
-   const [ticket]=await Promise.all([getAdminTicket(id,signal),ensureCatalogs()]);
+   const [ticket]=mode==='view'?[await getAdminTicketPreview(id,signal)]:await Promise.all([getAdminTicket(id,signal),ensureCatalogs()]);
    if(current()&&request===selection&&modal.open){
     const index=tickets.findIndex(t=>t.id===id);
     if(index>=0)tickets[index]=ticket;
     paint();
-    paintDetail(ticket);
-    detail.querySelector('[name=responsable]')?.focus();
+    if(mode==='view')paintDetailReadOnly(ticket);
+    else {paintDetail(ticket);detail.querySelector('[name=responsable]')?.focus();}
    }
   }catch(error){
    if(signal.aborted)return;
    if(await handleSession(error))return;
    if(current()&&request===selection&&modal.open)detail.innerHTML=`<p role="alert">${esc(errorMessage(error))}</p>`;
   }
+ }
+ function paintDetailReadOnly(ticket){
+  // Never allow a read-only Sheets projection to carry a CAS mutation token.
+  if(!ticket?.readOnly||ticket.version!==null){detail.textContent='No se pudo verificar el modo de consulta.';return;}
+  const links=String(ticket.adjuntos||'').split(/\s+/).filter(Boolean).map(value=>{
+   const safe=safeAttachmentUrl(value);
+   return safe?`<li><a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">Abrir adjunto en Google Drive</a></li>`:`<li>${esc(value)}</li>`;
+  }).join('');
+  detail.innerHTML=`<section class="ticket-summary" aria-label="Detalle de lectura de la solicitud">
+   <h2>${esc(ticket.id)}</h2>
+   <dl class="ticket-summary-grid">
+    <div><dt>Solicitante</dt><dd>${esc(ticket.solicitante)} · ${esc(ticket.correo)}</dd></div>
+    <div><dt>Área</dt><dd>${esc(ticket.area)}</dd></div>
+    <div><dt>Tipo</dt><dd>${esc(ticket.tipo)}</dd></div>
+    <div><dt>Estado</dt><dd>${esc(ticket.estado)}</dd></div>
+    <div><dt>Responsable</dt><dd>${esc(ticket.responsable||'Sin asignar')}</dd></div>
+    <div><dt>Prioridad asignada</dt><dd>${esc(ticket.prioridad||'Sin definir')}</dd></div>
+    <div><dt>Fecha solicitud</dt><dd>${esc(ticket.fecha)} ${esc(ticket.hora||'')}</dd></div>
+    <div><dt>Compromiso</dt><dd>${esc(ticket.fechaCompromiso||'Sin fecha')}</dd></div>
+    <div><dt>Plazo solicitado</dt><dd>${esc(ticket.plazo||'Sin dato')}</dd></div>
+   </dl>
+   <h3>Descripción original</h3><p class="ticket-description">${esc(ticket.descripcion)}</p>
+   ${links?`<h3>Adjuntos</h3><ul class="ticket-attachment-list">${links}</ul>`:''}
+   <p>Consulta de solo lectura. Para modificar se verificará la versión actual del ticket.</p>
+   <button type="button" id="ticket-prepare-edit">Preparar asignación</button>
+  </section>`;
+  detail.querySelector('#ticket-prepare-edit').onclick=()=>openTicket(ticket.id,'edit');
  }
  function paintDetail(ticket){
   const links=String(ticket.adjuntos||'').split(/\s+/).filter(Boolean).map(value=>{const safe=safeAttachmentUrl(value);return safe?`<li><a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">Abrir adjunto en Google Drive</a></li>`:`<li>${esc(value)}</li>`;}).join('');

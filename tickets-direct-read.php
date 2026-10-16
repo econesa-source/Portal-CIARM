@@ -167,20 +167,36 @@ function ciarm_tickets_direct_catalogs(array $catalogs,array $people,array $conf
  */
 function ciarm_tickets_direct_eligible(string $method,string $action): bool {
  return $method==='GET'
-   && in_array($action,['list','catalogs','serviceContext','serviceListRaw'],true)
+   && in_array($action,['list','catalogs','serviceContext','serviceListRaw','detailPreview'],true)
    && getenv('CIARM_TICKETS_DIRECT_READ')!=='0';
 }
 
 function ciarm_tickets_direct_read(string $action,?callable $batch=null): array {
- if(!in_array($action,['list','catalogs'],true))throw new RuntimeException('VALIDATION');
- $ranges=$action==='list'
+ if(!in_array($action,['list','catalogs','detailPreview'],true))throw new RuntimeException('VALIDATION');
+ $ranges=in_array($action,['list','detailPreview'],true)
   ? ["'TICKETS'!A:X","'BITACORA TICKETS'!A:J"]
   : ["'CATALOGOS'!A:E","'RESPONSABLES'!A:B","'CONFIG SERVICIO'!A:F"];
  $load=$batch??'ciarm_tickets_batch_get';
  $sets=$load($ranges,'UNFORMATTED_VALUE');
  foreach($ranges as $r)if(!array_key_exists($r,$sets))throw new RuntimeException('UPSTREAM');
- return $action==='list'?ciarm_tickets_direct_list($sets[$ranges[0]],$sets[$ranges[1]])
+ return in_array($action,['list','detailPreview'],true)?ciarm_tickets_direct_list($sets[$ranges[0]],$sets[$ranges[1]])
    :ciarm_tickets_direct_catalogs($sets[$ranges[0]],$sets[$ranges[1]],$sets[$ranges[2]]);
+}
+
+
+/** Read-only projection. Mutation tokens and pending operation payloads are never returned.
+ * Institutional session and admin permission are validated by tickets-api.php. */
+function ciarm_tickets_direct_detail_preview(string $id,?callable $batch=null): array {
+ if(!preg_match('/^TKT-\d{4}-\d+$/',$id))throw new RuntimeException('VALIDATION');
+ $tickets=ciarm_tickets_direct_read('detailPreview',$batch);
+ $matches=array_values(array_filter($tickets,static fn($ticket)=>$ticket['id']===$id));
+ if(count($matches)>1)throw new RuntimeException('DUPLICATE_ID');
+ if(!$matches)throw new RuntimeException('NOT_FOUND');
+ $ticket=$matches[0];
+ $ticket['version']=null;
+ $ticket['readOnly']=true;
+ unset($ticket['pendingOperation']);
+ return $ticket;
 }
 
 /**

@@ -176,9 +176,12 @@ export async function render(container) {
       if (firstTicket) {
         output.push('Detalle de ticket…');
         print();
-        const detail=await measured('Detalle de ticket','action=detail&id='+encodeURIComponent(firstTicket));
+        const detail=await measured('Detalle (consulta)','action=detailPreview&id='+encodeURIComponent(firstTicket));
         output[output.length-1]=detail.line;
         if(detail.interior) output.push(detail.interior);
+        const edit=await measured('Detalle (para editar)','action=detail&id='+encodeURIComponent(firstTicket));
+        output.push(edit.line);
+        if(edit.interior)output.push(edit.interior);
       }
       output.push('');
       output.push('Navegador: solicitud completa. Puente GAS: PHP → Apps Script y su respuesta.');

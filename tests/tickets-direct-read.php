@@ -79,6 +79,16 @@ assertRead(ciarm_tickets_direct_eligible('GET','catalogs'),'Catalogs GET should 
 assertRead(ciarm_tickets_direct_eligible('GET','serviceContext'),'Context GET should use Sheets by default');
 
 assertRead(ciarm_tickets_direct_eligible('GET','serviceListRaw'),'Raw service list is a GET-only projection');
+assertRead(ciarm_tickets_direct_eligible('GET','detailPreview'),'Read-only preview available under admin authentication');
+$preview=ciarm_tickets_direct_detail_preview('TKT-2026-00001',$fake);
+assertRead($preview['readOnly']===true&&$preview['version']===null&&$preview['id']==='TKT-2026-00001','Preview contains no write token');
+assertRead(!array_key_exists('pendingOperation',$preview),'Preview hides pending operation payloads');
+expectsReadError(fn()=>ciarm_tickets_direct_detail_preview('bad',$fake),'VALIDATION');
+expectsReadError(fn()=>ciarm_tickets_direct_detail_preview('TKT-2026-00099',$fake),'NOT_FOUND');
+$duplicate=function(array $ranges,string $render)use($headers,$ticket,$journal):array{
+ return [$ranges[0]=>[$headers,$ticket,$ticket],$ranges[1]=>$journal];
+};
+expectsReadError(fn()=>ciarm_tickets_direct_detail_preview('TKT-2026-00001',$duplicate),'DUPLICATE_ID');
 $serviceMeta=['email'=>'d.lara@ciarm.edu.mx','createdAt'=>'2026-10-15 08:00:00','waits'=>[],'cycles'=>[],
  'policy'=>['version'=>1,'timeZone'=>'America/Cancun']];
 $serviceRows=[['FOLIO','SEGUIMIENTO'],
@@ -115,6 +125,7 @@ try {
  assertRead(!ciarm_tickets_direct_eligible('GET','list'),'Emergency rollback must disable direct reads');
  assertRead(!ciarm_tickets_direct_eligible('GET','catalogs'),'Emergency rollback must disable catalogs');
  assertRead(!ciarm_tickets_direct_eligible('GET','serviceListRaw'),'Emergency rollback must disable raw service list');
+ assertRead(!ciarm_tickets_direct_eligible('GET','detailPreview'),'Emergency rollback must disable detail preview');
 } finally {
  putenv('CIARM_TICKETS_DIRECT_READ');
 }

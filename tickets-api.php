@@ -41,7 +41,7 @@ try {
    ciarm_ticket_perf_headers($ticketPerf,$ticketPerfStart);
    ciarm_json_response(200,['ok'=>true,'data'=>$data]);
   }
-  if(!in_array($action,['mine','creationStatus','list','catalogs','detail','serviceContext','serviceSettings','serviceList','serviceListRaw','serviceDetail','validateDirectReads'],true))throw new RuntimeException('VALIDATION');
+  if(!in_array($action,['mine','creationStatus','list','catalogs','detail','serviceContext','serviceSettings','serviceList','serviceListRaw','serviceDetail','detailPreview','validateDirectReads'],true))throw new RuntimeException('VALIDATION');
   $input=$_GET;
  } else {
   if(!ciarm_ticket_origin_valid($_SERVER['HTTP_ORIGIN']??'',$_SERVER['HTTP_HOST']??''))throw new RuntimeException('ORIGIN');
@@ -98,8 +98,8 @@ try {
   $ticketPerf['rbac']=(microtime(true)-$stamp)*1000;
   if(!$allowed)throw new RuntimeException('FORBIDDEN');
   if($action==='assign')$payload=array_intersect_key($input,array_flip(['operationId','ticketId','expectedVersion','changes']));
-  else $payload=$action==='detail'?['id'=>$input['id']??null]:[];
-  if($action==='detail'&&!is_string($payload['id']))throw new RuntimeException('VALIDATION');
+  else $payload=in_array($action,['detail','detailPreview'],true)?['id'=>$input['id']??null]:[];
+  if(in_array($action,['detail','detailPreview'],true)&&!is_string($payload['id']))throw new RuntimeException('VALIDATION');
  }
  // Optional authenticated parity audit: compare GAS with Sheets and
  // disable direct reads for the session if any mismatch is detected.
@@ -163,6 +163,10 @@ try {
     $context=ciarm_tickets_direct_service_context($sets[$configRange],(bool)$serviceContextCanAdmin);
     $context['csrfToken']=$serviceContextCsrf;
     $result=['ok'=>true,'data'=>$context];
+   }elseif($action==='detailPreview'){
+    $id=$payload['id']??null;
+    if(!is_string($id))throw new RuntimeException('VALIDATION');
+    $result=['ok'=>true,'data'=>ciarm_tickets_direct_detail_preview($id)];
    }elseif($action==='serviceListRaw'){
     if(!in_array($payload['kind']??null,['all','mine','assigned'],true))throw new RuntimeException('VALIDATION');
     $ranges=["'TICKETS'!A:X","'BITACORA TICKETS'!A:J","'SEGUIMIENTO SERVICIO'!A:B"];
@@ -188,10 +192,15 @@ try {
  }
  if($result===null){
   $gasStamp=microtime(true);
-  $bridgeAction=$action==='serviceListRaw'?'serviceList':$action;
+  $bridgeAction=$action==='serviceListRaw'?'serviceList':($action==='detailPreview'?'detail':$action);
   $result=$selfService?ciarm_portal_bridge($user,$bridgeAction,$payload,$perfProbe):ciarm_ticket_bridge($user,$bridgeAction,$payload,$perfProbe);
   if($action==='serviceListRaw'&&($result['ok']??false)===true&&is_array($result['data']??null))
     $result['data']=['computed'=>true,'items'=>$result['data']];
+  if($action==='detailPreview'&&($result['ok']??false)===true&&is_array($result['data']??null)){
+    unset($result['data']['pendingOperation']);
+    $result['data']['version']=null;
+    $result['data']['readOnly']=true;
+  }
   $ticketPerf['apps_script']=(microtime(true)-$gasStamp)*1000;
   if(!$readDirect)header('X-CIARM-Tickets-Read-Source: apps-script');
  }

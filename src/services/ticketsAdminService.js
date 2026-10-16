@@ -13,6 +13,7 @@ export const getAdminContext=signal=>ticketRequest('context',null,signal);
 export const listAdminTickets=signal=>ticketRequest('list',null,signal);
 export const getAdminCatalogs=signal=>ticketRequest('catalogs',null,signal);
 export const getAdminTicket=(id,signal)=>ticketRequest('detail',{id},signal);
+export const getAdminTicketPreview=(id,signal)=>ticketRequest('detailPreview',{id},signal);
 export const assignAdminTicket=({operationId,ticketId,expectedVersion,changes},csrfToken,signal)=>ticketRequest('assign',{operationId,ticketId,expectedVersion,changes,csrfToken},signal);
 export function escapeText(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 export function safeAttachmentUrl(value){try{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password&&['drive.google.com','docs.google.com'].includes(url.hostname)?url.href:null;}catch{return null;}}

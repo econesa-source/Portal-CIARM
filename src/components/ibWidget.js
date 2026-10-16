@@ -56,7 +56,7 @@ async function render(container, userSession) {
             <span style="color:#CBD5E1;">|</span>
             <span style="background:var(--gold-color, #C1B27E); color:#FFF; padding:2px 8px; border-radius:4px; font-weight:bold; font-size:0.75rem; text-transform:uppercase;">Programa del Diploma</span>
           </div>
-          <h2 style="margin:4px 0; color:var(--primary-color, #26487F); font-family:Kefa, Georgia, serif; font-size:1.6rem;">🎓 Módulo IB — Bachillerato Internacional</h2>
+          <h2 style="margin:4px 0; color:var(--primary-color, #26487F); font-family:Kefa, Georgia, serif; font-size:1.6rem;">Módulo IB — Bachillerato Internacional</h2>
           <p style="margin:0; color:#64748B; font-size:0.88rem;">
             Asistente pedagógico con IA de Google, repositorio de guías oficiales y recursos curriculares para docentes del CIARM.
           </p>
@@ -65,7 +65,7 @@ async function render(container, userSession) {
         <div style="display:flex; gap:10px; align-items:center;">
           <a href="${IB_SHARED_DRIVE_URL}" target="_blank" rel="noopener noreferrer" 
              style="display:inline-flex; align-items:center; gap:8px; background:#0A192F; color:#FFF; text-decoration:none; padding:10px 16px; border-radius:6px; font-weight:700; font-size:0.85rem; box-shadow:0 2px 4px rgba(0,0,0,0.1); transition:all 0.2s ease;">
-            <span>📂</span> Abrir Unidad Compartida en Drive
+            Abrir Unidad Compartida en Drive ↗
           </a>
         </div>
       </div>
@@ -99,7 +99,7 @@ async function render(container, userSession) {
         <div style="background:#0A192F; color:#FFFFFF; padding:16px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:3px solid var(--gold-color, #C1B27E); flex-wrap:wrap; gap:8px;">
           <div>
             <h3 style="margin:0; font-size:1.1rem; font-family:Kefa, Georgia, serif; color:#FFFFFF; display:flex; align-items:center; gap:8px;">
-              <span>🤖</span> Asistente Pedagógico IB (Google Cloud AI)
+              Asistente Pedagógico IB (Google Cloud AI)
             </h3>
             <p style="margin:3px 0 0 0; font-size:0.78rem; color:#CBD5E1;">
               Consultas metodológicas, criterios de evaluación y planificación fundamentadas en el acervo de guías oficiales.
@@ -113,12 +113,12 @@ async function render(container, userSession) {
         <!-- CHIPS DE CONSULTAS RÁPIDAS -->
         <div style="padding:14px 20px; background:#F8FAFC; border-bottom:1px solid #E2E8F0;">
           <span style="display:block; font-size:0.75rem; font-weight:700; color:#64748B; margin-bottom:8px; text-transform:uppercase;">
-            💡 Consultas rápidas sugeridas (Syllabus Vigente):
+            Consultas sugeridas (Syllabus vigente):
           </span>
           <div style="display:flex; flex-wrap:wrap; gap:8px;" id="ib-quick-prompts">
             ${QUICK_PROMPTS.map((p, idx) => `
               <button class="ib-prompt-chip" data-idx="${idx}" style="background:#FFFFFF; border:1px solid #CBD5E1; color:#1E293B; font-size:0.78rem; font-weight:600; padding:6px 12px; border-radius:20px; cursor:pointer; transition:all 0.2s ease;">
-                💬 ${p.titulo}
+                ${p.titulo}
               </button>
             `).join('')}
           </div>
@@ -127,7 +127,7 @@ async function render(container, userSession) {
         <!-- ÁREA DE CONVERSACIÓN -->
         <div id="ib-chat-box" style="padding:20px; max-height:420px; min-height:180px; overflow-y:auto; background:#FFFFFF; display:flex; flex-direction:column; gap:16px;">
           <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-left:4px solid var(--primary-color, #26487F); padding:14px; border-radius:6px; font-size:0.88rem; color:#1E3A8A; line-height:1.5;">
-            👋 <strong>¡Hola, ${escapeHtml(user.nombre || 'colega educador')}!</strong> Soy el Asistente Pedagógico del <strong>Módulo IB del CIARM</strong>.<br>
+            <strong>Bienvenido(a), ${escapeHtml(user.nombre || 'colega educador')}.</strong> Soy el Asistente Pedagógico del <strong>Módulo IB del CIARM</strong>.<br>
             Tengo indexado el acervo curricular oficial del Bachillerato Internacional (ciencias 2025/2026, matemáticas, lengua, humanidades, artes y componentes del Core).<br>
             Puedes consultarme sobre ponderaciones, criterios de corrección, formatos de evaluación interna, TOK, CAS o Monografía.
           </div>
@@ -150,7 +150,7 @@ async function render(container, userSession) {
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
           <div>
             <h3 style="margin:0; font-size:1.2rem; font-family:Kefa, Georgia, serif; color:var(--primary-color, #26487F);">
-              📚 Repositorio de Recursos y Guías Oficiales
+              Repositorio de Recursos y Guías Oficiales
             </h3>
             <p style="margin:2px 0 0 0; font-size:0.8rem; color:#64748B;">
               Clasificación y facetas automáticas generadas por IA. Consulta, descarga y previsualiza en Google Drive.
@@ -168,7 +168,7 @@ async function render(container, userSession) {
           <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px;">
             <div>
               <label for="ib-search-input" style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:4px; text-transform:uppercase;">
-                🔍 Búsqueda en texto y etiquetas:
+                Búsqueda en texto y etiquetas:
               </label>
               <input type="text" id="ib-search-input" placeholder="Ej. Biología 2025, TOK, Criterio A..." 
                      style="width:100%; padding:9px 12px; border:1px solid #CBD5E1; border-radius:4px; font-size:0.85rem; box-sizing:border-box; background:#FFF;" />
@@ -176,7 +176,7 @@ async function render(container, userSession) {
 
             <div>
               <label for="ib-filter-tipo" style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:4px; text-transform:uppercase;">
-                📑 Tipo de Documento:
+                Tipo de Documento:
               </label>
               <select id="ib-filter-tipo" style="width:100%; padding:9px 12px; border:1px solid #CBD5E1; border-radius:4px; font-size:0.85rem; box-sizing:border-box; background:#FFF;">
                 <option value="ALL">Todas las Categorías</option>
@@ -186,17 +186,17 @@ async function render(container, userSession) {
 
             <div>
               <label style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:4px; text-transform:uppercase;">
-                🌐 Idioma Oficial:
+                Idioma Oficial:
               </label>
               <div style="display:flex; gap:6px;">
                 <button class="ib-lang-btn active" data-lang="ALL" style="flex:1; padding:8px 6px; font-size:0.78rem; font-weight:700; border-radius:4px; border:1px solid #CBD5E1; cursor:pointer; background:#0A192F; color:#FFF;">
                   Todos
                 </button>
                 <button class="ib-lang-btn" data-lang="ES" style="flex:1; padding:8px 6px; font-size:0.78rem; font-weight:700; border-radius:4px; border:1px solid #CBD5E1; cursor:pointer; background:#FFF; color:#475569;">
-                  🇪🇸 Español
+                  Español
                 </button>
                 <button class="ib-lang-btn" data-lang="EN" style="flex:1; padding:8px 6px; font-size:0.78rem; font-weight:700; border-radius:4px; border:1px solid #CBD5E1; cursor:pointer; background:#FFF; color:#475569;">
-                  🇬🇧 English
+                  English
                 </button>
               </div>
             </div>
@@ -205,7 +205,7 @@ async function render(container, userSession) {
           <!-- FILA 2: CHIPS DE GRUPOS / ASIGNATURAS -->
           <div>
             <span style="display:block; font-size:0.75rem; font-weight:700; color:#475569; margin-bottom:6px; text-transform:uppercase;">
-              🏷️ Filtrar por Grupo Curricular:
+              Filtrar por Grupo Curricular:
             </span>
             <div style="display:flex; flex-wrap:wrap; gap:6px;" id="ib-group-chips">
               <button class="ib-group-chip active" data-group="ALL" style="background:#0A192F; color:#FFF; border:1px solid #0A192F; padding:4px 10px; border-radius:14px; font-size:0.75rem; font-weight:600; cursor:pointer;">
@@ -222,7 +222,7 @@ async function render(container, userSession) {
           <!-- FILA 3: TAGS POPULARES GENERADOS POR IA -->
           <div>
             <span style="display:block; font-size:0.7rem; font-weight:700; color:#64748B; margin-bottom:4px; text-transform:uppercase;">
-              ✨ Etiquetas automáticas populares:
+              Etiquetas frecuentes:
             </span>
             <div style="display:flex; flex-wrap:wrap; gap:5px;" id="ib-tags-bar">
               ${facets.popularTags.map(tag => `
@@ -402,9 +402,9 @@ async function render(container, userSession) {
           appendMessage(chatBox, "assistant", "El asistente no devolvió contenido para esta consulta. Intenta reformular tu pregunta.", "Asistente IB CIARM");
         }
       } else if (res.status === 401) {
-        appendMessage(chatBox, "assistant", "⚠️ Tu sesión institucional ha expirado. Por favor, recarga la página para volver a iniciar sesión con tu cuenta de Google.", "Seguridad CIARM");
+        appendMessage(chatBox, "assistant", "Tu sesión institucional ha expirado. Por favor, recarga la página para volver a iniciar sesión con tu cuenta de Google.", "Seguridad CIARM");
       } else if (res.status === 403) {
-        appendMessage(chatBox, "assistant", "🚫 No tienes asignado el permiso de consulta al Módulo IB en DM05. Contacta a la Dirección o Coordinación IB.", "Control de Acceso");
+        appendMessage(chatBox, "assistant", "No tienes asignado el permiso de consulta al Módulo IB en DM05. Contacta a la Dirección o Coordinación IB.", "Control de Acceso");
       } else {
         appendMessage(chatBox, "assistant", "No fue posible conectar con el Asistente en este momento. Intenta nuevamente en unos instantes.", "Asistente IB CIARM");
       }
@@ -429,7 +429,7 @@ function renderCatalog(items) {
   if (items.length === 0) {
     grid.innerHTML = `
       <div style="grid-column:1/-1; text-align:center; padding:36px 20px; color:#64748B; background:#F8FAFC; border:1px dashed #CBD5E1; border-radius:8px;">
-        🔍 <strong>No se encontraron documentos con los filtros seleccionados.</strong><br>
+        <strong>No se encontraron documentos con los filtros seleccionados.</strong><br>
         <small style="color:#94A3B8;">Prueba buscando otra palabra clave o restableciendo el selector de grupo o idioma.</small>
       </div>
     `;
@@ -438,7 +438,7 @@ function renderCatalog(items) {
 
   grid.innerHTML = items.map(item => {
     const isEs = item.idioma === "ES";
-    const langBadge = isEs ? "🇪🇸 Español" : "🇬🇧 English";
+    const langBadge = isEs ? "Español" : "English";
     const langColor = isEs ? "#D97706" : "#2563EB";
     const langBg = isEs ? "#FEF3C7" : "#EFF6FF";
 
@@ -477,17 +477,17 @@ function renderCatalog(items) {
           <div style="display:flex; gap:8px;">
             <a href="${item.driveUrl}" target="_blank" rel="noopener noreferrer" 
                style="flex:1; text-align:center; background:#0A192F; color:#FFF; text-decoration:none; padding:8px 12px; border-radius:4px; font-size:0.78rem; font-weight:700; transition:background 0.2s ease;">
-              📂 Ver en Drive
+              Ver en Drive ↗
             </a>
             <button onclick="navigator.clipboard.writeText('${item.archivo.replace(/'/g, "\\'")}'); alert('Nombre copiado: ${item.archivo.replace(/'/g, "\\'")}');" 
                     title="Copiar nombre de archivo" 
-                    style="background:#F8FAFC; border:1px solid #CBD5E1; color:#475569; padding:8px 10px; border-radius:4px; cursor:pointer; font-size:0.78rem;">
-              📋
+                    style="background:#F8FAFC; border:1px solid #CBD5E1; color:#475569; padding:8px 12px; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:600;">
+              Copiar
             </button>
           </div>
           <button class="ib-ask-guide-btn" data-title="${escapeHtml(item.titulo)}" 
                   style="width:100%; background:#F1F5F9; border:1px solid #E2E8F0; color:var(--primary-color, #26487F); font-size:0.75rem; font-weight:700; padding:6px; border-radius:4px; cursor:pointer; transition:all 0.2s ease;">
-            💬 Preguntar al Asistente sobre esta guía
+            Consultar con el Asistente →
           </button>
         </div>
       </div>
@@ -522,12 +522,12 @@ function appendMessage(container, sender, text, author, citations = []) {
   if (!isUser && Array.isArray(citations) && citations.length > 0) {
     citationsHtml = `
       <div style="margin-top:12px; padding-top:10px; border-top:1px solid #CBD5E1; font-size:0.78rem;">
-        <span style="font-weight:700; color:#475569; display:block; margin-bottom:6px;">📚 Fuentes oficiales del IB citadas:</span>
+        <span style="font-weight:700; color:#475569; display:block; margin-bottom:6px;">Fuentes oficiales del IB citadas:</span>
         <div style="display:flex; flex-direction:column; gap:4px;">
           ${citations.map(c => `
             <a href="${c.driveUrl || IB_SHARED_DRIVE_URL}" target="_blank" rel="noopener noreferrer" 
                style="color:var(--primary-color, #26487F); text-decoration:none; font-weight:600; display:inline-flex; align-items:center; gap:4px;">
-              <span>📄</span> ${escapeHtml(c.titulo || 'Guía IB')} ${c.grupo ? `(${escapeHtml(c.grupo)})` : ''} <span>↗</span>
+              ${escapeHtml(c.titulo || 'Guía IB')} ${c.grupo ? `(${escapeHtml(c.grupo)})` : ''} <span>↗</span>
             </a>
           `).join('')}
         </div>
@@ -557,7 +557,7 @@ function appendThinking(container) {
   el.style.color = "#64748B";
   el.style.fontStyle = "italic";
   el.style.padding = "8px 0";
-  el.innerHTML = `🔍 Consultando acervo oficial del IB con Vertex AI & Gemini...`;
+  el.innerHTML = `Consultando acervo oficial del IB con Vertex AI & Gemini...`;
   container.appendChild(el);
   container.scrollTop = container.scrollHeight;
   return id;

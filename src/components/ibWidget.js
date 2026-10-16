@@ -355,6 +355,7 @@ async function render(container, userSession) {
   const sendBtn = document.getElementById("ib-chat-send-btn");
 
   const conversationID = `ib-session-${crypto.randomUUID()}`;
+  let launched = false;
   let busy = false;
 
   chatForm?.addEventListener("submit", async (e) => {
@@ -381,6 +382,7 @@ async function render(container, userSession) {
           message,
           module: 'ib',
           conversationID,
+          launch: !launched,
           history: conversationHistory.slice(-6)
         })
       });
@@ -389,7 +391,8 @@ async function render(container, userSession) {
 
       if (res.ok) {
         const data = await res.json();
-        const textResponse = data?.answer || data?.message;
+        launched = true;
+        const textResponse = data?.answer || (Array.isArray(data?.messages) ? data.messages.filter(t => typeof t === "string" && t.trim()).join("\n\n") : data?.message);
         if (textResponse) {
           appendMessage(chatBox, "assistant", textResponse, "Asistente IB CIARM", data.citations);
           // Registrar en memoria de conversación

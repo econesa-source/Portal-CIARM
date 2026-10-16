@@ -290,6 +290,7 @@ function ciarm_ib_call_gemini(string $message, array $config, array $snippets = 
     return [
         'ok' => true,
         'answer' => $answer,
+        'messages' => [$answer],
         'citations' => $citations,
         'engine' => 'google-vertex-gemini',
     ];
@@ -477,6 +478,7 @@ function ciarm_ib_curriculum_fallback(string $message): array {
     return [
         'ok' => true,
         'answer' => $answer,
+        'messages' => [$answer],
         'citations' => $citations,
         'engine' => 'google-vertex-gemini',
     ];

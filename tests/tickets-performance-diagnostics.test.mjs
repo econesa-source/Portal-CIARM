@@ -26,7 +26,8 @@ test('la medición usa sesión institucional y solo consulta acciones de lectura
   button.click();
   for(let i=0;i<100 && !root.textContent.includes('Apps Script ejecución');i++)
     await new Promise(resolve=>setImmediate(resolve));
-  assert.match(root.textContent,/Detalle de ticket/);
+  assert.match(root.textContent,/Detalle \(consulta\)/);
+  assert.match(root.textContent,/Detalle \(para editar\)/);
   assert.match(root.textContent,/Lectura/);
   assert.match(root.textContent,/Apps Script \(ms\)/);
   assert.match(root.textContent,/transporte\/inicio/);
@@ -34,7 +35,7 @@ test('la medición usa sesión institucional y solo consulta acciones de lectura
 
   assert.doesNotMatch(root.textContent,/Dato privado/);
   const actions=calls.slice(2).map(x=>new URL(x.url,'https://portal2.ciarm.edu.mx').searchParams.get('action'));
-  assert.deepEqual(actions,['context','list','catalogs','serviceContext','serviceListRaw','detail']);
+  assert.deepEqual(actions,['context','list','catalogs','serviceContext','serviceListRaw','detailPreview','detail']);
   assert.ok(calls.every(x=>x.method==='GET' && x.credentials==='same-origin'));
   assert.match(root.textContent,/Lectura directa automática activa/);
   dom.window.close();

@@ -13,7 +13,7 @@ function setup(id='TKT-2026-00001',canAdmin=true,postResult=()=>({ok:true,data:{
  globalThis.fetch=async(url,options)=>{
   calls.push({url,options});let body;let status=200;
   if(options.method==='POST'){body=await postResult(JSON.parse(options.body));status=body.ok?200:409;}
-  else{const action=new URL(url,'https://portal2.ciarm.edu.mx').searchParams.get('action');body={ok:true,data:action==='context'?{canAdmin,csrfToken:'csrf'}:action==='list'?[ticket]:action==='catalogs'?{responsables:['Daniel Lara'],prioridades:['ALTA','MEDIA']}:ticket};}
+  else{const action=new URL(url,'https://portal2.ciarm.edu.mx').searchParams.get('action');body={ok:true,data:action==='context'?{canAdmin,csrfToken:'csrf'}:action==='list'?[ticket]:action==='catalogs'?{responsables:['Daniel Lara'],prioridades:['ALTA','MEDIA']}:action==='detailPreview'?{...ticket,version:null,readOnly:true}:ticket};}
   return {ok:status===200,status,json:async()=>body};
  };
  const root=document.querySelector('main');
@@ -129,5 +129,24 @@ test('admin dashboard renders without waiting for assignment catalogs',async()=>
  s.root.querySelector('[data-id]').click();
  await s.flush();
  assert.equal(catalogCalls,1,'catalog loaded once when editing');
+ s.dom.window.close();
+});
+
+test('ver detalle usa Sheets de solo lectura y exige GAS antes de editar',async()=>{
+ const s=setup('TKT-2026-00020');
+ s.ticket.estado='ASIGNADO';s.ticket.responsable='Daniel Lara';
+ await render(s.root);
+ s.root.querySelector('[data-state="ASIGNADO"]').click();
+ s.root.querySelector('[data-mode="view"]').click();
+ await s.flush();
+ assert.ok(s.root.querySelector('#ticket-prepare-edit'));
+ assert.equal(s.root.querySelector('#ticket-assignment'),null);
+ assert.ok(s.calls.some(c=>String(c.url).includes('action=detailPreview')));
+ assert.equal(s.calls.some(c=>String(c.url).includes('action=detail&')),false);
+ s.root.querySelector('#ticket-prepare-edit').click();
+ await s.flush();
+ assert.ok(s.root.querySelector('#ticket-assignment'));
+ const urls=s.calls.map(c=>String(c.url));
+ assert.ok(urls.some(url=>url.includes('action=detail&')));
  s.dom.window.close();
 });

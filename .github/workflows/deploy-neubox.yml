@@ -208,6 +208,29 @@ jobs:
             ERRORS=1
           fi
 
+          CODE="$(curl -sS -L --connect-timeout 10 --max-time 30 \
+            -H 'Content-Type: application/json' \
+            -d '{"message":"smoke","conversationID":"ciarm-smoke","module":"ib"}' \
+            -o /tmp/ib-chat-session.json -w '%{http_code}' "$BASE/ib-chat.php?sha=$EXPECTED_SHA" || echo 000)"
+          echo "ib-chat.php without session HTTP=$CODE"
+          if [ "$CODE" = "401" ] && grep -F 'La sesión institucional no es válida' /tmp/ib-chat-session.json >/dev/null; then
+            echo "OK: endpoint nativo ib-chat.php existe y exige sesión institucional."
+          else
+            echo "ERROR: ib-chat.php no está protegiendo el endpoint con la sesión real."
+            ERRORS=1
+          fi
+
+          CODE="$(get "$BASE/src/components/ibWidget.js?sha=$EXPECTED_SHA" /tmp/ib-widget.js || echo 000)"
+          echo "ibWidget.js HTTP=$CODE"
+          if [ "$CODE" = "200" ] && \
+             grep -F '/ib-chat.php' /tmp/ib-widget.js >/dev/null && \
+             grep -F 'IB_CLASSIFIED_CATALOG' /tmp/ib-widget.js >/dev/null; then
+            echo "OK: Módulo IB usa endpoint nativo ib-chat.php y catálogo facetado por IA."
+          else
+            echo "ERROR: ibWidget.js no está publicado con el motor nativo de Google."
+            ERRORS=1
+          fi
+
           CODE="$(get "$BASE/ciarm-theme.css?sha=$EXPECTED_SHA" /tmp/theme.css || echo 000)"
           echo "ciarm-theme.css HTTP=$CODE"
           if [ "$CODE" = "200" ] && \

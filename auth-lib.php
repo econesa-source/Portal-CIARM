@@ -65,7 +65,7 @@ function ciarm_http_json(string $url, array $options = []): array {
     return ['status' => $status, 'body' => $decoded];
 }
 
-function ciarm_google_access_token(array $serviceAccount): string {
+function ciarm_google_access_token(array $serviceAccount, string $scope = 'https://www.googleapis.com/auth/spreadsheets.readonly'): string {
     $now = time();
 
     $header = ciarm_base64url((string)json_encode([
@@ -75,7 +75,7 @@ function ciarm_google_access_token(array $serviceAccount): string {
 
     $claims = ciarm_base64url((string)json_encode([
         'iss' => $serviceAccount['client_email'] ?? '',
-        'scope' => 'https://www.googleapis.com/auth/spreadsheets.readonly',
+        'scope' => $scope,
         'aud' => 'https://oauth2.googleapis.com/token',
         'iat' => $now,
         'exp' => $now + 3600,

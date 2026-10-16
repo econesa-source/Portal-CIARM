@@ -75,6 +75,39 @@ test('Formulario: tres tipos, centro DM04, unidad, sin preseleccionar alternativ
   assert.equal(form.querySelectorAll('#compras-lineas > .compras-line').length,2);
  }finally{env.cleanup();}
 });
+
+test('Crear solicitud informa el envío, evita duplicaciones y abre Mis pedidos con confirmación',async()=>{
+ const solicitud={...own,'ID Solicitud':'SOL-000004','ID OC':'',Estado:'Enviada a Compras','Estado compra visible':'Pendiente de cotización'};
+ const env=setup({
+  contextoSolicitud:{tipos:['Compra - necesito cotización'],
+   areas:[{codigo:'CC-05',etiqueta:'Bachillerato'}],unidades:['unidad'],
+   email:'persona@ciarm.edu.mx',areaSugerida:'CC-05',adjuntosArchivo:true},
+  crearSolicitud:{idSolicitud:'SOL-000004',ok:true},
+  misPedidos:[solicitud]
+ });
+ try{
+  await render(env.root,session([card,'COMPRAS_CREAR','COMPRAS_MIS']));
+  const form=env.root.querySelector('#compras-crear');
+  form.elements.tipoSolicitud.value='Compra - necesito cotización';
+  form.elements.fechaGeneral.value='2026-10-16';
+  form.elements.areaContexto.value='Bachillerato';
+  form.querySelector('[name=descripcion]').value='Pantalla interactiva';
+  form.querySelector('[name=unidad]').value='unidad';
+  const button=form.querySelector('button[type=submit]');
+  form.dispatchEvent(new env.dom.window.Event('submit',{bubbles:true,cancelable:true}));
+  assert.equal(button.disabled,true);
+  assert.match(button.textContent,/Enviando/);
+  assert.match(env.root.textContent,/Enviando solicitud y adjunto/);
+  form.dispatchEvent(new env.dom.window.Event('submit',{bubbles:true,cancelable:true}));
+  for(let i=0;i<5;i++)await settle();
+  assert.equal(env.calls.filter(x=>x.action==='crearSolicitud').length,1);
+  assert.equal(env.root.querySelector('#compras-crear'),null,'formulario desaparece tras respuesta positiva');
+  assert.equal(env.root.querySelector('[data-tab=mis]').getAttribute('aria-selected'),'true');
+  assert.match(env.root.textContent,/Solicitud SOL-000004 registrada correctamente/);
+  assert.match(env.root.textContent,/Podés consultar su estado en Mis pedidos/);
+ }finally{env.cleanup();}
+});
+
 test('Mis pedidos: cancelación sólo para solicitante original y rol explícito',async()=>{
  const env=setup({misPedidos:[own,other],cancelarRemanente:{ok:true}});
  try{

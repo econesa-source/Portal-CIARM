@@ -28,7 +28,7 @@ function line(units){
  '<label>Unidad<select name="unidad" required><option value="">Seleccionar</option>'+selectOptions(units)+'</select></label></div>'+ 
  '<label class="compras-importe" hidden>Importe efectivamente pagado (MXN)<input type="number" name="importeDeclarado" step="0.01" min="0.01"></label></div>';
 }
-function renderCrear(p,ctx){
+function renderCrear(p,ctx,onCreated){
  p.innerHTML='<h3>Solicitar compra</h3><p>Compras se encarga de cotizar y clasificar cada renglón. No necesitás conocer cuentas ni partidas.</p>'+
  '<form id="compras-crear"><div class="compras-grid"><label>Tipo de solicitud<select name="tipoSolicitud" required><option value="">Seleccionar tipo</option>'+selectOptions(ctx.tipos)+'</select></label>'+
  '<label>Centro de costos<select name="centroCostos" required><option value="">Seleccionar</option>'+selectOptions(ctx.areas,ctx.areaSugerida)+'</select></label>'+
@@ -40,7 +40,7 @@ function renderCrear(p,ctx){
  (ctx.adjuntosArchivo===true?'':'<p>La carga de archivos requiere actualizar HT06.</p>')+
  '<label>O pegar un enlace de la cotización (opcional)<input name="adjuntosVinculos" type="url" placeholder="https://"></label>'+
  '<button type="submit">Enviar solicitud</button></form>';
- const form=p.querySelector('form'),container=p.querySelector('#compras-lineas');let clave=key();
+ const form=p.querySelector('form'),container=p.querySelector('#compras-lineas');let clave=key(),sending=false;
  const isReintegro=()=>form.elements.tipoSolicitud.value==='Reintegro de gasto';
  function syncAmounts(){[...container.querySelectorAll('.compras-importe')].forEach(label=>{label.hidden=!isReintegro();label.querySelector('input').required=isReintegro();});}
  form.elements.tipoSolicitud.addEventListener('change',syncAmounts);syncAmounts();
@@ -64,15 +64,21 @@ function renderCrear(p,ctx){
     !fields.adjuntoArchivo?.size&&!/^https:\/\//i.test(fields.adjuntosVinculos||'')){
    note(p,'Seleccioná el archivo de la cotización o comprobante.',true);return;
   }
-  const button=form.querySelector('[type=submit]');button.disabled=true;
+  if(sending)return;
+  sending=true;
+  const button=form.querySelector('[type=submit]');
+  const originalText=button.textContent;
+  button.disabled=true;button.textContent='Enviando…';
+  note(p,'Enviando solicitud y adjunto…');
   try{
    const attachment=await attachmentPayload(fields.adjuntoArchivo);
    if(attachment)payload.adjuntoArchivo=attachment;
    const result=await requestCompras('crearSolicitud',payload);
-   note(p,'Solicitud registrada'+(result?.idSolicitud?' · '+result.idSolicitud:''));clave=key();
-   form.reset();container.innerHTML=line(ctx.unidades);syncAmounts();
-  }catch(error){note(p,error?.code?errText(error):error.message,true);}
-  finally{button.disabled=false;}
+   if(!result?.idSolicitud)throw new Error('No se recibió un número de solicitud. Revisá Mis pedidos antes de intentar nuevamente.');
+   clave=key();
+   await onCreated(result.idSolicitud);
+  }catch(error){if(p.isConnected)note(p,error?.code?errText(error):error.message,true);}
+  finally{sending=false;button.disabled=false;button.textContent=originalText;}
  });
 }
 function renderMis(p,data,session,codes){
@@ -334,7 +340,18 @@ export async function render(container,session){
     data=extras.find(x=>x.name==='ordinarias')?.data||[];
    }else data=await requestCompras(tab.query,{},requestController.signal);
    if(requestController.signal.aborted)return;
-   if(tab.id==='crear')renderCrear(body,data);
+   if(tab.id==='crear')renderCrear(body,data,async idSolicitud=>{
+    const message='Solicitud '+idSolicitud+' registrada correctamente.';
+    const mis=tabs.find(t=>t.id==='mis');
+    if(mis){
+     await choose(mis);
+     note(body,message+' Podés consultar su estado en Mis pedidos.');
+    }else{
+     body.innerHTML='<h3>Solicitud registrada</h3><p>El pedido quedó guardado y no necesitás volver a enviarlo.</p>';
+     note(body,message);
+    }
+    body.scrollIntoView?.({block:'start',behavior:'smooth'});
+   });
    if(tab.id==='mis')renderMis(body,data,session,roles);
    if(tab.id==='elegir')renderAlternativas(body,data);
    if(tab.id==='aprobar'){

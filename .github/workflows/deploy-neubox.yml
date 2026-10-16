@@ -115,14 +115,19 @@ jobs:
             ERRORS=1
           fi
 
+          EXPECTED_VERSION="$(sed -nE "s/^const APP_VERSION = '([0-9]+\.[0-9]+\.[0-9]+)';$/\1/p" src/main.js)"
+          if [ -z "$EXPECTED_VERSION" ] || ! grep -F "src/main.js?v=$EXPECTED_VERSION" index.html >/dev/null; then
+            echo "ERROR: el router y el HTML de origen no coinciden en versión."
+            exit 1
+          fi
           CODE="$(get "$BASE/?sha=$EXPECTED_SHA" /tmp/root.html || echo 000)"
           echo "root HTTP=$CODE"
           if [ "$CODE" = "200" ] && \
-             grep -F 'src/main.js?v=18.7.13' /tmp/root.html >/dev/null && \
+             grep -F "src/main.js?v=$EXPECTED_VERSION" /tmp/root.html >/dev/null && \
              grep -F 'assets/images/ciarm-logo-header-v2.png?v=18.1.0' /tmp/root.html >/dev/null; then
-            echo "OK: el sitio público usa el router CIARM v18.7.13 y referencia el logo CIARM."
+            echo "OK: el sitio público usa el router CIARM v$EXPECTED_VERSION y referencia el logo CIARM."
           else
-            echo "ERROR: el sitio público NO usa el router vigente v18.7.13."
+            echo "ERROR: el sitio público NO usa el router vigente v$EXPECTED_VERSION."
             ERRORS=1
           fi
 

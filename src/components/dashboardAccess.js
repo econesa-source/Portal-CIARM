@@ -1,7 +1,6 @@
 import { comprasUiEnabled } from '../services/comprasClient.js';
 import { resolvePortalPermissions, canSeeCard, canSeeAction } from '../services/portalPermissions.js';
 
-const CARD_ORDER = ['solicitudes','biblioteca','normativa','comunicados','administracion','ib'];
 const PENDING_BUTTON = {
   biblioteca: 'acceder', normativa: 'consultar', comunicados: 'ver',
   administracion: 'acceder', ib: 'acceder'
@@ -20,9 +19,8 @@ export function applyDashboardAccess(container, response) {
   }
 
   const cards = [...container.querySelectorAll('.dashboard-grid-exact > .exact-card')];
-  if (cards.length !== CARD_ORDER.length) throw new Error('Cambió la estructura de tarjetas: revisar códigos DM05.');
-  cards.forEach((element, index) => {
-    const card = CARD_ORDER[index];
+  cards.forEach(element => {
+    const card = element.dataset.card;
     if (!canSeeCard(permissions, card)) { element.remove(); return; }
     if (card === 'solicitudes') {
       if (!canSeeAction(permissions, card, 'crear')) {
@@ -48,6 +46,7 @@ export function applyDashboardAccess(container, response) {
     const card = document.createElement('div');
     card.className = 'exact-card';
     card.dataset.module = 'compras';
+    card.dataset.card = 'compras';
     card.innerHTML = '<span class="exact-card-category">SCGRC</span><h3 class="exact-card-title">Compras</h3><p class="exact-card-desc">Solicita compras, elige cotizaciones y consulta sus avances.</p><a href="#compras" class="exact-btn gold">Gestionar compras</a>';
     container.querySelector('.dashboard-grid-exact')?.append(card);
   }
@@ -70,4 +69,12 @@ export function allowedRoute(hash, response) {
     return canSeeAction(permissions, 'ib', 'acceder');
   }
   return true; // el resto de rutas conserva validaciones específicas del backend
+}
+
+export function syncIbNavigation(root, response) {
+  const visible = Boolean(response) && allowedRoute('#ib', response);
+  root.querySelectorAll('a[href="#ib"]').forEach(link => {
+    link.hidden = !visible;
+    link.style.display = visible ? '' : 'none';
+  });
 }

@@ -23,10 +23,6 @@ if (!$user) {
     ciarm_json_response(401, ['error' => 'La sesión institucional no es válida.']);
 }
 
-if (ciarm_rbac_enforced() && !ciarm_rbac_has_function($user, 'ASISTENTE_CONSULTAR')) {
-    ciarm_json_response(403, ['error' => 'Esta función no está habilitada para tu perfil.']);
-}
-
 $tokenRaw = @file_get_contents(ciarm_private_path('voiceflow-access-token.txt'));
 $token = $tokenRaw === false ? '' : trim($tokenRaw);
 if ($token === '') {
@@ -37,6 +33,19 @@ $raw = (string)file_get_contents('php://input');
 $request = json_decode($raw, true);
 if (!is_array($request)) {
     ciarm_json_response(400, ['error' => 'La solicitud no pudo procesarse.']);
+}
+
+$module = (string)($request['module'] ?? 'asistente');
+if (!in_array($module, ['ib', 'asistente'], true)) {
+    ciarm_json_response(400, ['error' => 'Módulo no válido.']);
+}
+$requiredCodes = $module === 'ib' ? ['IB_TARJETA', 'IB_ACCEDER'] : ['ASISTENTE_TARJETA', 'ASISTENTE_CONSULTAR'];
+if (ciarm_rbac_enforced()) {
+    foreach ($requiredCodes as $code) {
+        if (!ciarm_rbac_has_function($user, $code)) {
+            ciarm_json_response(403, ['error' => 'Esta función no está habilitada para tu perfil.']);
+        }
+    }
 }
 
 $message = trim((string)($request['message'] ?? ''));

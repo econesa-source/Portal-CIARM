@@ -7,7 +7,7 @@ import { comprasUiEnabled, clearComprasClient } from './services/comprasClient.j
 import { getAuthenticatedUser, logout } from './services/authService.js';
 import { renderLoginWidget } from './components/loginWidget.js';
 import { getPortalPermissions, clearPortalPermissionsCache } from './services/portalPermissionsClient.js';
-import { applyDashboardAccess, allowedRoute } from './components/dashboardAccess.js';
+import { applyDashboardAccess, allowedRoute, syncIbNavigation } from './components/dashboardAccess.js';
 
 const APP_VERSION = '18.7.13';
 
@@ -109,13 +109,14 @@ async function router() {
   setupSidebarControls();
 
   // GUARDIA DE SESIÓN REAL: la cookie HttpOnly del servidor es la fuente de verdad.
-  const user = await getAuthenticatedUser();
+  const user = await getAuthenticatedUser(true);
   if (navigationId !== latestNavigation) return;
 
   if (!user) {
     clearPortalPermissionsCache();
     clearComprasClient();
     syncComprasNavigation(null);
+    syncIbNavigation(document, null);
     if (sidebar) sidebar.style.display = 'none';
     if (sidebarToggle) sidebarToggle.style.display = 'none';
     setSidebarOpen(false);
@@ -187,6 +188,7 @@ async function router() {
       window.__CIARM_COMPRAS_UI_ENABLED__ = permissions?.comprasEnabled === true;
       window.__CIARM_COMPRAS_WRITES_ENABLED__ = permissions?.comprasWritesEnabled === true;
       syncComprasNavigation(permissions);
+      syncIbNavigation(document, permissions);
       if ((hash === '#compras' && !comprasUiEnabled()) || !allowedRoute(hash, permissions)) {
         mainContainer.innerHTML = '<p role="alert">Esta función no está habilitada para tu perfil.</p>';
         return;

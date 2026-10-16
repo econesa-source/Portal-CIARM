@@ -331,7 +331,7 @@ export function render(container, userSession) {
       </section>
 
       <div class="dashboard-grid-exact">
-        <div class="exact-card">
+        <div class="exact-card" data-card="solicitudes">
           <div class="ticket-card-header">
             <span class="exact-card-category">SERVICIOS INTERNOS</span>
           </div>
@@ -343,35 +343,35 @@ export function render(container, userSession) {
           </div>
         </div>
 
-        <div class="exact-card">
+        <div class="exact-card" data-card="biblioteca">
           <span class="exact-card-category">BIBLIOTECA CIARM</span>
           <h3 class="exact-card-title">Libros y Papers</h3>
           <p class="exact-card-desc">Busca bibliografía académica, consulta fuentes y propón o inicia una investigación.</p>
           <span class="exact-btn light exact-btn-disabled" aria-disabled="true">Acceder a Biblioteca</span>
         </div>
 
-        <div class="exact-card">
+        <div class="exact-card" data-card="normativa">
           <span class="exact-card-category">SICPE · SISTEMA INTEGRAL DE CUMPLIMIENTO</span>
           <h3 class="exact-card-title">Normas y herramientas</h3>
           <p class="exact-card-desc">Consulta normativa aplicable, protocolos, formatos, hojas de registro y genera informes.</p>
           <span class="exact-btn light exact-btn-disabled" aria-disabled="true">Consultar Normativa</span>
         </div>
 
-        <div class="exact-card">
+        <div class="exact-card" data-card="comunicados">
           <span class="exact-card-category">COMUNICACIÓN INSTITUCIONAL</span>
           <h3 class="exact-card-title">Comunicados</h3>
           <p class="exact-card-desc">Consulta avisos, novedades y comunicaciones institucionales relevantes para tu función.</p>
           <span class="exact-btn light exact-btn-disabled" aria-disabled="true">Ver Comunicados</span>
         </div>
 
-        <div class="exact-card">
+        <div class="exact-card" data-card="administracion">
           <span class="exact-card-category">SCGRC · SISTEMA DE CONTROL DE GESTIÓN</span>
           <h3 class="exact-card-title">Administración</h3>
           <p class="exact-card-desc">Órdenes de compra, reportes y herramientas administrativas habilitadas para tu perfil.</p>
           <span class="exact-btn light exact-btn-disabled" aria-disabled="true">Gestión Administrativa</span>
         </div>
 
-        <div class="exact-card">
+        <div class="exact-card" data-card="ib">
           <span class="exact-card-category">BACHILLERATO INTERNACIONAL</span>
           <h3 class="exact-card-title">IB</h3>
           <p class="exact-card-desc">Accede a documentación, programas, recursos y herramientas correspondientes a tu función.</p>

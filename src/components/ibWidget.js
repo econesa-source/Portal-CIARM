@@ -507,7 +507,7 @@ async function render(container, userSession) {
         <div id="ib-chat-box" style="padding:20px; max-height:360px; min-height:160px; overflow-y:auto; background:#FFFFFF; display:flex; flex-direction:column; gap:14px;">
           <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-left:4px solid var(--primary-color, #26487F); padding:14px; border-radius:6px; font-size:0.88rem; color:#1E3A8A; line-height:1.5;">
             👋 <strong>¡Hola, ${user.nombre || 'colega educador'}!</strong> Soy el Asistente Pedagógico del <strong>Módulo IB de CIARM</strong>.<br>
-            Tengo indexadas las guías oficiales del Programa del Diploma, informes de examinador y reglamentos. 
+            Puedes consultar el catálogo de recursos y enviar preguntas al asistente institucional.
             Puedes preguntarme sobre ponderaciones, criterios de corrección, formatos de evaluación interna, TOK o Monografía.
           </div>
         </div>
@@ -531,7 +531,7 @@ async function render(container, userSession) {
               📚 Catálogo de Guías y Recursos Curriculares
             </h3>
             <p style="margin:2px 0 0 0; font-size:0.8rem; color:#64748B;">
-              Búsqueda indexada sobre el repositorio institucional de 18,892 documentos (Google Drive).
+              Filtra los recursos destacados de este catálogo. Los enlaces abren una búsqueda en Google Drive.
             </p>
           </div>
           <span id="ib-counter-tag" style="background:#F1F5F9; color:#475569; font-size:0.8rem; padding:6px 12px; border-radius:20px; font-weight:700;">
@@ -643,10 +643,14 @@ async function render(container, userSession) {
   const chatInput = document.getElementById("ib-chat-input");
   const sendBtn = document.getElementById("ib-chat-send-btn");
 
+  const conversationID = `ib-${crypto.randomUUID()}`;
+  let launched = false;
+  let busy = false;
   chatForm?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const message = (chatInput?.value || "").trim();
-    if (!message) return;
+    if (!message || busy) return;
+    busy = true;
 
     // Agregar mensaje del usuario
     appendMessage(chatBox, "user", message, user.nombre);
@@ -664,7 +668,9 @@ async function render(container, userSession) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: `[Módulo IB CIARM - Consulta Curricular]: ${message}`,
-          conversationID: `ib-${(user.correo || 'anon').replace(/[^a-zA-Z0-9]/g, '')}-${Date.now().toString(36)}`
+          module: 'ib',
+          conversationID,
+          launch: !launched
         })
       });
 
@@ -672,19 +678,21 @@ async function render(container, userSession) {
 
       if (res.ok) {
         const data = await res.json();
+        launched = true;
         const textResponse = extractVoiceflowText(data);
         if (textResponse) {
           appendMessage(chatBox, "assistant", textResponse, "Asistente IB CIARM");
         } else {
-          appendLocalPedagogicalResponse(chatBox, message);
+          appendMessage(chatBox, "assistant", "El servicio no devolvió una respuesta. Intenta nuevamente.", "Asistente IB CIARM");
         }
       } else {
-        appendLocalPedagogicalResponse(chatBox, message);
+        appendMessage(chatBox, "assistant", "No fue posible consultar el servicio. Verifica tu sesión y permisos e intenta nuevamente.", "Asistente IB CIARM");
       }
     } catch (err) {
       removeThinking(thinkingId);
-      appendLocalPedagogicalResponse(chatBox, message);
+      appendMessage(chatBox, "assistant", "No fue posible conectar con el servicio. Intenta nuevamente.", "Asistente IB CIARM");
     } finally {
+      busy = false;
       sendBtn.disabled = false;
       sendBtn.style.opacity = "1";
     }
@@ -788,59 +796,8 @@ function removeThinking(id) {
   if (el) el.remove();
 }
 
-function appendLocalPedagogicalResponse(chatBox, message) {
-  const m = message.toLowerCase();
-  let answer = "";
-
-  if (m.includes("evaluacion interna") || m.includes("ciencias") || m.includes("biologia") || m.includes("quimica") || m.includes("fisica")) {
-    answer = `📌 **Evaluación Interna de Ciencias (Syllabus 2025/2026):**
-La investigación individual representa el 20% de la calificación final (ponderada sobre 24 puntos). 
-Los criterios unificados para Biología, Química y Física son:
-1. **Conclusión (Criterio 1):** Validez, interpretación científica y comparación con literatura establecida.
-2. **Evaluación (Criterio 2):** Fortalezas, limitaciones metodológicas y mejoras realistas sugeridas.
-3. **Comunicación:** Estructura clara y formato académico conciso (máximo 3,000 palabras o 12 páginas).
-*(Consulta el documento completo en la carpeta: 'IB SUBJECT GUIDES/Group 4 - Sciences')*`;
-  } else if (m.includes("tok") || m.includes("teoria del conocimiento") || m.includes("ensayo")) {
-    answer = `📌 **Componente de Evaluación de TOK (Teoría del Conocimiento):**
-El curso se evalúa mediante dos componentes:
-• **Exposición de TOK (33%):** Evaluación interna moderada, enfocada en 3 objetos reales respondiendo a una pregunta prescrita.
-• **Ensayo de TOK (67%):** Evaluación externa sobre uno de los 6 títulos prescritos (máximo 1,600 palabras).
-Criterio central: Capacidad de conectar las Áreas de Conocimiento con el marco conceptual, utilizando argumentos y contraargumentos basados en ejemplos concretos.`;
-  } else if (m.includes("cas") || m.includes("creatividad")) {
-    answer = `📌 **Requisitos y Etapas de CAS:**
-CAS no se califica con puntos pero es requisito obligatorio para la obtención del Diploma:
-• **Las 5 etapas:** Investigación, Preparación, Acción, Reflexión y Demostración.
-• **Los 7 resultados de aprendizaje:** Identificar fortalezas, afrontar desafíos, planificar experiencias, compromiso, trabajo colaborativo, compromiso global y ética.
-• Es indispensable completar un **Proyecto CAS** de al menos un mes con trabajo en equipo.`;
-  } else if (m.includes("monografia") || m.includes("extended essay")) {
-    answer = `📌 **Estructura de la Monografía (Extended Essay):**
-Investigación académica independiente de 4,000 palabras:
-• Criterio A: Enfoque y método (6 pts)
-• Criterio B: Conocimiento y comprensión (6 pts)
-• Criterio C: Pensamiento crítico (12 pts)
-• Criterio D: Presentación formal (4 pts)
-• Criterio E: Compromiso / Reflexión en el formulario RPPF (6 pts).`;
-  } else if (m.includes("inteligencia artificial") || m.includes("ia") || m.includes("artificial intelligence") || m.includes("chatgpt")) {
-    answer = `📌 **Postura Oficial del IB sobre Inteligencia Artificial:**
-El Bachillerato Internacional (IB) NO prohíbe el uso de IA generativa, pero establece directrices estrictas de probidad académica:
-1. **Herramienta de apoyo, no autor:** El trabajo evaluado debe ser enteramente creación del alumno. La IA no puede figurar como autor ni sustituir el pensamiento crítico del estudiante.
-2. **Declaración y Transparencia Obligatoria:** Todo uso de herramientas como ChatGPT debe ser transparentado explícitamente en el trabajo, indicando la herramienta, la fecha y el prompt utilizado en un apéndice o cita formal.
-3. **Falta de Conducta:** Presentar texto o ideas generadas por IA sin atribuir como trabajo propio se clasifica directamente como plagio y falta de probidad académica sujeta a anulación de calificación.`;
-  } else if (m.includes("matematicas") || m.includes("aa") || m.includes("ai") || m.includes("analisis") || m.includes("aplicaciones")) {
-    answer = `📌 **Diferencias entre Matemáticas AA y Matemáticas AI:**
-• **Análisis y Enfoques (AA):** Énfasis en rigor algebraico clásico, demostraciones formales, cálculo infinitesimal continuo y análisis teórico de funciones. Recomendado para ingenierías, física, matemáticas puras y ciencias exactas.
-• **Aplicaciones e Interpretación (AI):** Énfasis en modelización matemática mediante tecnología y cálculo numérico, estadística avanzada descriptiva e inferencial y sistemas discretos. Recomendado para ciencias sociales, economía, negocios, diseño y medicina.
-Ambas ramas se ofrecen en Nivel Medio (NM) y Nivel Superior (NS) y comparten el componente de Exploración Matemática (20% de evaluación interna).`;
-  } else {
-    answer = `📌 **Consulta Curricular Registrada:**
-He recibido tu consulta sobre: "${message}".
-Para profundizar en las normativas específicas y rúbricas completas de este tema, puedes consultar el **Catálogo de Guías** ubicado en la sección inferior de este módulo o abrir la carpeta en la **Unidad Compartida de Google Drive** con los 18,892 documentos indexados.`;
-  }
-
-  appendMessage(chatBox, "assistant", answer, "Asistente IB CIARM");
-}
-
 function extractVoiceflowText(data) {
+  if (Array.isArray(data?.messages)) return data.messages.filter(t => typeof t === "string" && t.trim()).join("\n\n");
   if (Array.isArray(data)) {
     const texts = data.filter(d => d.type === 'text' && d.payload?.message).map(d => d.payload.message);
     if (texts.length > 0) return texts.join("\n\n");
@@ -854,5 +811,5 @@ function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-export { render, renderIbWidget };
+export { render, render as renderIbWidget };
 export default render;

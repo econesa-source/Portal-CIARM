@@ -167,7 +167,7 @@ function ciarm_tickets_direct_catalogs(array $catalogs,array $people,array $conf
  */
 function ciarm_tickets_direct_eligible(string $method,string $action): bool {
  return $method==='GET'
-   && in_array($action,['list','catalogs'],true)
+   && in_array($action,['list','catalogs','serviceContext'],true)
    && getenv('CIARM_TICKETS_DIRECT_READ')!=='0';
 }
 

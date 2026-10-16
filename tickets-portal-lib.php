@@ -91,3 +91,54 @@ function ciarm_portal_bridge(array $user,string $action,array $payload,bool $per
     $response=ciarm_http_json(CIARM_TICKETS_WEBAPP,['post'=>true,'headers'=>['Accept: application/json','Content-Type: application/json'],'body'=>json_encode($signed,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),'timeout'=>in_array($action,['uploadAttachment','finalizeCreate'],true)?60:25]);
     if($response['status']!==200||!is_bool($response['body']['ok']??null))throw new RuntimeException('UPSTREAM');return $response['body'];
 }
+
+function ciarm_upload_evidence_to_drive(array $file, array $user): array {
+    $raw=@file_get_contents(ciarm_private_path('service-account.json'));
+    if($raw===false)throw new RuntimeException('CONFIGURATION');
+    $account=json_decode($raw,true,512,JSON_THROW_ON_ERROR);
+    if(!is_array($account))throw new RuntimeException('CONFIGURATION');
+    $token=ciarm_google_access_token($account,'https://www.googleapis.com/auth/drive');
+    $path=(string)($file['tmp_name']??'');
+    if(!is_uploaded_file($path))throw new RuntimeException('VALIDATION');
+    $originalName=basename((string)($file['name']??'evidencia.jpg'));
+    $cleanName=preg_replace('/[^\w.-]/','_',$originalName);
+    if(strlen($cleanName)>100)$cleanName=substr($cleanName,-100);
+    $fileName='evidencia_'.date('Ymd_His').'_'.$cleanName;
+    $finfo=new finfo(FILEINFO_MIME_TYPE);
+    $mime=$finfo->file($path)?:'application/octet-stream';
+    $fileBytes=file_get_contents($path);
+    if($fileBytes===false)throw new RuntimeException('VALIDATION');
+    $folderId='103wSYfCuSwVKW_aTbTFr2O7b-JyuT619';
+    $metadata=['name'=>$fileName,'parents'=>[$folderId],'description'=>'Evidencia subida por '.($user['correo']??'colaborador')];
+    $boundary='-------314159265358979323846';
+    $delimiter="\r\n--".$boundary."\r\n";
+    $closeDelim="\r\n--".$boundary."--";
+    $multipartBody=$delimiter."Content-Type: application/json; charset=UTF-8\r\n\r\n".json_encode($metadata).$delimiter."Content-Type: ".$mime."\r\nContent-Transfer-Encoding: base64\r\n\r\n".chunk_split(base64_encode($fileBytes)).$closeDelim;
+    $uploadRes=ciarm_http_json('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink',[
+        'post'=>true,
+        'headers'=>['Authorization: Bearer '.$token,'Content-Type: multipart/related; boundary='.$boundary,'Content-Length: '.strlen($multipartBody)],
+        'body'=>$multipartBody,
+        'timeout'=>45
+    ]);
+    if($uploadRes['status']<200||$uploadRes['status']>=300||empty($uploadRes['body']['id'])){
+        $metadataNoParent=['name'=>$fileName,'description'=>'Evidencia subida por '.($user['correo']??'colaborador')];
+        $multipartBodyNoParent=$delimiter."Content-Type: application/json; charset=UTF-8\r\n\r\n".json_encode($metadataNoParent).$delimiter."Content-Type: ".$mime."\r\nContent-Transfer-Encoding: base64\r\n\r\n".chunk_split(base64_encode($fileBytes)).$closeDelim;
+        $uploadRes=ciarm_http_json('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink',[
+            'post'=>true,
+            'headers'=>['Authorization: Bearer '.$token,'Content-Type: multipart/related; boundary='.$boundary,'Content-Length: '.strlen($multipartBodyNoParent)],
+            'body'=>$multipartBodyNoParent,
+            'timeout'=>45
+        ]);
+        if($uploadRes['status']<200||$uploadRes['status']>=300||empty($uploadRes['body']['id']))throw new RuntimeException('UPSTREAM');
+    }
+    $fileId=(string)$uploadRes['body']['id'];
+    @ciarm_http_json('https://www.googleapis.com/drive/v3/files/'.$fileId.'/permissions',[
+        'post'=>true,
+        'headers'=>['Authorization: Bearer '.$token,'Content-Type: application/json'],
+        'body'=>json_encode(['role'=>'reader','type'=>'anyone']),
+        'timeout'=>10
+    ]);
+    $url=$uploadRes['body']['webViewLink']??('https://drive.google.com/file/d/'.$fileId.'/view');
+    return ['url'=>$url,'name'=>$fileName,'id'=>$fileId];
+}
+

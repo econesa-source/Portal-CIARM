@@ -53,11 +53,11 @@ try {
    if((int)($_SERVER['CONTENT_LENGTH']??0)>16*1024*1024)throw new RuntimeException('PAYLOAD_SIZE');$input=$_POST;
   } else throw new RuntimeException('CONTENT_TYPE');
   $action=$input['action']??'';
-  if(!is_string($action)||!in_array($action,['assign','beginCreate','uploadAttachment','finalizeCreate','saveServicePolicy','serviceTransition'],true))throw new RuntimeException('VALIDATION');
-  if(($action==='uploadAttachment')!==($contentType==='multipart/form-data'))throw new RuntimeException('CONTENT_TYPE');
+  if(!is_string($action)||!in_array($action,['assign','beginCreate','uploadAttachment','uploadEvidence','finalizeCreate','saveServicePolicy','serviceTransition'],true))throw new RuntimeException('VALIDATION');
+  if(in_array($action,['uploadAttachment','uploadEvidence'],true)!==($contentType==='multipart/form-data'))throw new RuntimeException('CONTENT_TYPE');
   if(!ciarm_ticket_csrf_valid((string)($_SESSION['ciarm_ticket_csrf']??''),is_string($input['csrfToken']??null)?$input['csrfToken']:''))throw new RuntimeException('CSRF');
  }
- $selfService=in_array($action,['mine','creationStatus','beginCreate','uploadAttachment','finalizeCreate','serviceContext','serviceSettings','serviceList','serviceDetail','saveServicePolicy','serviceTransition'],true);
+ $selfService=in_array($action,['mine','creationStatus','beginCreate','uploadAttachment','uploadEvidence','finalizeCreate','serviceContext','serviceSettings','serviceList','serviceDetail','saveServicePolicy','serviceTransition'],true);
  // Métricas sólo cuando las solicita explícitamente un gestor autorizado.
  // Nunca reenvíe el indicador sin una firma HMAC del backend.
  $perfProbe=$method==='GET'&&($_GET['perf']??'')==='1'&&ciarm_ticket_current_permission($user);
@@ -67,11 +67,24 @@ try {
   if($action==='mine'&&!ciarm_rbac_has_function($user,'INT_MIS'))throw new RuntimeException('FORBIDDEN');
   if(in_array($action,['creationStatus','beginCreate','uploadAttachment','finalizeCreate'],true)
       &&!ciarm_rbac_has_function($user,'INT_CREAR'))throw new RuntimeException('FORBIDDEN');
+  if($action==='uploadEvidence'&&!ciarm_rbac_has_function($user,'TAREAS_GESTION')&&!ciarm_rbac_has_function($user,'INT_GESTION'))throw new RuntimeException('FORBIDDEN');
  }
  if($selfService){
   $stamp=microtime(true);
   ciarm_portal_current_collaborator($user);
   $ticketPerf['identity']=(microtime(true)-$stamp)*1000;
+  if($action==='uploadEvidence'){
+   if(array_keys($_FILES)!==['file']||!is_array($_FILES['file'])||!is_string($_FILES['file']['tmp_name']??null)||!is_uploaded_file($_FILES['file']['tmp_name']))throw new RuntimeException('VALIDATION');
+   $file=$_FILES['file'];
+   if(($file['error']??-1)!==UPLOAD_ERR_OK)throw new RuntimeException('VALIDATION');
+   $size=(int)($file['size']??0);
+   if($size<1||$size>10*1024*1024)throw new RuntimeException('PAYLOAD_SIZE');
+   $mime=(new finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);
+   $allowed=is_string($mime)&&(str_starts_with($mime,'image/')||$mime==='application/pdf');
+   if(!$allowed)throw new RuntimeException('CONTENT_TYPE');
+   $res=ciarm_upload_evidence_to_drive($file,$user);
+   ciarm_json_response(200,['ok'=>true,'data'=>$res]);
+  }
   if(in_array($action,['serviceSettings','saveServicePolicy'],true)||($action==='serviceList'&&($input['kind']??'')==='all')){
    $stamp=microtime(true);
    $allowed=ciarm_ticket_current_permission($user);

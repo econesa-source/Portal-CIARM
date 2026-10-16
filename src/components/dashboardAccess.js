@@ -33,6 +33,12 @@ export function applyDashboardAccess(container, response) {
       if (!canSeeAction(permissions, card, 'gestionar')) {
         element.querySelector('a[href="#admin-solicitudes"]')?.remove();
       }
+    } else if (card === 'tareas') {
+      const canManage = canSeeAction(permissions, 'tareas', 'gestionar') || canSeeAction(permissions, 'solicitudes', 'gestionar');
+      if (!canManage) {
+        element.querySelector('a[href="#mis-tareas"]')?.remove();
+        element.querySelector('a[href="#historial-tareas"]')?.remove();
+      }
     } else if (card === 'ib') {
       if (!canSeeAction(permissions, 'ib', 'acceder')) {
         element.querySelector('a[href="#ib"]')?.remove();
@@ -60,6 +66,9 @@ export function allowedRoute(hash, response) {
   if (hash === '#compras') return canSeeCard(permissions, 'compras') && ['crear','mis','area','todos','cancelar','firmar','prorroga','excepcion','elegir','recibir'].some(action => canSeeAction(permissions,'compras',action));
   if (hash === '#solicitudes') return canSeeAction(permissions, 'solicitudes', 'crear');
   if (hash === '#mis-solicitudes') return canSeeAction(permissions, 'solicitudes', 'mis');
+  if (hash === '#mis-tareas' || hash === '#historial-tareas') {
+    return canSeeAction(permissions, 'tareas', 'gestionar') || canSeeAction(permissions, 'solicitudes', 'gestionar');
+  }
   // Las pantallas administrativas solicitan GET tickets-api.php?action=context
   // y el servidor autoriza INT_GESTION desde DM05. No duplicar esta decisión.
   if (hash === '#admin-solicitudes' || hash === '#vision-gerencial') {

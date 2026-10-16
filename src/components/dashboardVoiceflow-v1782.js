@@ -331,7 +331,7 @@ export function render(container, userSession) {
       </section>
 
       <div class="dashboard-grid-exact">
-        <div class="exact-card">
+        <div class="exact-card" data-card="solicitudes">
           <div class="ticket-card-header">
             <span class="exact-card-category">SERVICIOS INTERNOS</span>
           </div>
@@ -340,6 +340,16 @@ export function render(container, userSession) {
           <div class="exact-card-btn-group">
             <a href="#solicitudes" class="exact-btn dark">+ Crear Solicitud</a>
             <a href="#mis-solicitudes" class="exact-btn gold">📋 Mis Solicitudes</a>
+          </div>
+        </div>
+
+        <div class="exact-card" data-card="tareas">
+          <span class="exact-card-category">SERVICIOS INTERNOS · OPERACIONES</span>
+          <h3 class="exact-card-title">Gestión de Tareas</h3>
+          <p class="exact-card-desc">Atiende y reporta tus tareas asignadas o consulta tu historial de desempeño y cumplimiento.</p>
+          <div class="exact-card-btn-group">
+            <a href="#mis-tareas" class="exact-btn dark">Gestionar tareas</a>
+            <a href="#historial-tareas" class="exact-btn gold">Historial de tareas</a>
           </div>
         </div>
 

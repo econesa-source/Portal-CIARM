@@ -14,6 +14,7 @@ const routes = {
   '#solicitudes': () => import(`./components/solicitudesWidget.js?v=${APP_VERSION}`),
   '#mis-solicitudes': () => import(`./components/misSolicitudesWidget.js?v=${APP_VERSION}`),
   '#mis-tareas': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
+  '#historial-tareas': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
   '#validar-solicitudes': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
   '#seguimiento-servicio': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
   '#config-servicio': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),

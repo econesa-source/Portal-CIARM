@@ -343,6 +343,16 @@ export function render(container, userSession) {
           </div>
         </div>
 
+        <div class="exact-card" data-card="tareas">
+          <span class="exact-card-category">SERVICIOS INTERNOS · OPERACIONES</span>
+          <h3 class="exact-card-title">Gestión de Tareas</h3>
+          <p class="exact-card-desc">Atiende y reporta tus tareas asignadas o consulta tu historial de desempeño y cumplimiento.</p>
+          <div class="exact-card-btn-group">
+            <a href="#mis-tareas" class="exact-btn dark">Gestionar tareas</a>
+            <a href="#historial-tareas" class="exact-btn gold">Historial de tareas</a>
+          </div>
+        </div>
+
         <div class="exact-card" data-card="biblioteca">
           <span class="exact-card-category">BIBLIOTECA CIARM</span>
           <h3 class="exact-card-title">Libros y Papers</h3>

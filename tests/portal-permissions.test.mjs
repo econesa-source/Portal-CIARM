@@ -52,3 +52,28 @@ test('Ruta de IB se protege en modo DM05 activo', () => {
   const responseWithIb = { verified: true, enforced: true, codes: ['IB_TARJETA', 'IB_ACCEDER'] };
   assert.equal(allowedRoute('#ib', responseWithIb), true);
 });
+
+test('Tarjeta de tareas y función gestionar en DM05', () => {
+  const p = new Set(['TAREAS_GESTION']);
+  assert.equal(canSeeCard(p, 'tareas'), false);
+  assert.equal(canSeeAction(p, 'tareas', 'gestionar'), false);
+  p.add('TAREAS_TARJETA');
+  assert.equal(canSeeCard(p, 'tareas'), true);
+  assert.equal(canSeeAction(p, 'tareas', 'gestionar'), true);
+});
+
+test('Rutas de tareas (#mis-tareas, #historial-tareas) se protegen en modo DM05 activo', () => {
+  const responseTareas = { verified: true, enforced: true, codes: ['TAREAS_TARJETA', 'TAREAS_GESTION'] };
+  assert.equal(allowedRoute('#mis-tareas', responseTareas), true);
+  assert.equal(allowedRoute('#historial-tareas', responseTareas), true);
+  assert.equal(allowedRoute('#solicitudes', responseTareas), false);
+
+  const responseAdmin = { verified: true, enforced: true, codes: ['INT_TARJETA', 'INT_GESTION'] };
+  assert.equal(allowedRoute('#mis-tareas', responseAdmin), true);
+  assert.equal(allowedRoute('#historial-tareas', responseAdmin), true);
+
+  const responseSinPermiso = { verified: true, enforced: true, codes: ['INT_TARJETA', 'INT_MIS'] };
+  assert.equal(allowedRoute('#mis-tareas', responseSinPermiso), false);
+  assert.equal(allowedRoute('#historial-tareas', responseSinPermiso), false);
+});
+

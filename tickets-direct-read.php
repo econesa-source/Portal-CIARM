@@ -216,3 +216,25 @@ function ciarm_tickets_parity_report(string $kind,array $legacy,array $direct): 
  $report['fields']=array_slice(array_keys($fields),0,18);
  return $report;
 }
+
+/**
+ * Read-only service context. The caller authenticates DM03 and validates
+ * DM05 permissions before invoking; this function does not authorize writes.
+ * The current policy remains defined exclusively by CONFIG SERVICIO.
+ */
+function ciarm_tickets_direct_service_context(array $configRows,bool $canAdmin): array {
+ $sheet=ciarm_tickets_table($configRows,['VERSION','REGLAS','ACTOR','FECHA','OPERACION','HASH']);
+ $enabled=false;
+ if($sheet['rows']){
+  $latest=end($sheet['rows']);
+  $raw=ciarm_tickets_value($latest,$sheet,'REGLAS');
+  if(!is_string($raw)||trim($raw)==='')throw new RuntimeException('SCHEMA');
+  $policy=json_decode($raw,true,512,JSON_THROW_ON_ERROR);
+  if(!is_array($policy)||!isset($policy['version'],$policy['responsibles'],$policy['levels'])
+     ||!is_array($policy['responsibles'])||!is_array($policy['levels'])){
+   throw new RuntimeException('SCHEMA');
+  }
+  $enabled=true;
+ }
+ return ['protocol'=>'tickets-service-v1','enabled'=>$enabled,'canAdmin'=>$canAdmin];
+}

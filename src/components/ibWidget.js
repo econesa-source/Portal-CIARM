@@ -39,19 +39,29 @@ const QUICK_PROMPTS = [
 
 let conversationHistory = [];
 
-function initVoiceflowWidget() {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+function getGlobalWindow() {
+  return typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' && globalThis.window ? globalThis.window : null);
+}
 
-  if (window.voiceflow?.chat?.load) {
+function getGlobalDocument() {
+  return typeof document !== 'undefined' ? document : (typeof globalThis !== 'undefined' && globalThis.document ? globalThis.document : null);
+}
+
+function initVoiceflowWidget() {
+  const win = getGlobalWindow();
+  const doc = getGlobalDocument();
+  if (!win || !doc) return;
+
+  if (win.voiceflow?.chat?.load) {
     try {
-      window.voiceflow.chat.load({
+      win.voiceflow.chat.load({
         verify: { projectID: '6acf91c97ce4a1c413c98483' },
         url: 'https://general-runtime.voiceflow.com',
         voice: {
           url: 'https://runtime-api.voiceflow.com'
         }
       });
-      window.voiceflow.chat.show?.();
+      win.voiceflow.chat.show?.();
     } catch (_) {}
     return;
   }
@@ -59,15 +69,15 @@ function initVoiceflowWidget() {
   (function(d, t) {
       var v = d.createElement(t), s = d.getElementsByTagName(t)[0];
       v.onload = function() {
-        if (window.voiceflow?.chat?.load) {
-          window.voiceflow.chat.load({
+        if (win.voiceflow?.chat?.load) {
+          win.voiceflow.chat.load({
             verify: { projectID: '6acf91c97ce4a1c413c98483' },
             url: 'https://general-runtime.voiceflow.com',
             voice: {
               url: 'https://runtime-api.voiceflow.com'
             }
           });
-          window.voiceflow.chat.show?.();
+          win.voiceflow.chat.show?.();
         }
       };
       v.src = 'https://cdn.voiceflow.com/widget-next/bundle.mjs';
@@ -77,10 +87,11 @@ function initVoiceflowWidget() {
       } else if (d.head) {
         d.head.appendChild(v);
       }
-  })(document, 'script');
+  })(doc, 'script');
 }
 
 async function render(container, userSession) {
+
 
   if (!container) return;
 
@@ -383,16 +394,19 @@ async function render(container, userSession) {
   // Inicializar widget de Voiceflow para el Módulo IB
   initVoiceflowWidget();
 
-  window.addEventListener('hashchange', () => {
-    if (window.location.hash !== '#ib') {
-      window.voiceflow?.chat?.hide?.();
-    }
-  }, { once: true });
+  const win = getGlobalWindow();
+  if (win?.addEventListener) {
+    win.addEventListener('hashchange', () => {
+      if (win.location?.hash !== '#ib') {
+        win.voiceflow?.chat?.hide?.();
+      }
+    }, { once: true });
+  }
 
   const btnOpenVf = document.getElementById("ib-open-voiceflow-btn");
   btnOpenVf?.addEventListener("click", () => {
-    if (window.voiceflow?.chat?.open) {
-      window.voiceflow.chat.open();
+    if (win?.voiceflow?.chat?.open) {
+      win.voiceflow.chat.open();
     } else {
       initVoiceflowWidget();
     }
@@ -409,8 +423,8 @@ async function render(container, userSession) {
           input.value = promptObj.prompt;
           input.focus();
         }
-        if (window.voiceflow?.chat?.open) {
-          window.voiceflow.chat.open();
+        if (win?.voiceflow?.chat?.open) {
+          win.voiceflow.chat.open();
         }
       }
     });
@@ -442,11 +456,12 @@ async function render(container, userSession) {
     const thinkingId = appendThinking(chatBox);
 
     try {
-      if (window.voiceflow?.chat?.open) {
-        window.voiceflow.chat.open();
+      if (win?.voiceflow?.chat?.open) {
+        win.voiceflow.chat.open();
       }
 
       // Consulta al proxy server-side /voiceflow.php
+
       const res = await fetch("/voiceflow.php", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

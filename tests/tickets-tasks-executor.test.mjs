@@ -72,3 +72,9 @@ test('tickets-api.php y tickets-portal-lib.php protegen subida de evidencia y re
   assert.match(lib, /function ciarm_upload_evidence_to_drive/);
   assert.match(lib, /103wSYfCuSwVKW_aTbTFr2O7b-JyuT619/);
 });
+
+test('Vista admin-solicitudes no incluye el vínculo Mis tareas en su barra de navegación', () => {
+  const content = readFileSync('src/components/adminSolicitudesWidget.js', 'utf8');
+  assert.doesNotMatch(content, /href="#mis-tareas"/);
+});
+

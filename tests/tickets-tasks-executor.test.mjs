@@ -78,3 +78,9 @@ test('Vista admin-solicitudes no incluye el vínculo Mis tareas en su barra de n
   assert.doesNotMatch(content, /href="#mis-tareas"/);
 });
 
+test('Vista mis-tareas e historial solo muestran Tareas Asignadas e Historial de Tareas', () => {
+  const content = readFileSync('src/components/ticketsServiceWidget.js', 'utf8');
+  assert.match(content, /isTaskView\?'<a href="#mis-tareas">Tareas asignadas<\/a><a href="#historial-tareas">Historial de tareas<\/a>'/);
+});
+
+

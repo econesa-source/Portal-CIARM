@@ -39,7 +39,49 @@ const QUICK_PROMPTS = [
 
 let conversationHistory = [];
 
+function initVoiceflowWidget() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+  if (window.voiceflow?.chat?.load) {
+    try {
+      window.voiceflow.chat.load({
+        verify: { projectID: '6acf91c97ce4a1c413c98483' },
+        url: 'https://general-runtime.voiceflow.com',
+        voice: {
+          url: 'https://runtime-api.voiceflow.com'
+        }
+      });
+      window.voiceflow.chat.show?.();
+    } catch (_) {}
+    return;
+  }
+
+  (function(d, t) {
+      var v = d.createElement(t), s = d.getElementsByTagName(t)[0];
+      v.onload = function() {
+        if (window.voiceflow?.chat?.load) {
+          window.voiceflow.chat.load({
+            verify: { projectID: '6acf91c97ce4a1c413c98483' },
+            url: 'https://general-runtime.voiceflow.com',
+            voice: {
+              url: 'https://runtime-api.voiceflow.com'
+            }
+          });
+          window.voiceflow.chat.show?.();
+        }
+      };
+      v.src = 'https://cdn.voiceflow.com/widget-next/bundle.mjs';
+      v.type = 'text/javascript';
+      if (s && s.parentNode) {
+        s.parentNode.insertBefore(v, s);
+      } else if (d.head) {
+        d.head.appendChild(v);
+      }
+  })(document, 'script');
+}
+
 async function render(container, userSession) {
+
   if (!container) return;
 
   const user = userSession || { nombre: "Docente CIARM", correo: "docente@ciarm.edu.mx" };
@@ -79,8 +121,8 @@ async function render(container, userSession) {
         </div>
         <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-left:4px solid var(--gold-color, #C1B27E); padding:12px; border-radius:6px;">
           <span style="font-size:0.75rem; font-weight:700; color:#64748B; text-transform:uppercase; display:block;">Motor de Asistencia IA</span>
-          <strong style="font-size:1.15rem; color:#0A192F;">Google Vertex & Gemini</strong>
-          <small style="display:block; color:#94A3B8; font-size:0.75rem;">Grounding en Documentos IB</small>
+          <strong style="font-size:1.15rem; color:#0A192F;">Voiceflow Web Chat</strong>
+          <small style="display:block; color:#94A3B8; font-size:0.75rem;">Proyecto: 6acf91c97ce4a1c413c98483</small>
         </div>
         <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-left:4px solid #10B981; padding:12px; border-radius:6px;">
           <span style="font-size:0.75rem; font-weight:700; color:#64748B; text-transform:uppercase; display:block;">Clasificador y Facetas</span>
@@ -94,20 +136,26 @@ async function render(container, userSession) {
         </div>
       </div>
 
-      <!-- SECCIÓN 1: ASISTENTE PEDAGÓGICO IB (CHAT NATIVO GOOGLE CLOUD) -->
+      <!-- SECCIÓN 1: ASISTENTE PEDAGÓGICO IB (VOICEFLOW) -->
       <section style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; margin-bottom:28px; box-shadow:0 2px 6px rgba(0,0,0,0.04); overflow:hidden;">
         <div style="background:#0A192F; color:#FFFFFF; padding:16px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:3px solid var(--gold-color, #C1B27E); flex-wrap:wrap; gap:8px;">
           <div>
             <h3 style="margin:0; font-size:1.1rem; font-family:Kefa, Georgia, serif; color:#FFFFFF; display:flex; align-items:center; gap:8px;">
-              Asistente Pedagógico IB (Google Cloud AI)
+              Asistente Pedagógico IB (Voiceflow)
             </h3>
             <p style="margin:3px 0 0 0; font-size:0.78rem; color:#CBD5E1;">
-              Consultas metodológicas, criterios de evaluación y planificación fundamentadas en el acervo de guías oficiales.
+              Consultas metodológicas, criterios de evaluación y planificación curricular mediante el widget oficial de Voiceflow.
             </p>
           </div>
-          <span style="background:rgba(193, 178, 126, 0.25); border:1px solid var(--gold-color, #C1B27E); color:#FFF; font-size:0.72rem; padding:4px 10px; border-radius:20px; font-weight:600;">
-            ● RAG & Grounding Oficial Activo
-          </span>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="background:rgba(193, 178, 126, 0.25); border:1px solid var(--gold-color, #C1B27E); color:#FFF; font-size:0.72rem; padding:4px 10px; border-radius:20px; font-weight:600;">
+              ● Voiceflow: 6acf91c97ce4a1c413c98483
+            </span>
+            <button type="button" id="ib-open-voiceflow-btn" 
+                    style="background:var(--gold-color, #C1B27E); color:#0A192F; border:none; padding:6px 14px; border-radius:20px; font-weight:700; font-size:0.75rem; cursor:pointer; transition:all 0.2s ease;">
+              Abrir Voiceflow ↗
+            </button>
+          </div>
         </div>
 
         <!-- CHIPS DE CONSULTAS RÁPIDAS -->
@@ -127,9 +175,8 @@ async function render(container, userSession) {
         <!-- ÁREA DE CONVERSACIÓN -->
         <div id="ib-chat-box" style="padding:20px; max-height:420px; min-height:180px; overflow-y:auto; background:#FFFFFF; display:flex; flex-direction:column; gap:16px;">
           <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-left:4px solid var(--primary-color, #26487F); padding:14px; border-radius:6px; font-size:0.88rem; color:#1E3A8A; line-height:1.5;">
-            <strong>Bienvenido(a), ${escapeHtml(user.nombre || 'colega educador')}.</strong> Soy el Asistente Pedagógico del <strong>Módulo IB del CIARM</strong>.<br>
-            Tengo indexado el acervo curricular oficial del Bachillerato Internacional (ciencias 2025/2026, matemáticas, lengua, humanidades, artes y componentes del Core).<br>
-            Puedes consultarme sobre ponderaciones, criterios de corrección, formatos de evaluación interna, TOK, CAS o Monografía.
+            <strong>Bienvenido(a), ${escapeHtml(user.nombre || 'colega educador')}.</strong> El Asistente Pedagógico del <strong>Módulo IB del CIARM</strong> está conectado con el widget oficial de <strong>Voiceflow</strong> (Proyecto: <code>6acf91c97ce4a1c413c98483</code>).<br>
+            Puedes interactuar aquí mismo o abrir el asistente interactivo de Voiceflow con el botón superior o desde el widget en la esquina inferior.
           </div>
         </div>
 
@@ -333,6 +380,24 @@ async function render(container, userSession) {
     });
   });
 
+  // Inicializar widget de Voiceflow para el Módulo IB
+  initVoiceflowWidget();
+
+  window.addEventListener('hashchange', () => {
+    if (window.location.hash !== '#ib') {
+      window.voiceflow?.chat?.hide?.();
+    }
+  }, { once: true });
+
+  const btnOpenVf = document.getElementById("ib-open-voiceflow-btn");
+  btnOpenVf?.addEventListener("click", () => {
+    if (window.voiceflow?.chat?.open) {
+      window.voiceflow.chat.open();
+    } else {
+      initVoiceflowWidget();
+    }
+  });
+
   // Chips de preguntas rápidas sugeridas
   document.querySelectorAll(".ib-prompt-chip").forEach(chip => {
     chip.addEventListener("click", () => {
@@ -344,11 +409,14 @@ async function render(container, userSession) {
           input.value = promptObj.prompt;
           input.focus();
         }
+        if (window.voiceflow?.chat?.open) {
+          window.voiceflow.chat.open();
+        }
       }
     });
   });
 
-  // Enviar mensaje al Asistente Google Cloud AI (ib-chat.php)
+  // Enviar mensaje al Asistente IB (Voiceflow)
   const chatForm = document.getElementById("ib-chat-form");
   const chatBox = document.getElementById("ib-chat-box");
   const chatInput = document.getElementById("ib-chat-input");
@@ -374,16 +442,19 @@ async function render(container, userSession) {
     const thinkingId = appendThinking(chatBox);
 
     try {
-      // Consulta al proxy server-side nativo Google ib-chat.php
-      const res = await fetch("/ib-chat.php", {
+      if (window.voiceflow?.chat?.open) {
+        window.voiceflow.chat.open();
+      }
+
+      // Consulta al proxy server-side /voiceflow.php
+      const res = await fetch("/voiceflow.php", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message,
           module: 'ib',
           conversationID,
-          launch: !launched,
-          history: conversationHistory.slice(-6)
+          launch: !launched
         })
       });
 
@@ -392,25 +463,24 @@ async function render(container, userSession) {
       if (res.ok) {
         const data = await res.json();
         launched = true;
-        const textResponse = data?.answer || (Array.isArray(data?.messages) ? data.messages.filter(t => typeof t === "string" && t.trim()).join("\n\n") : data?.message);
+        const textResponse = extractVoiceflowText(data);
         if (textResponse) {
-          appendMessage(chatBox, "assistant", textResponse, "Asistente IB CIARM", data.citations);
-          // Registrar en memoria de conversación
+          appendMessage(chatBox, "assistant", textResponse, "Asistente IB Voiceflow");
           conversationHistory.push({ role: "user", text: message });
           conversationHistory.push({ role: "model", text: textResponse });
         } else {
-          appendMessage(chatBox, "assistant", "El asistente no devolvió contenido para esta consulta. Intenta reformular tu pregunta.", "Asistente IB CIARM");
+          appendMessage(chatBox, "assistant", "El asistente Voiceflow está listo en el widget interactivo.", "Asistente IB Voiceflow");
         }
       } else if (res.status === 401) {
         appendMessage(chatBox, "assistant", "Tu sesión institucional ha expirado. Por favor, recarga la página para volver a iniciar sesión con tu cuenta de Google.", "Seguridad CIARM");
       } else if (res.status === 403) {
         appendMessage(chatBox, "assistant", "No tienes asignado el permiso de consulta al Módulo IB en DM05. Contacta a la Dirección o Coordinación IB.", "Control de Acceso");
       } else {
-        appendMessage(chatBox, "assistant", "No fue posible conectar con el Asistente en este momento. Intenta nuevamente en unos instantes.", "Asistente IB CIARM");
+        appendMessage(chatBox, "assistant", "No fue posible conectar con el Asistente en este momento. Intenta nuevamente desde el widget de Voiceflow.", "Asistente IB Voiceflow");
       }
     } catch (err) {
       removeThinking(thinkingId);
-      appendMessage(chatBox, "assistant", "Ocurrió un error al procesar la solicitud con el servicio de IA de Google. Verifica tu conexión e intenta nuevamente.", "Asistente IB CIARM");
+      appendMessage(chatBox, "assistant", "Ocurrió un error al procesar la solicitud con el servicio de Voiceflow. Verifica tu conexión e intenta nuevamente.", "Asistente IB Voiceflow");
     } finally {
       busy = false;
       sendBtn.disabled = false;
@@ -421,6 +491,7 @@ async function render(container, userSession) {
   // Render inicial del catálogo
   refreshCatalog();
 }
+
 
 function renderCatalog(items) {
   const grid = document.getElementById("ib-catalog-grid");
@@ -556,8 +627,7 @@ function appendThinking(container) {
   el.style.fontSize = "0.8rem";
   el.style.color = "#64748B";
   el.style.fontStyle = "italic";
-  el.style.padding = "8px 0";
-  el.innerHTML = `Consultando acervo oficial del IB con Vertex AI & Gemini...`;
+  el.innerHTML = `Consultando acervo curricular con Voiceflow…`;
   container.appendChild(el);
   container.scrollTop = container.scrollHeight;
   return id;
@@ -567,6 +637,19 @@ function removeThinking(id) {
   const el = document.getElementById(id);
   if (el) el.remove();
 }
+
+function extractVoiceflowText(data) {
+  if (data?.answer) return data.answer;
+  if (Array.isArray(data?.messages)) return data.messages.filter(t => typeof t === "string" && t.trim()).join("\n\n");
+  if (Array.isArray(data)) {
+    const texts = data.filter(d => d.type === 'text' && d.payload?.message).map(d => d.payload.message);
+    if (texts.length > 0) return texts.join("\n\n");
+  }
+  if (data?.text) return data.text;
+  if (data?.message) return data.message;
+  return null;
+}
+
 
 /**
  * Renderizador ligero y seguro de Markdown para respuestas pedagógicas

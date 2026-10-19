@@ -50,7 +50,6 @@ test('Módulo IB and Portal navigation use sober institutional glyphs and zero e
   assert.ok(ibWidget.includes('Módulo IB — Bachillerato Internacional'), 'Heading must be present without emoji');
   assert.ok(!ibWidget.includes('🎓'), 'No graduation cap emoji');
   assert.ok(!ibWidget.includes('🤖'), 'No robot emoji');
-  assert.ok(ibWidget.includes('Asistente Pedagógico IB (Voiceflow)'), 'Assistant heading must be clean');
+  assert.ok(ibWidget.includes('Asistente Pedagógico IB (Google Cloud AI)'), 'Assistant heading must be clean');
   assert.ok(ibWidget.includes('Ver en Drive ↗'), 'Drive button must use clean arrow');
 });
-

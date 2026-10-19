@@ -228,11 +228,11 @@ jobs:
           CODE="$(get "$BASE/src/components/ibWidget.js?sha=$EXPECTED_SHA" /tmp/ib-widget.js || echo 000)"
           echo "ibWidget.js HTTP=$CODE"
           if [ "$CODE" = "200" ] && \
-             grep -F '6acf91c97ce4a1c413c98483' /tmp/ib-widget.js >/dev/null && \
+             grep -F '/ib-chat.php' /tmp/ib-widget.js >/dev/null && \
              grep -F 'IB_CLASSIFIED_CATALOG' /tmp/ib-widget.js >/dev/null; then
-            echo "OK: Módulo IB usa widget Voiceflow y catálogo facetado por IA."
+            echo "OK: Módulo IB usa endpoint nativo ib-chat.php y catálogo facetado por IA."
           else
-            echo "ERROR: ibWidget.js no está publicado con el widget Voiceflow y catálogo IB."
+            echo "ERROR: ibWidget.js no está publicado con el motor nativo de Google."
             ERRORS=1
           fi
 

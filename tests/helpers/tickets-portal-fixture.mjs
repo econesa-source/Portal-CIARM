@@ -24,7 +24,7 @@ export function portalFixture(options={}) {
   sheets.set(name,s);return s;
  }
  sheet('TICKETS',[headers,...(options.rows||[[...row]])]);
- sheet('Catálogo de colaboradores',[[],[],[],['Correo Ciarm','Nombre','Apellido','Área','Status'],...(options.collaborators||[['persona@ciarm.edu.mx','Persona','Prueba','Administración','Activo'],['otra@ciarm.edu.mx','Otra','Persona','Dirección','Activo'],['d.lara@ciarm.edu.mx','Daniel','Lara','Administración','Activo'],['e.conesa@ciarm.edu.mx','Ezequiel','Conesa','Dirección','Activo']])]);
+ sheet('Catálogo de colaboradores',[[],[],[],['Correo Ciarm','Nombre','Apellido','Área','Status'],...(options.collaborators||[['persona@ciarm.edu.mx','Persona','Prueba','Administración','Activo'],['otra@ciarm.edu.mx','Otra','Persona','Dirección','Activo'],['d.lara@ciarm.edu.mx','Daniel','Lara','Administración','Activo'],['e.conesa@ciarm.edu.mx','Ezequiel','Conesa','Dirección','Activo'],['r.valencia@ciarm.edu.mx','Rodrigo','Valencia','Dirección','Activo']])]);
  sheet('CATALOGOS',[['ÁREAS','PRIORIDADES'],['Administración','ALTA'],['','MEDIA'],['','POR DEFINIR']]);
  sheet('RESPONSABLES',[['TIPOS','RESPONSABLE'],['TODAS','Daniel Lara']]);
  sheet('Permisos de usuario',[['Correo Ciarm','Status','Sistema de tickets'],['d.lara@ciarm.edu.mx','Activo','Administrador'],['e.conesa@ciarm.edu.mx','Activo','Administrador']]);

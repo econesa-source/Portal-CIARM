@@ -17,3 +17,40 @@ test('visible journal distinguishes lifecycle events through validation',()=>{co
 test('critical resolution requires separate containment evidence',()=>{const s=fixture();activate(s);s.sheets.get('CATALOGOS').rows.push(['','CRITICA']);const p=s.payload();p.changes.prioridad='CRITICA';s.call('assign',p);transition(s,'START');assert.equal(transition(s,'RESOLVE').code,'VALIDATION');assert.equal(transition(s,'CONTAIN').ok,true);assert.equal(transition(s,'RESOLVE').ok,true);});
 test('flow detail restores pending operation only to its original actor',()=>{const s=fixture();activate(s);assign(s);const d=s.call('serviceDetail',{id:s.row[0]}).data,p={operationId:crypto.randomUUID(),ticketId:s.row[0],expectedVersion:d.ticket.version,event:'START',comment:''};s.failOnce('beforeConfirmation');assert.equal(s.call('serviceTransition',p).ok,false);assert.equal(s.call('serviceDetail',{id:s.row[0]}).data.pendingOperation?.operationId,p.operationId);assert.equal(s.call('serviceDetail',{id:s.row[0]},'persona@ciarm.edu.mx').data.pendingOperation,undefined);});
 test('service listing reads tracking once rather than once per ticket',()=>{const rows=Array.from({length:100},(_,i)=>{const r=Array(24).fill('');r[0]=`TKT-2026-${i+1}`;r[5]='persona@ciarm.edu.mx';r[12]='NUEVO';return r;});const s=portalFixture({rows}),table=s.book.insertSheet('SEGUIMIENTO SERVICIO');table.appendRow(['FOLIO','SEGUIMIENTO']);const p=s.context.serviceDefaultPolicy();for(const row of rows)table.appendRow([row[0],JSON.stringify({policy:p,createdAt:'2026-10-07 10:00:00',cycles:[],waits:[],email:'d.lara@ciarm.edu.mx'})]);let reads=0;const get=table.getDataRange;table.getDataRange=()=>{reads++;return get();};assert.equal(s.call('serviceList',{kind:'all'}).data.length,100);assert.ok(reads<=2,`tracking reads ${reads}`);});
+test('executor name fallback grants roles.executor when meta.email is missing and auto-heals on start',()=>{
+ const s=fixture();activate(s);
+ // Set ticket responsable to 'Rodrigo Valencia' in TICKETS sheet and create meta without email
+ s.rows[1][9]='Rodrigo Valencia';
+ s.rows[1][12]='ASIGNADO';
+ const table=s.book.insertSheet('SEGUIMIENTO SERVICIO');
+ table.appendRow(['FOLIO','SEGUIMIENTO']);
+ const p=policy(s);
+ p.responsibles.push({name:'PRUEBA — Rodrigo Valencia',email:'r.valencia@ciarm.edu.mx',test:true});
+ s.call('saveServicePolicy',{operationId:crypto.randomUUID(),expectedVersion:1,policy:p});
+ table.appendRow([s.row[0],JSON.stringify({policy:p,createdAt:'2026-10-07 10:00:00',cycles:[],waits:[],deadlines:{start:'2026-10-08 10:00:00',resolve:'2026-10-09 10:00:00'}})])
+ // Detail for Rodrigo recognizes him as executor
+ const d=s.call('serviceDetail',{id:s.row[0]},'r.valencia@ciarm.edu.mx').data;
+ assert.equal(d.roles.executor,true);
+ // Unrelated user is forbidden from detail
+ assert.equal(s.call('serviceDetail',{id:s.row[0]},'otra@ciarm.edu.mx').code,'FORBIDDEN');
+ // Rodrigo can perform START and it auto-heals meta.email
+ const started=s.call('serviceTransition',{operationId:crypto.randomUUID(),ticketId:s.row[0],expectedVersion:d.ticket.version,event:'START',comment:''},'r.valencia@ciarm.edu.mx');
+ assert.equal(started.ok,true);
+ assert.equal(started.data.ticket.estado,'EN PROCESO');
+ const healedMeta=s.context.serviceCase(s.book,s.row[0]);
+ assert.equal(healedMeta.email,'r.valencia@ciarm.edu.mx');
+});
+test('service assignment matches catalog name to policy with prefix without throwing RESPONSIBLE_ACCOUNT',()=>{
+ const s=fixture();activate(s);
+ const p=policy(s);
+ p.responsibles.push({name:'PRUEBA — Rodrigo Valencia',email:'r.valencia@ciarm.edu.mx',test:true});
+ s.call('saveServicePolicy',{operationId:crypto.randomUUID(),expectedVersion:1,policy:p});
+ s.sheets.get('CATALOGOS').rows.push(['','ALTA']);
+ s.sheets.get('RESPONSABLES').rows.push(['','Rodrigo Valencia']);
+ const pay=s.payload();
+ pay.changes.responsable='Rodrigo Valencia';
+ const res=s.call('assign',pay);
+ assert.equal(res.ok,true);
+ const meta=s.context.serviceCase(s.book,s.row[0]);
+ assert.equal(meta.email,'r.valencia@ciarm.edu.mx');
+});

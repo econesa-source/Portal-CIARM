@@ -260,7 +260,29 @@ function ciarm_tickets_direct_service_context(array $configRows,bool $canAdmin):
  * SEGUIMIENTO SERVICIO. The business calculations are sourced from GAS in the
  * generated browser module, not reimplemented in PHP.
  */
-function ciarm_tickets_direct_service_list(array $ticketRows,array $journalRows,array $serviceRows,string $actor,string $kind): array {
+function ciarm_tickets_is_executor(array $ticket,?array $meta,string $actor,string $actorName=''): bool {
+ $actor=strtolower(trim($actor));
+ if($meta!==null&&strtolower(trim((string)($meta['email']??'')))===$actor)return true;
+ $resp=trim((string)($ticket['responsable']??''));
+ if($resp===''||strcasecmp($resp,'SIN ASIGNAR')===0||strcasecmp($resp,'Sin asignar')===0)return false;
+ $cleanResp=strtolower(trim((string)preg_replace('/^PRUEBA\s*[—–-]\s*/iu','',$resp)));
+ if(isset($meta['policy']['responsibles'])&&is_array($meta['policy']['responsibles'])){
+  foreach($meta['policy']['responsibles'] as $r){
+   if(is_array($r)&&strtolower(trim((string)($r['email']??'')))===$actor){
+    $rName=trim((string)($r['name']??''));
+    $cleanRName=strtolower(trim((string)preg_replace('/^PRUEBA\s*[—–-]\s*/iu','',$rName)));
+    if(strcasecmp($rName,$resp)===0||$cleanRName===$cleanResp||$cleanRName===strtolower($resp))return true;
+   }
+  }
+ }
+ if($actorName!==''){
+  $cleanActorName=strtolower(trim((string)preg_replace('/^PRUEBA\s*[—–-]\s*/iu','',$actorName)));
+  if(strcasecmp($actorName,$resp)===0||$cleanActorName===$cleanResp)return true;
+ }
+ return false;
+}
+
+function ciarm_tickets_direct_service_list(array $ticketRows,array $journalRows,array $serviceRows,string $actor,string $kind,string $actorName=''): array {
  if(!in_array($kind,['all','mine','assigned'],true))throw new RuntimeException('VALIDATION');
  if(!preg_match('/^[a-z0-9._+\-]+@ciarm\.edu\.mx$/',$actor))throw new RuntimeException('FORBIDDEN');
  $table=ciarm_tickets_table($serviceRows,['FOLIO','SEGUIMIENTO']);
@@ -279,7 +301,7 @@ function ciarm_tickets_direct_service_list(array $ticketRows,array $journalRows,
  foreach(ciarm_tickets_direct_list($ticketRows,$journalRows) as $ticket){
   $meta=$cases[$ticket['id']]??null;
   $owner=strtolower(trim($ticket['correo']))===$actor;
-  $executor=is_array($meta)&&($meta['email']??null)===$actor;
+  $executor=ciarm_tickets_is_executor($ticket,$meta,$actor,$actorName);
   if($kind==='mine'&&!$owner||$kind==='assigned'&&!$executor)continue;
   $items[]=['ticket'=>$ticket,'meta'=>$meta];
  }

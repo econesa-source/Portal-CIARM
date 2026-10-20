@@ -175,8 +175,10 @@ try {
      if(!isset($sets[$range])||!is_array($sets[$range]))throw new RuntimeException('SCHEMA');
     }
     $actor=strtolower(trim((string)($user['correo']??'')));
+    $collaborator=ciarm_portal_current_collaborator($user);
+    $actorName=(string)($collaborator['nombre']??'');
     $result=['ok'=>true,'data'=>ciarm_tickets_direct_service_list(
-     $sets[$ranges[0]],$sets[$ranges[1]],$sets[$ranges[2]],$actor,$payload['kind']
+     $sets[$ranges[0]],$sets[$ranges[1]],$sets[$ranges[2]],$actor,$payload['kind'],$actorName
     )];
    }else{
     $result=['ok'=>true,'data'=>ciarm_tickets_direct_read($action)];

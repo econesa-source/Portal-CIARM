@@ -227,6 +227,7 @@ try {
 }
 catch(Throwable $error){
  ciarm_ticket_perf_headers($ticketPerf,$ticketPerfStart);
+ error_log('tickets-api exception: ' . $error->getMessage() . ' in ' . $error->getFile() . ':' . $error->getLine());
  $code=in_array($error->getMessage(),['FORBIDDEN','ORIGIN','CSRF','VALIDATION','PAYLOAD_SIZE','CONTENT_TYPE','CONFIGURATION'],true)?$error->getMessage():'UPSTREAM';
  ciarm_json_response(ticket_http_status($code),['ok'=>false,'code'=>$code]);
 }

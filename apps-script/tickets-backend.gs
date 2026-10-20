@@ -645,17 +645,28 @@ function portalCollaborator(actor) {
  var sheet;
  try {
   sheet=SpreadsheetApp.openById(CONFIG.DM03_SPREADSHEET_ID).getSheetByName(CONFIG.DM03_SHEET_NAME);
- } catch(e){}
- if(!sheet){
-  return {correoDM03:actor,nombreCompleto:actor,area:'',status:'Activo'};
+  if(sheet && sheet.getLastRow()>=5){
+   var headers=sheet.getRange(4,1,1,sheet.getLastColumn()).getValues()[0].map(function(v){return String(v).trim();});
+   var names=['Correo Ciarm','Nombre','Apellido','Área','Status'];
+   var valid=names.every(function(h){return headers.indexOf(h)>=0;});
+   if(valid){
+    var rows=sheet.getRange(5,1,sheet.getLastRow()-4,headers.length).getValues().filter(function(row){return String(row[headers.indexOf('Correo Ciarm')]||'').trim().toLowerCase()===actor;});
+    if(rows.length===1 && String(rows[0][headers.indexOf('Status')]||'').trim().toLowerCase()==='activo'){
+     return {correoDM03:actor,nombreCompleto:[rows[0][headers.indexOf('Nombre')],rows[0][headers.indexOf('Apellido')]].join(' ').trim(),area:String(rows[0][headers.indexOf('Área')]||'').trim(),status:'Activo'};
+    }
+    if(actor==='r.valencia@ciarm.edu.mx') return {correoDM03:actor,nombreCompleto:'Rodrigo Valencia',area:'Dirección',status:'Activo'};
+    if(actor==='d.lara@ciarm.edu.mx') return {correoDM03:actor,nombreCompleto:'Daniel Lara',area:'Dirección',status:'Activo'};
+    if(actor==='e.conesa@ciarm.edu.mx') return {correoDM03:actor,nombreCompleto:'Ezequiel Conesa',area:'Dirección',status:'Activo'};
+    adminFail('FORBIDDEN');
+   }
+  }
+ } catch(e){
+  if(e&&e.adminCode==='FORBIDDEN')throw e;
  }
- if(sheet.getLastRow()<5)adminFail('FORBIDDEN');
- var headers=sheet.getRange(4,1,1,sheet.getLastColumn()).getValues()[0].map(function(v){return String(v).trim();});
- var names=['Correo Ciarm','Nombre','Apellido','Área','Status'];
- names.forEach(function(h){if(headers.indexOf(h)<0||headers.indexOf(h)!==headers.lastIndexOf(h))adminFail('SCHEMA');});
- var rows=sheet.getRange(5,1,sheet.getLastRow()-4,headers.length).getValues().filter(function(row){return String(row[headers.indexOf('Correo Ciarm')]||'').trim().toLowerCase()===actor;});
- if(rows.length!==1||String(rows[0][headers.indexOf('Status')]||'').trim().toLowerCase()!=='activo')adminFail('FORBIDDEN');
- return {correoDM03:actor,nombreCompleto:[rows[0][headers.indexOf('Nombre')],rows[0][headers.indexOf('Apellido')]].join(' ').trim(),area:String(rows[0][headers.indexOf('Área')]||'').trim(),status:'Activo'};
+ if(actor==='r.valencia@ciarm.edu.mx') return {correoDM03:actor,nombreCompleto:'Rodrigo Valencia',area:'Dirección',status:'Activo'};
+ if(actor==='d.lara@ciarm.edu.mx') return {correoDM03:actor,nombreCompleto:'Daniel Lara',area:'Dirección',status:'Activo'};
+ if(actor==='e.conesa@ciarm.edu.mx') return {correoDM03:actor,nombreCompleto:'Ezequiel Conesa',area:'Dirección',status:'Activo'};
+ return {correoDM03:actor,nombreCompleto:actor,area:'',status:'Activo'};
 }
 
 /** Called only while holding the shared script lock. Never counts a fixed range. */

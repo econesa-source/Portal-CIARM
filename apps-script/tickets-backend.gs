@@ -883,6 +883,9 @@ function serviceIsExecutor(ticket,meta,actor,book){
  var resp=ticket&&ticket.responsable?String(ticket.responsable).trim():'';
  if(!resp||resp==='SIN ASIGNAR'||resp==='Sin asignar')return false;
  var cleanResp=resp.replace(/^PRUEBA\s*[—–-]\s*/i,'').trim().toLowerCase();
+ if(cleanResp==='rodrigo valencia'&&actor==='r.valencia@ciarm.edu.mx')return true;
+ if(cleanResp==='daniel lara'&&actor==='d.lara@ciarm.edu.mx')return true;
+ if(cleanResp==='ezequiel conesa'&&actor==='e.conesa@ciarm.edu.mx')return true;
  var policy=(meta&&meta.policy)||(book&&typeof serviceConfig==='function'?serviceConfig(book):null);
  if(policy&&Array.isArray(policy.responsibles)){
   for(var i=0;i<policy.responsibles.length;i++){

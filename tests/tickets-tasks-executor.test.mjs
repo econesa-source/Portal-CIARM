@@ -83,4 +83,74 @@ test('Vista mis-tareas e historial solo muestran Tareas Asignadas e Historial de
   assert.match(content, /isTaskView\?'<a href="#mis-tareas">Tareas asignadas<\/a><a href="#historial-tareas">Historial de tareas<\/a>'/);
 });
 
+import { actions } from '../src/components/ticketsServiceWidget.js';
+
+test('Matriz de opciones según el rol: Gestor (Ejecutor), Solicitante y Administrador', () => {
+  // 1. Gestor de Tareas (Ejecutor) en ASIGNADO: Iniciar Tarea, Solicitar Espera, Marcar como Resuelta
+  const taskAsignada = {
+    ticket: { estado: 'ASIGNADO' },
+    service: { priority: 'MEDIA' },
+    roles: { executor: true, owner: false, admin: false }
+  };
+  assert.deepEqual(actions(taskAsignada), ['START', 'WAIT_REQUEST', 'RESOLVE']);
+
+  // 2. Gestor de Tareas en EN PROCESO: Solicitar Espera, Marcar como Resuelta
+  const taskEnProceso = {
+    ticket: { estado: 'EN PROCESO' },
+    service: { priority: 'MEDIA' },
+    roles: { executor: true, owner: false, admin: false }
+  };
+  assert.deepEqual(actions(taskEnProceso), ['WAIT_REQUEST', 'RESOLVE']);
+
+  // 3. Gestor de Tareas en EN ESPERA: No puede reactivar (solo Administrador)
+  const taskEnEspera = {
+    ticket: { estado: 'EN ESPERA' },
+    service: { priority: 'MEDIA' },
+    roles: { executor: true, owner: false, admin: false }
+  };
+  assert.deepEqual(actions(taskEnEspera), []);
+
+  // 4. Administrador en EN ESPERA: Reactiva con RESUME (+ EXCEPTION)
+  const adminEnEspera = {
+    ticket: { estado: 'EN ESPERA' },
+    service: { priority: 'MEDIA' },
+    roles: { executor: false, owner: false, admin: true }
+  };
+  assert.deepEqual(actions(adminEnEspera), ['RESUME', 'EXCEPTION']);
+
+  // 5. Solicitante únicamente en RESUELTO: ACCEPT y REJECT
+  const ownerResuelto = {
+    ticket: { estado: 'RESUELTO' },
+    service: { priority: 'MEDIA' },
+    roles: { executor: false, owner: true, admin: false }
+  };
+  assert.deepEqual(actions(ownerResuelto), ['ACCEPT', 'REJECT']);
+
+  // Solicitante en otro estado no tiene acciones
+  const ownerProceso = {
+    ticket: { estado: 'EN PROCESO' },
+    service: { priority: 'MEDIA' },
+    roles: { executor: false, owner: true, admin: false }
+  };
+  assert.deepEqual(actions(ownerProceso), []);
+
+  // 6. Administrador: Controles exclusivos
+  // Clasificar prioridad inicial (TRIAGE) en NUEVO
+  const adminNuevo = {
+    ticket: { estado: 'NUEVO' },
+    service: { priority: 'POR DEFINIR' },
+    roles: { executor: false, owner: false, admin: true }
+  };
+  assert.deepEqual(actions(adminNuevo), ['TRIAGE', 'EXCEPTION']);
+
+  // Validar motivos y congelar SLA (WAIT_APPROVE) cuando hay solicitud de espera
+  const adminEsperaPendiente = {
+    ticket: { estado: 'EN PROCESO' },
+    service: { priority: 'MEDIA', waitRequest: { comment: 'falta insumo', dependency: 'Proveedor' } },
+    roles: { executor: false, owner: false, admin: true }
+  };
+  assert.deepEqual(actions(adminEsperaPendiente), ['WAIT_APPROVE', 'EXCEPTION']);
+});
+
+
 

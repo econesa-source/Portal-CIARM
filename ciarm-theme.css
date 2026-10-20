@@ -1579,6 +1579,7 @@ body {
 
 .ticket-service-nav {display:flex;flex-wrap:wrap;gap:12px;margin:12px 0;}
 #service-policy label,#service-form label {display:block;margin:8px 0;}
+#service-policy label[hidden],#service-form label[hidden] {display:none !important;}
 #service-policy textarea,#service-form textarea {width:100%;box-sizing:border-box;}
 #service-policy .ticket-table input {width:80px;}
 #service-dialog #service-detail {padding:16px;}

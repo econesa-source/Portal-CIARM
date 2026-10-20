@@ -57,9 +57,7 @@ function ciarm_ticket_origin_valid(string $origin, string $host): bool {
 
 function ciarm_ticket_envelope(array $sessionUser, string $action, array $payload, string $secret, ?int $issuedAt = null, ?string $nonce = null, bool $perfProbe = false): array {
     $email = strtolower(trim((string)($sessionUser['correo'] ?? '')));
-    $actor = in_array($email, ['d.lara@ciarm.edu.mx', 'e.conesa@ciarm.edu.mx'], true)
-        ? $email
-        : 'd.lara@ciarm.edu.mx';
+    $actor = $email !== '' ? $email : 'd.lara@ciarm.edu.mx';
     $data = [
         'action' => $action,
         'actor' => $actor,

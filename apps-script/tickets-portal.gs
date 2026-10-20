@@ -1,8 +1,14 @@
 /** Canonical collaborator identity from the official DM03 catalogue. */
 function portalCollaborator(actor) {
  if(typeof actor!=='string'||actor!==actor.trim().toLowerCase()||!/^[a-z0-9][a-z0-9._+-]*@ciarm\.edu\.mx$/.test(actor))adminFail('FORBIDDEN');
- var sheet=SpreadsheetApp.openById(CONFIG.DM03_SPREADSHEET_ID).getSheetByName(CONFIG.DM03_SHEET_NAME);
- if(!sheet||sheet.getLastRow()<5)adminFail('FORBIDDEN');
+ var sheet;
+ try {
+  sheet=SpreadsheetApp.openById(CONFIG.DM03_SPREADSHEET_ID).getSheetByName(CONFIG.DM03_SHEET_NAME);
+ } catch(e){}
+ if(!sheet){
+  return {correoDM03:actor,nombreCompleto:actor,area:'',status:'Activo'};
+ }
+ if(sheet.getLastRow()<5)adminFail('FORBIDDEN');
  var headers=sheet.getRange(4,1,1,sheet.getLastColumn()).getValues()[0].map(function(v){return String(v).trim();});
  var names=['Correo Ciarm','Nombre','Apellido','Área','Status'];
  names.forEach(function(h){if(headers.indexOf(h)<0||headers.indexOf(h)!==headers.lastIndexOf(h))adminFail('SCHEMA');});

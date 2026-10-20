@@ -94,6 +94,14 @@ test('Matriz de opciones según el rol: Gestor (Ejecutor), Solicitante y Adminis
   };
   assert.deepEqual(actions(taskAsignada), ['START', 'WAIT_REQUEST', 'RESOLVE']);
 
+  // Tarea asignada crítica: RESOLVE siempre disponible, más opción de contención si no está contenida
+  const taskAsignadaCritica = {
+    ticket: { estado: 'ASIGNADO' },
+    service: { priority: 'CRITICA' },
+    roles: { executor: true, owner: false, admin: false }
+  };
+  assert.deepEqual(actions(taskAsignadaCritica), ['START', 'WAIT_REQUEST', 'RESOLVE', 'CONTAIN']);
+
   // 2. Gestor de Tareas en EN PROCESO: Solicitar Espera, Marcar como Resuelta
   const taskEnProceso = {
     ticket: { estado: 'EN PROCESO' },
@@ -101,6 +109,21 @@ test('Matriz de opciones según el rol: Gestor (Ejecutor), Solicitante y Adminis
     roles: { executor: true, owner: false, admin: false }
   };
   assert.deepEqual(actions(taskEnProceso), ['WAIT_REQUEST', 'RESOLVE']);
+
+  // Tarea en proceso crítica: RESOLVE siempre disponible
+  const taskEnProcesoCritica = {
+    ticket: { estado: 'EN PROCESO' },
+    service: { priority: 'CRITICA' },
+    roles: { executor: true, owner: false, admin: false }
+  };
+  assert.deepEqual(actions(taskEnProcesoCritica), ['WAIT_REQUEST', 'RESOLVE', 'CONTAIN']);
+
+  const taskEnProcesoCriticaContenida = {
+    ticket: { estado: 'EN PROCESO' },
+    service: { priority: 'CRITICA', containedAt: '2026-10-20 10:00:00' },
+    roles: { executor: true, owner: false, admin: false }
+  };
+  assert.deepEqual(actions(taskEnProcesoCriticaContenida), ['WAIT_REQUEST', 'RESOLVE']);
 
   // 3. Gestor de Tareas en EN ESPERA: No puede reactivar (solo Administrador)
   const taskEnEspera = {

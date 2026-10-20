@@ -610,7 +610,7 @@ function verifyTicketRequest(envelope,signature) {
  if(!adminEqual(adminHex(Utilities.computeHmacSha256Signature(envelope,secret,Utilities.Charset.UTF_8)),signature))adminFail('INVALID_SIGNATURE');
  var request;try{request=JSON.parse(envelope);}catch(error){adminFail('VALIDATION');}
  if(!request||typeof request!=='object'||Array.isArray(request))adminFail('VALIDATION');
- var limit=request.action==='uploadAttachment'?PORTAL_UPLOAD_LIMIT:PORTAL_METADATA_LIMIT;
+ var limit=(request.action==='uploadAttachment'||request.action==='uploadEvidence')?PORTAL_UPLOAD_LIMIT:PORTAL_METADATA_LIMIT;
  if(Utilities.newBlob(envelope).getBytes().length>limit)adminFail('PAYLOAD_SIZE');
  if(!Number.isInteger(request.issuedAt)||Math.abs(Math.floor(Date.now()/1000)-request.issuedAt)>120)adminFail('EXPIRED');
  if(typeof request.nonce!=='string'||!/^[a-zA-Z0-9-]{16,80}$/.test(request.nonce))adminFail('VALIDATION');

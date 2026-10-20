@@ -53,6 +53,7 @@ function handleTicketEnvelope(envelope,signature) {
    case 'uploadAttachment':data=portalUploadAttachment(book,request.actor,request.payload);break;
    case 'finalizeCreate':data=portalFinalizeCreate(book,request.actor,request.payload);break;
    case 'creationStatus':data=portalCreationStatus(book,request.actor,(request.payload||{}).operationId);break;
+   case 'uploadEvidence':data=serviceUploadEvidence(book,request.actor,request.payload);break;
    default:adminFail('VALIDATION');
   }
   clock.mark('work');

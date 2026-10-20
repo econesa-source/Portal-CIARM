@@ -152,5 +152,20 @@ test('Matriz de opciones según el rol: Gestor (Ejecutor), Solicitante y Adminis
   assert.deepEqual(actions(adminEsperaPendiente), ['WAIT_APPROVE', 'EXCEPTION']);
 });
 
+test('ticketsServiceWidget implementa botones individuales de acción y captura dual cámara/archivo', () => {
+  const content = readFileSync('src/components/ticketsServiceWidget.js', 'utf8');
+  assert.match(content, /ticket-action-buttons/);
+  assert.match(content, /ticket-action-pill/);
+  assert.match(content, /data-action=/);
+
+  assert.match(content, /id="evidence-camera-input"[^>]*capture="environment"/);
+  assert.match(content, /id="evidence-file-input"/);
+  assert.match(content, /id="btn-capture-photo"/);
+  assert.match(content, /id="btn-upload-file"/);
+
+  const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{1FA00}-\u{1FAFF}]/u;
+  assert.equal(content.match(emojiRegex), null, 'ticketsServiceWidget debe tener cero emojis casuales');
+});
+
 
 

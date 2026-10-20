@@ -1583,6 +1583,20 @@ body {
 #service-policy textarea,#service-form textarea {width:100%;box-sizing:border-box;}
 #service-policy .ticket-table input {width:80px;}
 #service-dialog #service-detail {padding:16px;}
+.ticket-action-buttons { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 14px; }
+.ticket-action-pill { padding: 8px 16px; min-height: 40px; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; color: #334155; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.15s ease; user-select: none; }
+.ticket-action-pill:hover:not(:disabled) { border-color: #94a3b8; background: #f1f5f9; }
+.ticket-action-pill.active { background: var(--primary-color, #1e40af); color: #ffffff; border-color: var(--primary-color, #1e40af); font-weight: 600; box-shadow: 0 1px 4px rgba(30, 64, 175, 0.3); }
+.ticket-action-pill[data-action="RESOLVE"].active { background: #059669; border-color: #059669; box-shadow: 0 1px 4px rgba(5, 150, 105, 0.3); }
+.ticket-action-pill[data-action="WAIT_REQUEST"].active { background: #d97706; border-color: #d97706; box-shadow: 0 1px 4px rgba(217, 119, 6, 0.3); }
+.ticket-action-pill[data-action="CONTAIN"].active { background: #d97706; border-color: #d97706; box-shadow: 0 1px 4px rgba(217, 119, 6, 0.3); }
+.ticket-action-pill[data-action="WAIT_APPROVE"].active { background: #d97706; border-color: #d97706; box-shadow: 0 1px 4px rgba(217, 119, 6, 0.3); }
+.ticket-action-pill[data-action="START"].active { background: #2563eb; border-color: #2563eb; box-shadow: 0 1px 4px rgba(37, 99, 235, 0.3); }
+.ticket-action-pill[data-action="RESUME"].active { background: #2563eb; border-color: #2563eb; box-shadow: 0 1px 4px rgba(37, 99, 235, 0.3); }
+.ticket-action-pill[data-action="TRIAGE"].active { background: #6366f1; border-color: #6366f1; box-shadow: 0 1px 4px rgba(99, 102, 241, 0.3); }
+.ticket-action-pill[data-action="REJECT"].active { background: #dc2626; border-color: #dc2626; box-shadow: 0 1px 4px rgba(220, 38, 38, 0.3); }
+.ticket-action-pill[data-action="ACCEPT"].active { background: #059669; border-color: #059669; box-shadow: 0 1px 4px rgba(5, 150, 105, 0.3); }
+.ticket-action-pill:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* Executive management dashboard: existing institutional surfaces and dialogs. */
 .management-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }

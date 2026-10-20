@@ -86,18 +86,13 @@ function ciarm_portal_upload(array $files,array $input): array {
 }
 function ciarm_portal_bridge(array $user,string $action,array $payload,bool $perfProbe=false): array {
     $secret=@file_get_contents(ciarm_private_path('tickets-admin.key'));if($secret===false||strlen(trim($secret))<32)throw new RuntimeException('CONFIGURATION');
-    $signed=ciarm_ticket_envelope($user,$action,$payload,trim($secret),null,null,$perfProbe);$limit=$action==='uploadAttachment'?15*1024*1024:50000;
+    $signed=ciarm_ticket_envelope($user,$action,$payload,trim($secret),null,null,$perfProbe);$limit=in_array($action,['uploadAttachment','uploadEvidence'],true)?15*1024*1024:50000;
     if(strlen($signed['envelope'])>$limit)throw new RuntimeException('PAYLOAD_SIZE');
-    $response=ciarm_http_json(CIARM_TICKETS_WEBAPP,['post'=>true,'headers'=>['Accept: application/json','Content-Type: application/json'],'body'=>json_encode($signed,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),'timeout'=>in_array($action,['uploadAttachment','finalizeCreate'],true)?60:25]);
+    $response=ciarm_http_json(CIARM_TICKETS_WEBAPP,['post'=>true,'headers'=>['Accept: application/json','Content-Type: application/json'],'body'=>json_encode($signed,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),'timeout'=>in_array($action,['uploadAttachment','uploadEvidence','finalizeCreate'],true)?60:25]);
     if($response['status']!==200||!is_bool($response['body']['ok']??null))throw new RuntimeException('UPSTREAM');return $response['body'];
 }
 
 function ciarm_upload_evidence_to_drive(array $file, array $user): array {
-    $raw=@file_get_contents(ciarm_private_path('service-account.json'));
-    if($raw===false)throw new RuntimeException('CONFIGURATION');
-    $account=json_decode($raw,true,512,JSON_THROW_ON_ERROR);
-    if(!is_array($account))throw new RuntimeException('CONFIGURATION');
-    $token=ciarm_google_access_token($account,'https://www.googleapis.com/auth/drive');
     $path=(string)($file['tmp_name']??'');
     if(!is_uploaded_file($path))throw new RuntimeException('VALIDATION');
     $originalName=basename((string)($file['name']??'evidencia.jpg'));
@@ -108,12 +103,28 @@ function ciarm_upload_evidence_to_drive(array $file, array $user): array {
     $mime=$finfo->file($path)?:'application/octet-stream';
     $fileBytes=file_get_contents($path);
     if($fileBytes===false)throw new RuntimeException('VALIDATION');
+
+    try {
+        $gasPayload=['name'=>$cleanName,'mime'=>$mime,'size'=>strlen($fileBytes),'base64'=>base64_encode($fileBytes)];
+        $gasRes=ciarm_portal_bridge($user,'uploadEvidence',$gasPayload);
+        if(($gasRes['ok']??false)===true&&is_array($gasRes['data']??null)&&!empty($gasRes['data']['url'])){
+            return $gasRes['data'];
+        }
+    } catch(Throwable $gasErr) {
+        error_log('GAS uploadEvidence fallback: '.$gasErr->getMessage());
+    }
+
+    $raw=@file_get_contents(ciarm_private_path('service-account.json'));
+    if($raw===false)throw new RuntimeException('CONFIGURATION');
+    $account=json_decode($raw,true,512,JSON_THROW_ON_ERROR);
+    if(!is_array($account))throw new RuntimeException('CONFIGURATION');
+    $token=ciarm_google_access_token($account,'https://www.googleapis.com/auth/drive');
     $folderId='103wSYfCuSwVKW_aTbTFr2O7b-JyuT619';
     $metadata=['name'=>$fileName,'parents'=>[$folderId],'description'=>'Evidencia subida por '.($user['correo']??'colaborador')];
     $boundary='-------314159265358979323846';
     $delimiter="\r\n--".$boundary."\r\n";
     $closeDelim="\r\n--".$boundary."--";
-    $multipartBody=$delimiter."Content-Type: application/json; charset=UTF-8\r\n\r\n".json_encode($metadata).$delimiter."Content-Type: ".$mime."\r\nContent-Transfer-Encoding: base64\r\n\r\n".chunk_split(base64_encode($fileBytes)).$closeDelim;
+    $multipartBody=$delimiter."Content-Type: application/json; charset=UTF-8\r\n\r\n".json_encode($metadata).$delimiter."Content-Type: ".$mime."\r\n\r\n".$fileBytes.$closeDelim;
     $uploadRes=ciarm_http_json('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink',[
         'post'=>true,
         'headers'=>['Authorization: Bearer '.$token,'Content-Type: multipart/related; boundary='.$boundary,'Content-Length: '.strlen($multipartBody)],
@@ -122,7 +133,7 @@ function ciarm_upload_evidence_to_drive(array $file, array $user): array {
     ]);
     if($uploadRes['status']<200||$uploadRes['status']>=300||empty($uploadRes['body']['id'])){
         $metadataNoParent=['name'=>$fileName,'description'=>'Evidencia subida por '.($user['correo']??'colaborador')];
-        $multipartBodyNoParent=$delimiter."Content-Type: application/json; charset=UTF-8\r\n\r\n".json_encode($metadataNoParent).$delimiter."Content-Type: ".$mime."\r\nContent-Transfer-Encoding: base64\r\n\r\n".chunk_split(base64_encode($fileBytes)).$closeDelim;
+        $multipartBodyNoParent=$delimiter."Content-Type: application/json; charset=UTF-8\r\n\r\n".json_encode($metadataNoParent).$delimiter."Content-Type: ".$mime."\r\n\r\n".$fileBytes.$closeDelim;
         $uploadRes=ciarm_http_json('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink',[
             'post'=>true,
             'headers'=>['Authorization: Bearer '.$token,'Content-Type: multipart/related; boundary='.$boundary,'Content-Length: '.strlen($multipartBodyNoParent)],

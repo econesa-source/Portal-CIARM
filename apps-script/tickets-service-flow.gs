@@ -117,3 +117,20 @@ function serviceList(book,actor,kind){
 function serviceConfigVersion(book,version){var rows=serviceCachedRows(book,'CONFIG SERVICIO',['VERSION','REGLAS','ACTOR','FECHA','OPERACION','HASH']).slice(1).filter(function(r){return r[0]===version;});if(rows.length!==1)adminFail('SCHEMA');return serviceValidatePolicy(JSON.parse(rows[0][1]));}
 function serviceCreationPlan(book,request){var policy=serviceConfig(book);return policy?{version:policy.version,receivedAt:serviceNow(),urgent:request.prioridadSolicitada==='🔴 Urgente'}:null;}
 function serviceCreationRecover(book,id,creation){if(!creation)return;var policy=serviceConfigVersion(book,creation.version),deadline=serviceDeadline(serviceDate(creation.receivedAt),creation.urgent?policy.levels.URGENTE.assign:policy.assignmentHours,policy);var meta={policy:policy,createdAt:creation.receivedAt,historical:false,assignmentOwner:'d.lara@ciarm.edu.mx',assignmentDeadline:Utilities.formatDate(deadline,'America/Cancun','yyyy-MM-dd HH:mm:ss'),cycles:[],waits:[]};serviceSaveCase(book,id,null,meta);}
+function serviceUploadEvidence(book,actor,input){
+ if(!input||typeof input.base64!=='string'||!input.name||!input.mime)adminFail('VALIDATION');
+ var bytes=Utilities.base64Decode(input.base64);
+ if(bytes.length>10*1024*1024)adminFail('PAYLOAD_SIZE');
+ var root=DriveApp.getFolderById(CONFIG.ATTACHMENTS_FOLDER_ID);
+ var candidates=root.getFoldersByName('evidencias-servicio'),folder;
+ if(candidates.hasNext())folder=candidates.next();
+ else folder=root.createFolder('evidencias-servicio');
+ var cleanName=String(input.name).replace(/[^\w.-]/g,'_');
+ if(cleanName.length>100)cleanName=cleanName.substring(cleanName.length-100);
+ var fileName='evidencia_'+Utilities.formatDate(new Date(),'America/Cancun','yyyyMMdd_HHmmss')+'_'+cleanName;
+ var blob=Utilities.newBlob(bytes,input.mime,fileName);
+ var file=folder.createFile(blob);
+ file.setDescription('Evidencia subida por '+actor);
+ file.setSharing(DriveApp.Access.ANYONE_WITH_LINK,DriveApp.Permission.VIEW);
+ return {url:file.getUrl(),id:file.getId(),name:fileName};
+}

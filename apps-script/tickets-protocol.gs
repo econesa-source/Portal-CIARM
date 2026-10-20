@@ -58,6 +58,6 @@ function handleTicketEnvelope(envelope,signature) {
   }
   clock.mark('work');
   return ticketPerfReply({ok:true,data:data},request,clock);
- }catch(error){var result={ok:false,code:error.adminCode||'UPSTREAM'};if(request&&request.action==='serviceTransition'&&book&&request.payload){try{var history=book.getSheetByName('BITACORA TICKETS');result.operationPending=history?history.getDataRange().getValues().slice(1).some(function(r){return r[0]===request.payload.operationId&&r[2]===request.actor;}):false;}catch(ignored){}}return ticketPerfReply(result,request,clock);}
+ }catch(error){var result={ok:false,code:error.adminCode||'UPSTREAM'};if(request&&request.perfProbe&&error.adminDetail)result.detail=error.adminDetail;if(request&&request.action==='serviceTransition'&&book&&request.payload){try{var history=book.getSheetByName('BITACORA TICKETS');result.operationPending=history?history.getDataRange().getValues().slice(1).some(function(r){return r[0]===request.payload.operationId&&r[2]===request.actor;}):false;}catch(ignored){}}return ticketPerfReply(result,request,clock);}
  finally{if(typeof SERVICE_TABLE_CACHE!=='undefined')SERVICE_TABLE_CACHE=null;if(locked)lock.releaseLock();}
 }

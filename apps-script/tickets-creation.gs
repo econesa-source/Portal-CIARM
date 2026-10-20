@@ -3,7 +3,7 @@ function portalOperationId(id){if(typeof id!=='string'||!/^[a-zA-Z0-9][a-zA-Z0-9
 function portalJournal(book){
  var table=adminJournal(book);
  if(!table.headers[9])table.sheet.getRange(1,10).setValue('ACCIÓN');
- else if(table.headers[9]!=='ACCIÓN')adminFail('SCHEMA');
+ else if(adminNormalizeHeader(table.headers[9])!=='ACCION')adminFail('SCHEMA', 'col 9 bitacora esperaba ACCION y vino ' + table.headers[9]);
  return adminJournalTable(book);
 }
 function portalCreationEvent(book,actor,id){

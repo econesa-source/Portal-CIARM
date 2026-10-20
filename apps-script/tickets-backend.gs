@@ -406,16 +406,26 @@ function ticketPerfReply(reply,request,clock){
 var ADMIN_TICKET_HEADERS = ['ID TICKET','FECHA SOLICITUD','HORA SOLICITUD','ÁREA SOLICITANTE','SOLICITANTE','CORREO SOLICITANTE','TIPO DE SOLICITUD','DESCRIPCIÓN','PRIORIDAD','RESPONSABLE','FECHA ASIGNACIÓN','FECHA COMPROMISO','ESTADO','FECHA INICIO','FECHA TERMINACIÓN','TIEMPO EJECUCIÓN','TIEMPO TOTAL','SLA','PUNTOS','OBSERVACIONES','ÚLTIMA ACTUALIZACIÓN','PRIORIDAD SOLICITADA','PLAZO SOLICITADO','ARCHIVOS ADJUNTOS'];
 var ADMIN_JOURNAL_HEADERS = ['OPERACION','ESTADO','ACTOR','PAYLOAD HASH','TICKET','ANTES','DESPUES','FECHA','PAYLOAD'];
 
-function adminFail(code) { var error = new Error(code); error.adminCode = code; throw error; }
+function adminFail(code, detail) { var error = new Error(detail ? code + ': ' + detail : code); error.adminCode = code; error.adminDetail = detail || ''; throw error; }
 function adminHex(bytes) { return bytes.map(function(b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join(''); }
 function adminHash(value) { return adminHex(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, JSON.stringify(value), Utilities.Charset.UTF_8)); }
 function adminEqual(a,b) { if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false; var diff=0; for(var i=0;i<a.length;i++) diff |= a.charCodeAt(i)^b.charCodeAt(i); return diff===0; }
+function adminNormalizeHeader(h) { return String(h||'').trim().replace(/[\u200B-\u200D\uFEFF]/g,'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase(); }
 function adminTable(book,name,required,valuesOnly) {
- var sheet=book.getSheetByName(name); if(!sheet) adminFail('SCHEMA');
- // Catalogs and authorization tables never use formula text. Avoid an extra
- // Spreadsheet service read in those paths. Ticket snapshots remain unchanged.
- var range=sheet.getDataRange();var rows=range.getValues();var formulas=valuesOnly?null:range.getFormulas();var headers=rows[0].map(function(v){return String(v).trim();});
- required.forEach(function(h){if(headers.indexOf(h)<0 || headers.indexOf(h)!==headers.lastIndexOf(h)) adminFail('SCHEMA');});
+ var sheet=book.getSheetByName(name); if(!sheet) adminFail('SCHEMA', 'hoja ' + name + ' no existe');
+ var range=sheet.getDataRange();var rows=range.getValues();var formulas=valuesOnly?null:range.getFormulas();
+ var headers=rows[0].map(function(v){return String(v).trim().replace(/[\u200B-\u200D\uFEFF]/g,'');});
+ var normHeaders=headers.map(adminNormalizeHeader);
+ required.forEach(function(h){
+  var normH=adminNormalizeHeader(h);
+  var idx=headers.indexOf(h);
+  if(idx<0) idx=normHeaders.indexOf(normH);
+  if(idx<0) adminFail('SCHEMA', 'falta ' + h + ' en ' + name + '; headers=' + headers.join('|'));
+  var lastIdx=headers.lastIndexOf(h);
+  if(lastIdx<0) lastIdx=normHeaders.lastIndexOf(normH);
+  if(idx!==lastIdx) adminFail('SCHEMA', 'duplicado ' + h + ' en ' + name);
+  headers[idx]=h;
+ });
  return {sheet:sheet,headers:headers,rows:rows,formulas:formulas};
 }
 function adminPermission(actor) {
@@ -458,6 +468,7 @@ function handleAdminEnvelope(envelope,signature) {
   clock.mark('work');return ticketPerfReply({ok:true,data:data},request,clock);
  } catch(err) {
   var result={ok:false,code:err.adminCode||'UPSTREAM'};
+  if(request&&request.perfProbe&&err.adminDetail)result.detail=err.adminDetail;
   // Tell the client whether it must retain the operation ID for recovery.
   if(request&&request.action==='assign'&&book&&request.payload) {
    try {var history=book.getSheetByName('BITACORA TICKETS');result.operationPending=history?history.getDataRange().getValues().slice(1).some(function(row){return row[0]===request.payload.operationId&&row[2]===request.actor;}):false;}catch(ignored){}
@@ -517,7 +528,11 @@ function adminJournal(book) {
 }
 function adminJournalTable(book) {
  var table=adminTable(book,'BITACORA TICKETS',ADMIN_JOURNAL_HEADERS);
- if(ADMIN_JOURNAL_HEADERS.some(function(h,i){return table.headers[i]!==h;}))adminFail('SCHEMA');
+ for(var i=0;i<ADMIN_JOURNAL_HEADERS.length;i++){
+  if(adminNormalizeHeader(table.headers[i])!==adminNormalizeHeader(ADMIN_JOURNAL_HEADERS[i])){
+   adminFail('SCHEMA', 'bitacora col ' + i + ' esperaba ' + ADMIN_JOURNAL_HEADERS[i] + ' y vino ' + table.headers[i]);
+  }
+ }
  return table;
 }
 function adminPendingOperation(book,id,actor) {
@@ -635,7 +650,7 @@ function handleTicketEnvelope(envelope,signature) {
   }
   clock.mark('work');
   return ticketPerfReply({ok:true,data:data},request,clock);
- }catch(error){var result={ok:false,code:error.adminCode||'UPSTREAM'};if(request&&request.action==='serviceTransition'&&book&&request.payload){try{var history=book.getSheetByName('BITACORA TICKETS');result.operationPending=history?history.getDataRange().getValues().slice(1).some(function(r){return r[0]===request.payload.operationId&&r[2]===request.actor;}):false;}catch(ignored){}}return ticketPerfReply(result,request,clock);}
+ }catch(error){var result={ok:false,code:error.adminCode||'UPSTREAM'};if(request&&request.perfProbe&&error.adminDetail)result.detail=error.adminDetail;if(request&&request.action==='serviceTransition'&&book&&request.payload){try{var history=book.getSheetByName('BITACORA TICKETS');result.operationPending=history?history.getDataRange().getValues().slice(1).some(function(r){return r[0]===request.payload.operationId&&r[2]===request.actor;}):false;}catch(ignored){}}return ticketPerfReply(result,request,clock);}
  finally{if(typeof SERVICE_TABLE_CACHE!=='undefined')SERVICE_TABLE_CACHE=null;if(locked)lock.releaseLock();}
 }
 
@@ -702,7 +717,7 @@ function portalOperationId(id){if(typeof id!=='string'||!/^[a-zA-Z0-9][a-zA-Z0-9
 function portalJournal(book){
  var table=adminJournal(book);
  if(!table.headers[9])table.sheet.getRange(1,10).setValue('ACCIÓN');
- else if(table.headers[9]!=='ACCIÓN')adminFail('SCHEMA');
+ else if(adminNormalizeHeader(table.headers[9])!=='ACCION')adminFail('SCHEMA', 'col 9 bitacora esperaba ACCION y vino ' + table.headers[9]);
  return adminJournalTable(book);
 }
 function portalCreationEvent(book,actor,id){

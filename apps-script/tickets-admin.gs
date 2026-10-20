@@ -18,7 +18,19 @@ function adminFail(code, detail) { var error = new Error(detail ? code + ': ' + 
 function adminHex(bytes) { return bytes.map(function(b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join(''); }
 function adminHash(value) { return adminHex(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, JSON.stringify(value), Utilities.Charset.UTF_8)); }
 function adminEqual(a,b) { if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false; var diff=0; for(var i=0;i<a.length;i++) diff |= a.charCodeAt(i)^b.charCodeAt(i); return diff===0; }
-function adminNormalizeHeader(h) { return String(h||'').trim().replace(/[\u200B-\u200D\uFEFF]/g,'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase(); }
+function adminNormalizeHeader(h) {
+ return String(h||'')
+  .trim()
+  .replace(/[\u200B-\u200D\uFEFF]/g,'')
+  .replace(/\u221A\u00C5|\u00C3\u0081/g,'A')
+  .replace(/\u221A\u00CC|\u00C3\u0093/g,'O')
+  .replace(/\u221A\u00DA|\u00C3\u009A/g,'U')
+  .replace(/\u221A\u00C9|\u00C3\u0089/g,'E')
+  .replace(/\u221A\u00CD|\u00C3\u008D/g,'I')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g,'')
+  .toUpperCase();
+}
 function adminTable(book,name,required,valuesOnly) {
  var sheet=book.getSheetByName(name); if(!sheet) adminFail('SCHEMA', 'hoja ' + name + ' no existe');
  var range=sheet.getDataRange();var rows=range.getValues();var formulas=valuesOnly?null:range.getFormulas();
@@ -26,13 +38,11 @@ function adminTable(book,name,required,valuesOnly) {
  var normHeaders=headers.map(adminNormalizeHeader);
  required.forEach(function(h){
   var normH=adminNormalizeHeader(h);
-  var idx=headers.indexOf(h);
-  if(idx<0) idx=normHeaders.indexOf(normH);
-  if(idx<0) adminFail('SCHEMA', 'falta ' + h + ' en ' + name + '; headers=' + headers.join('|'));
-  var lastIdx=headers.lastIndexOf(h);
-  if(lastIdx<0) lastIdx=normHeaders.lastIndexOf(normH);
-  if(idx!==lastIdx) adminFail('SCHEMA', 'duplicado ' + h + ' en ' + name);
-  headers[idx]=h;
+  var first=normHeaders.indexOf(normH);
+  var last=normHeaders.lastIndexOf(normH);
+  if(first<0) adminFail('SCHEMA', 'falta ' + h + ' en ' + name + '; headers=' + headers.join('|'));
+  if(first!==last) adminFail('SCHEMA', 'duplicado ' + h + ' en ' + name);
+  headers[first]=h;
  });
  return {sheet:sheet,headers:headers,rows:rows,formulas:formulas};
 }

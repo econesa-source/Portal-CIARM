@@ -22,5 +22,12 @@ function doGet(e){
  return ContentService.createTextOutput(JSON.stringify({ok:false,code:'FORBIDDEN'})).setMimeType(ContentService.MimeType.JSON);
 }
 `;
-const bundle=original.replace('function doPost(e)', 'function legacyTicketPost(e)').replace('function doGet(e)', 'function legacyTicketGet(e)')+'\n'+admin+'\n'+portal+'\n'+dispatcher;
+function toAscii(str) {
+  return str.replace(/[^\x00-\x7F]/g, char => {
+    const hex = char.charCodeAt(0).toString(16).padStart(4, '0');
+    return '\\u' + hex;
+  });
+}
+const bundle=toAscii(original.replace('function doPost(e)', 'function legacyTicketPost(e)').replace('function doGet(e)', 'function legacyTicketGet(e)')+'\n'+admin+'\n'+portal+'\n'+dispatcher);
 fs.writeFileSync(new URL('./tickets-backend.gs',import.meta.url),bundle);
+

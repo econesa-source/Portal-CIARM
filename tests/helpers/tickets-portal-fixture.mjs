@@ -29,11 +29,12 @@ export function portalFixture(options={}) {
  sheet('RESPONSABLES',[['TIPOS','RESPONSABLE'],['TODAS','Daniel Lara']]);
  sheet('Permisos de usuario',[['Correo Ciarm','Status','Sistema de tickets'],['d.lara@ciarm.edu.mx','Activo','Administrador'],['e.conesa@ciarm.edu.mx','Activo','Administrador']]);
  const book={getSheetByName:n=>sheets.get(n)||null,insertSheet:n=>sheet(n,[])};
- const props={TICKETS_ADMIN_SECRET:'test-secret-only-for-fixtures'};const cache=new Map();
+ const props={TICKETS_ADMIN_SECRET:'test-secret-only-for-fixtures'};const cache=new Map();const sentEmails=[];let mailFailure='';
  const context=vm.createContext({CONFIG:{TICKETS_SPREADSHEET_ID:'tickets',DM03_SPREADSHEET_ID:'dm03',DM03_SHEET_NAME:'Catálogo de colaboradores',ATTACHMENTS_FOLDER_ID:'attachments'},Date:FixtureDate,JSON,Math,
   PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]})},
   SpreadsheetApp:{openById:()=>book,flush:()=>{hit('afterRowWrite');if(calculate&&sheets.get('TICKETS').rows[1][8]==='ALTA')sheets.get('TICKETS').rows[1][17]='CALCULATED SLA';}},
   DriveApp:{getFolderById:id=>{if(!folders.has(id))throw Error('folder missing');return folders.get(id);},Access:{ANYONE_WITH_LINK:'link'},Permission:{VIEW:'view'}},
+  MailApp:{sendEmail:msg=>{if(mailFailure){const err=mailFailure;mailFailure='';throw Error(err);}sentEmails.push(msg);},getRemainingDailyQuota:()=>100},
   LockService:{getScriptLock:()=>({tryLock:()=>lockAllowed,releaseLock:()=>{}})},
   CacheService:{getScriptCache:()=>({get:k=>cache.get(k),put:(k,v)=>cache.set(k,v)})},
   Utilities:{DigestAlgorithm:{SHA_256:'sha256'},Charset:{UTF_8:'utf8'},computeDigest:(_,s)=>[...crypto.createHash('sha256').update(Array.isArray(s)?Buffer.from(s):s).digest()],computeHmacSha256Signature:(s,k)=>[...crypto.createHmac('sha256',k).update(s).digest()],parseDate:(value)=>new Date(value.replace(' ','T')+'-05:00'),formatDate:(value,tz,format)=>{const local=new Date(value.getTime()-5*3600000).toISOString();if(format==='HH:mm:ss')return local.slice(11,19);if(format==='yyyy-MM-dd HH:mm:ss')return local.slice(0,10)+' '+local.slice(11,19);return local.slice(0,10);},getUuid:()=>crypto.randomUUID(),newBlob:(value,mime,name)=>({getBytes:()=>Array.from(typeof value==='string'?Buffer.from(value):Buffer.from(value)),getContentType:()=>mime,getName:()=>name}),base64Decode:value=>Array.from(Buffer.from(value,'base64')),base64Encode:value=>Buffer.from(value).toString('base64')}});
@@ -46,5 +47,5 @@ export function portalFixture(options={}) {
   return (context.handleTicketEnvelope||context.handleAdminEnvelope)(envelope,signature);
  }
  const payload=()=>({operationId:'operation-00000001',ticketId:row[0],expectedVersion:call('detail',{id:row[0]}).data.version,changes:{responsable:'Daniel Lara',prioridad:'ALTA',fechaCompromiso:'2026-10-08',observacion:'Asignación inicial'}});
- return {context,call,sheets,book,files,metrics,failOnce:point=>failurePoint=point,rows:sheets.get('TICKETS').rows,denyLock:()=>lockAllowed=false,row,payload,interrupt:n=>failure=n,props,coerce:()=>coerce=true,calculate:()=>{calculate=true;sheets.get('TICKETS').formulas[1][17]='=IF(I2="ALTA","CALCULATED SLA","POR DEFINIR")';}};
+ return {context,call,sheets,book,files,metrics,sentEmails,failMailOnce:(msg='Simulated MailApp quota error')=>mailFailure=msg,failOnce:point=>failurePoint=point,rows:sheets.get('TICKETS').rows,denyLock:()=>lockAllowed=false,row,payload,interrupt:n=>failure=n,props,coerce:()=>coerce=true,calculate:()=>{calculate=true;sheets.get('TICKETS').formulas[1][17]='=IF(I2="ALTA","CALCULATED SLA","POR DEFINIR")';}};
 }

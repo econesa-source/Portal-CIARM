@@ -101,7 +101,12 @@ function portalFinalizeCreate(book,actor,input){
  if(adminHash(adminSnapshot(ticket))!==adminHash(reserved.after))adminFail('CONFLICT');
  if(typeof serviceCreationRecover==='function')serviceCreationRecover(book,reserved.id,data.serviceCreation);
  event.table.sheet.getRange(event.rowNumber,2).setValue('CONFIRMADO');event.row[1]='CONFIRMADO';
- return portalCreationView(book,event);
+ var view=adminTicketView(ticket);
+ if(typeof ticketNotifyTransition==='function'){
+  var audit=ticketNotifyTransition(book,{event:'CREATE',operationId:input.operationId,journalSheet:event.table.sheet,journalRowNumber:event.rowNumber,ticket:view,meta:typeof serviceCase==='function'?serviceCase(book,reserved.id):null,actor:actor});
+  if(audit)event.payload.notification=audit;
+ }
+ return {operationId:event.row[0],state:event.row[1],finalizing:Boolean(event.payload.reservation),uploadedIndexes:event.payload.receipts.map(function(receipt){return receipt.index;}),ticket:view};
 }
 function portalCreationStatus(book,actor,id){return portalCreationView(book,portalCreationEvent(book,actor,id));}
 

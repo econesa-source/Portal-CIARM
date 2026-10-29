@@ -93,6 +93,8 @@ jobs:
             local url="$1"
             local out="$2"
             curl -sS -L \
+              --resolve portal.ciarm.edu.mx:443:65.99.225.22 \
+              --resolve portal.ciarm.edu.mx:80:65.99.225.22 \
               --retry 4 \
               --retry-delay 3 \
               --retry-all-errors \

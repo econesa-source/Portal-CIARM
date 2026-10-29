@@ -16,31 +16,6 @@ function ciarm_ticket_perf_headers(array $durations, float $start): void {
  }
  header('Server-Timing: '.implode(', ',$parts));
 }
-if(($_GET['notifyDiag']??'')==='8f9d2a7b4c1e6f03a5d8e2b9'){
- $diag=['probes'=>[],'privateFiles'=>@scandir(dirname(__DIR__).'/portal-ciarm-private')?:[]];
- foreach([['smtp.google.com',25],['aspmx.l.google.com',25],['relay.mailchannels.net',25],['127.0.0.1',25]] as [$h,$p]){
-  $errno=0;$errstr='';
-  $ip=filter_var($h,FILTER_VALIDATE_IP)?$h:gethostbyname($h);
-  $fp=@stream_socket_client("tcp://{$ip}:{$p}",$errno,$errstr,3);
-  if($fp){
-   stream_set_timeout($fp,3);
-   $banner=ciarm_ticket_smtp_read($fp);
-   $ehlo=ciarm_ticket_smtp_cmd($fp,'EHLO portal2.ciarm.edu.mx',[250]);
-   $mf=ciarm_ticket_smtp_cmd($fp,'MAIL FROM:<no-reply@ciarm.edu.mx>',[250]);
-   $rcpt=ciarm_ticket_smtp_cmd($fp,'RCPT TO:<e.conesa@ciarm.edu.mx>',[250,251]);
-   @ciarm_ticket_smtp_cmd($fp,'QUIT',[221,250]);
-   fclose($fp);
-   $diag['probes']["{$h}({$ip}):{$p}"]=['open'=>true,'banner'=>trim($banner),'mailFrom'=>$mf['resp'],'rcptTo'=>$rcpt['resp']];
-  } else {
-   $diag['probes']["{$h}({$ip}):{$p}"]=['open'=>false,'error'=>"{$errno}: {$errstr}"];
-  }
- }
- if(($_GET['testSend']??'')==='1'){
-  $diag['testMxEzequiel']=ciarm_ticket_smtp_mx_send('e.conesa@ciarm.edu.mx','[Portal CIARM] Solicitud recibida TKT-2026-00030 (Limpieza)','<p>Prueba diagnóstico notificación TKT-2026-00030</p>');
-  $diag['testMxRodrigo']=ciarm_ticket_smtp_mx_send('r.valencia@ciarm.edu.mx','[Portal CIARM] Nueva tarea asignada TKT-2026-00030 — Prioridad CRITICA','<p>Prueba diagnóstico notificación TKT-2026-00030</p>');
- }
- ciarm_json_response(200,$diag);
-}
 $user=ciarm_session_user();
 $ticketPerf['session']=(microtime(true)-$ticketPerfStart)*1000;
 if($user===null)ciarm_json_response(401,['ok'=>false,'code'=>'UNAUTHENTICATED']);

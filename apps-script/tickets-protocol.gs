@@ -2,7 +2,7 @@
 var PORTAL_METADATA_LIMIT = 50000;
 var PORTAL_UPLOAD_LIMIT = 15 * 1024 * 1024;
 function verifyTicketRequest(envelope,signature) {
- var secret=PropertiesService.getScriptProperties().getProperty('TICKETS_ADMIN_SECRET');
+ var secret=PropertiesService.getScriptProperties().getProperty('TICKETS_ADMIN_SECRET')||PropertiesService.getScriptProperties().getProperty('TICKETS_SHARED_SECRET');
  if(!secret)adminFail('NOT_CONFIGURED');
  if(typeof envelope!=='string'||envelope.length>PORTAL_UPLOAD_LIMIT)adminFail('PAYLOAD_SIZE');
  if(!adminEqual(adminHex(Utilities.computeHmacSha256Signature(envelope,secret,Utilities.Charset.UTF_8)),signature))adminFail('INVALID_SIGNATURE');

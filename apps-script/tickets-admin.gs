@@ -61,7 +61,7 @@ function adminPermission(actor) {
 function handleAdminEnvelope(envelope,signature) {
  var lock=LockService.getScriptLock();var locked=false,request,clock=ticketPerfClock();
  try {
-  var secret=PropertiesService.getScriptProperties().getProperty('TICKETS_ADMIN_SECRET');
+  var secret=PropertiesService.getScriptProperties().getProperty('TICKETS_ADMIN_SECRET')||PropertiesService.getScriptProperties().getProperty('TICKETS_SHARED_SECRET');
   if(!secret) adminFail('NOT_CONFIGURED');
   if(typeof envelope!=='string'||envelope.length>50000) adminFail('INVALID_SIGNATURE');
   var expected=adminHex(Utilities.computeHmacSha256Signature(envelope,secret,Utilities.Charset.UTF_8));

@@ -376,11 +376,13 @@ function ciarm_ticket_send_raw_mime(string $to, string $subject, string $html, s
 
 function ciarm_ticket_smtp_mx_send(string $to, string $subject, string $html, string $mxHost = 'smtp.google.com', int $port = 25): array {
     $errno=0;$errstr='';
-    $fp=@stream_socket_client("tcp://{$mxHost}:{$port}",$errno,$errstr,6,STREAM_CLIENT_CONNECT);
-    if(!$fp)return ['ok'=>false,'stage'=>'connect','error'=>"{$errno}: {$errstr}"];
+    $ipv4=gethostbyname($mxHost);
+    $ctx=stream_context_create(['ssl'=>['peer_name'=>$mxHost,'verify_peer'=>false,'verify_peer_name'=>false]]);
+    $fp=@stream_socket_client("tcp://{$ipv4}:{$port}",$errno,$errstr,6,STREAM_CLIENT_CONNECT,$ctx);
+    if(!$fp)return ['ok'=>false,'stage'=>'connect','ip'=>$ipv4,'error'=>"{$errno}: {$errstr}"];
     stream_set_timeout($fp,8);
     $banner=ciarm_ticket_smtp_read($fp);
-    if((int)substr($banner,0,3)!==220){fclose($fp);return ['ok'=>false,'stage'=>'banner','error'=>trim($banner)];}
+    if((int)substr($banner,0,3)!==220){fclose($fp);return ['ok'=>false,'stage'=>'banner','ip'=>$ipv4,'error'=>trim($banner)];}
     $ehlo=ciarm_ticket_smtp_cmd($fp,'EHLO portal2.ciarm.edu.mx',[250]);
     if(!$ehlo['ok']){fclose($fp);return ['ok'=>false,'stage'=>'ehlo','error'=>$ehlo['resp']];}
     if(stripos($ehlo['resp'],'STARTTLS')!==false){
@@ -402,7 +404,7 @@ function ciarm_ticket_smtp_mx_send(string $to, string $subject, string $html, st
     @ciarm_ticket_smtp_cmd($fp,'QUIT',[221,250]);
     fclose($fp);
     if(!$endData['ok'])return ['ok'=>false,'stage'=>'data_body','error'=>$endData['resp']];
-    return ['ok'=>true,'stage'=>'sent','resp'=>$endData['resp']];
+    return ['ok'=>true,'stage'=>'sent','ip'=>$ipv4,'resp'=>$endData['resp']];
 }
 
 function ciarm_ticket_ensure_notifications(string $action, array $input, array $result, ?callable $mailer = null): array {

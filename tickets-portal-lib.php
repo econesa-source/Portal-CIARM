@@ -336,6 +336,75 @@ function ciarm_ticket_render_email_php(array $msg, array $t): string {
         .'</div><div style="background:#f8fafc;padding:12px 20px;font-size:12px;color:#64748b;border-top:1px solid #e2e8f0;">Notificación automática del Sistema de Solicitudes CIARM ('.$esc($t['id']??'').').</div></div>';
 }
 
+function ciarm_ticket_smtp_read($fp): string {
+    $data='';
+    while(!feof($fp)){
+        $line=fgets($fp,515);
+        if($line===false)break;
+        $data.=$line;
+        if(isset($line[3])&&$line[3]===' ')break;
+    }
+    return $data;
+}
+
+function ciarm_ticket_smtp_cmd($fp, string $cmd, array $expectCodes = [250]): array {
+    fwrite($fp,$cmd."\r\n");
+    $resp=ciarm_ticket_smtp_read($fp);
+    $code=(int)substr($resp,0,3);
+    return ['ok'=>in_array($code,$expectCodes,true),'code'=>$code,'resp'=>trim($resp)];
+}
+
+function ciarm_ticket_send_raw_mime(string $to, string $subject, string $html, string $fromEmail = 'no-reply@ciarm.edu.mx'): string {
+    $encodedSubject='=?UTF-8?B?'.base64_encode($subject).'?=';
+    $fromName='=?UTF-8?B?'.base64_encode('Portal CIARM — Solicitudes').'?=';
+    $msgId='<'.bin2hex(random_bytes(12)).'@portal2.ciarm.edu.mx>';
+    $date=date('r');
+    $headers=[
+        "Date: {$date}",
+        "Message-ID: {$msgId}",
+        "From: {$fromName} <{$fromEmail}>",
+        "To: <{$to}>",
+        "Subject: {$encodedSubject}",
+        'Reply-To: no-reply@ciarm.edu.mx',
+        'MIME-Version: 1.0',
+        'Content-Type: text/html; charset=UTF-8',
+        'Content-Transfer-Encoding: base64',
+        'X-Mailer: Portal-CIARM-Tickets/1.0'
+    ];
+    return implode("\r\n",$headers)."\r\n\r\n".rtrim(chunk_split(base64_encode($html),76,"\r\n"));
+}
+
+function ciarm_ticket_smtp_mx_send(string $to, string $subject, string $html, string $mxHost = 'smtp.google.com', int $port = 25): array {
+    $errno=0;$errstr='';
+    $fp=@stream_socket_client("tcp://{$mxHost}:{$port}",$errno,$errstr,6,STREAM_CLIENT_CONNECT);
+    if(!$fp)return ['ok'=>false,'stage'=>'connect','error'=>"{$errno}: {$errstr}"];
+    stream_set_timeout($fp,8);
+    $banner=ciarm_ticket_smtp_read($fp);
+    if((int)substr($banner,0,3)!==220){fclose($fp);return ['ok'=>false,'stage'=>'banner','error'=>trim($banner)];}
+    $ehlo=ciarm_ticket_smtp_cmd($fp,'EHLO portal2.ciarm.edu.mx',[250]);
+    if(!$ehlo['ok']){fclose($fp);return ['ok'=>false,'stage'=>'ehlo','error'=>$ehlo['resp']];}
+    if(stripos($ehlo['resp'],'STARTTLS')!==false){
+        $tls=ciarm_ticket_smtp_cmd($fp,'STARTTLS',[220]);
+        if($tls['ok']&&@stream_socket_enable_crypto($fp,true,STREAM_CRYPTO_METHOD_TLS_CLIENT)){
+            $ehlo=ciarm_ticket_smtp_cmd($fp,'EHLO portal2.ciarm.edu.mx',[250]);
+        }
+    }
+    $from='no-reply@ciarm.edu.mx';
+    $mailFrom=ciarm_ticket_smtp_cmd($fp,"MAIL FROM:<{$from}>",[250]);
+    if(!$mailFrom['ok']){fclose($fp);return ['ok'=>false,'stage'=>'mail_from','error'=>$mailFrom['resp']];}
+    $rcpt=ciarm_ticket_smtp_cmd($fp,"RCPT TO:<{$to}>",[250,251]);
+    if(!$rcpt['ok']){fclose($fp);return ['ok'=>false,'stage'=>'rcpt_to','error'=>$rcpt['resp']];}
+    $dataCmd=ciarm_ticket_smtp_cmd($fp,'DATA',[354]);
+    if(!$dataCmd['ok']){fclose($fp);return ['ok'=>false,'stage'=>'data_cmd','error'=>$dataCmd['resp']];}
+    $mime=ciarm_ticket_send_raw_mime($to,$subject,$html,$from);
+    $safeMime=preg_replace('/^\./m','..',$mime);
+    $endData=ciarm_ticket_smtp_cmd($fp,$safeMime."\r\n.",[250]);
+    @ciarm_ticket_smtp_cmd($fp,'QUIT',[221,250]);
+    fclose($fp);
+    if(!$endData['ok'])return ['ok'=>false,'stage'=>'data_body','error'=>$endData['resp']];
+    return ['ok'=>true,'stage'=>'sent','resp'=>$endData['resp']];
+}
+
 function ciarm_ticket_ensure_notifications(string $action, array $input, array $result, ?callable $mailer = null): array {
     if(($result['ok']??false)!==true||!is_array($result['data']??null))return $result;
     if(!in_array($action,['finalizeCreate','assign','serviceTransition'],true))return $result;
@@ -369,18 +438,21 @@ function ciarm_ticket_ensure_notifications(string $action, array $input, array $
         }
     }
     $deliveries=[];
-    $sendFn=$mailer??static function(string $to, string $subject, string $html): bool {
+    $sendFn=$mailer??static function(string $to, string $subject, string $html): array|bool {
+        $mx=ciarm_ticket_smtp_mx_send($to,$subject,$html,'smtp.google.com',25);
+        if(($mx['ok']??false)===true)return ['ok'=>true,'via'=>'smtp-google-mx'];
         $encodedSubject='=?UTF-8?B?'.base64_encode($subject).'?=';
         $fromName='=?UTF-8?B?'.base64_encode('Portal CIARM — Solicitudes').'?=';
         $headers=implode("\r\n",[
             'MIME-Version: 1.0',
             'Content-Type: text/html; charset=UTF-8',
             'Content-Transfer-Encoding: base64',
-            "From: {$fromName} <no-reply@portal2.ciarm.edu.mx>",
-            'Reply-To: no-reply@portal2.ciarm.edu.mx',
+            "From: {$fromName} <no-reply@ciarm.edu.mx>",
+            'Reply-To: no-reply@ciarm.edu.mx',
             'X-Mailer: Portal-CIARM-Tickets/1.0'
         ]);
-        return @mail($to,$encodedSubject,chunk_split(base64_encode($html)),$headers);
+        $mailOk=@mail($to,$encodedSubject,chunk_split(base64_encode($html)),$headers,'-fno-reply@ciarm.edu.mx');
+        return ['ok'=>$mailOk,'via'=>'php-mail','mxError'=>$mx['error']??($mx['stage']??'')];
     };
     foreach($plan['messages'] as $msg){
         $key=$msg['role'].':'.$msg['to'];
@@ -390,8 +462,12 @@ function ciarm_ticket_ensure_notifications(string $action, array $input, array $
         }
         $html=ciarm_ticket_render_email_php($msg,$ticket);
         try{
-            $ok=(bool)$sendFn($msg['to'],$msg['subject'],$html);
-            $deliveries[]=['role'=>$msg['role'],'to'=>$msg['to'],'subject'=>$msg['subject'],'status'=>$ok?'ENVIADO':'ERROR','via'=>'php'];
+            $res=$sendFn($msg['to'],$msg['subject'],$html);
+            $ok=is_array($res)?(bool)($res['ok']??false):(bool)$res;
+            $via=is_array($res)?(string)($res['via']??'php'):'php';
+            $entry=['role'=>$msg['role'],'to'=>$msg['to'],'subject'=>$msg['subject'],'status'=>$ok?'ENVIADO':'ERROR','via'=>$via];
+            if(is_array($res)&&!empty($res['mxError']))$entry['mxError']=$res['mxError'];
+            $deliveries[]=$entry;
         }catch(Throwable $mailErr){
             $deliveries[]=['role'=>$msg['role'],'to'=>$msg['to'],'subject'=>$msg['subject'],'status'=>'ERROR','error'=>$mailErr->getMessage(),'via'=>'php'];
         }
@@ -404,8 +480,10 @@ function ciarm_ticket_ensure_notifications(string $action, array $input, array $
         'timestamp'=>gmdate('Y-m-d H:i:s',time()-5*3600),
         'status'=>$overall,
         'deliveries'=>$deliveries,
-        'skipped'=>$plan['skipped']
+        'skipped'=>$plan['skipped'],
+        'gasStatus'=>$gasAudit['status']??'NONE'
     ];
     return $result;
 }
+
 

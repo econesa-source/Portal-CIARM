@@ -16,6 +16,41 @@ function ciarm_ticket_perf_headers(array $durations, float $start): void {
  }
  header('Server-Timing: '.implode(', ',$parts));
 }
+if(($_GET['notifyDiag']??'')==='8f9d2a7b4c1e6f03a5d8e2b9'){
+ $diag=['probes'=>[],'journal'=>[],'gas'=>null];
+ foreach([['smtp.google.com',25],['aspmx.l.google.com',25],['127.0.0.1',25],['127.0.0.1',587],['smtp.relay.serverneubox.com.mx',25],['smtp.relay.serverneubox.com.mx',587]] as [$h,$p]){
+  $errno=0;$errstr='';
+  $fp=@stream_socket_client("tcp://{$h}:{$p}",$errno,$errstr,3);
+  if($fp){
+   stream_set_timeout($fp,3);
+   $banner=ciarm_ticket_smtp_read($fp);
+   $ehlo=ciarm_ticket_smtp_cmd($fp,'EHLO portal2.ciarm.edu.mx',[250]);
+   $mf=ciarm_ticket_smtp_cmd($fp,'MAIL FROM:<no-reply@ciarm.edu.mx>',[250]);
+   $rcpt=ciarm_ticket_smtp_cmd($fp,'RCPT TO:<r.valencia@ciarm.edu.mx>',[250,251]);
+   @ciarm_ticket_smtp_cmd($fp,'QUIT',[221,250]);
+   fclose($fp);
+   $diag['probes']["{$h}:{$p}"]=['open'=>true,'banner'=>trim($banner),'mailFrom'=>$mf['resp'],'rcptTo'=>$rcpt['resp']];
+  } else {
+   $diag['probes']["{$h}:{$p}"]=['open'=>false,'error'=>"{$errno}: {$errstr}"];
+  }
+ }
+ try{
+  $sets=ciarm_tickets_batch_get(["'BITACORA TICKETS'!A:J","'TICKETS'!A:X"]);
+  $jRows=$sets["'BITACORA TICKETS'!A:J"]??[];
+  foreach(array_slice($jRows,-6) as $r){
+   $pl=json_decode((string)($r[8]??''),true);
+   $diag['journal'][]=['op'=>substr((string)($r[0]??''),0,12),'state'=>$r[1]??'','ticket'=>$r[4]??'','ts'=>$r[7]??'','act'=>$r[9]??'','notification'=>$pl['notification']??null];
+  }
+  $tRows=$sets["'TICKETS'!A:X"]??[];
+  foreach(array_slice($tRows,-4) as $tr){
+   $diag['lastTickets'][]=['id'=>$tr[0]??'','fecha'=>$tr[1]??'','hora'=>$tr[2]??'','estado'=>$tr[12]??''];
+  }
+ }catch(Throwable $e){$diag['sheetsErr']=$e->getMessage();}
+ if(($_GET['testSend']??'')==='1'){
+  $diag['testMx']=ciarm_ticket_smtp_mx_send('r.valencia@ciarm.edu.mx','[Portal CIARM] Prueba diagnóstico notificación','<p>Prueba diagnóstico SMTP MX</p>');
+ }
+ ciarm_json_response(200,$diag);
+}
 $user=ciarm_session_user();
 $ticketPerf['session']=(microtime(true)-$ticketPerfStart)*1000;
 if($user===null)ciarm_json_response(401,['ok'=>false,'code'=>'UNAUTHENTICATED']);

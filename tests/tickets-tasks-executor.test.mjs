@@ -208,6 +208,6 @@ test('Simplificación de accesos en Mis Solicitudes y Seguimiento y validación'
   assert.equal(allowedRoute('#validar-solicitudes', withoutMis), false);
 
   const widgetContent = readFileSync('src/components/ticketsServiceWidget.js', 'utf8');
-  assert.match(widgetContent, /href="#solicitudes"[^>]*>Crear solicitud<\/a>/);
+  assert.match(widgetContent, /href="#solicitudes" class="solicitud-secondary-link">&#128203; Crear Solicitud<\/a>/);
   assert.match(widgetContent, /'Evaluar gestión':'Ver detalle'/);
 });

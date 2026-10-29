@@ -210,4 +210,11 @@ test('Simplificación de accesos en Mis Solicitudes y Seguimiento y validación'
   const widgetContent = readFileSync('src/components/ticketsServiceWidget.js', 'utf8');
   assert.match(widgetContent, /href="#solicitudes" class="solicitud-secondary-link">&#128203; Crear Solicitud<\/a>/);
   assert.match(widgetContent, /'Evaluar gestión':'Ver detalle'/);
+  assert.match(widgetContent, /kind==='mine'\?'Mis solicitudes y validación'/);
+  assert.doesNotMatch(widgetContent, /<a href="#validar-solicitudes">Mis solicitudes y validación<\/a>/);
+  assert.match(widgetContent, /id="service-confirm-dialog"/);
+  assert.match(widgetContent, /id="service-confirm-undo"[^>]*>Deshacer<\/button>/);
+  assert.match(widgetContent, /id="service-confirm-yes"[^>]*>Sí<\/button>/);
+  assert.match(widgetContent, /aria-label="Acciones de validación"/);
 });
+

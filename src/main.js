@@ -24,6 +24,7 @@ const routes = {
   '#config-servicio': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
   '#admin-solicitudes': () => import(`./components/adminSolicitudesWidget.js?v=${APP_VERSION}`),
   '#mis-obligaciones': () => import(`./components/misObligacionesWidget.js?v=${APP_VERSION}`),
+  '#normativa': () => import(`./components/normativaWidget.js?v=${APP_VERSION}`),
   '#ib': () => import(`./components/ibWidget.js?v=${APP_VERSION}`)
 };
 

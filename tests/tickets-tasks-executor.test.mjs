@@ -190,5 +190,24 @@ test('ticketsServiceWidget implementa botones individuales de acción y captura 
   assert.equal(content.match(emojiRegex), null, 'ticketsServiceWidget debe tener cero emojis casuales');
 });
 
+test('Simplificación de accesos en Mis Solicitudes y Seguimiento y validación', () => {
+  for (const file of ['src/components/dashboardWidget.js', 'src/components/dashboardVoiceflow-v1782.js']) {
+    const content = readFileSync(file, 'utf8');
+    assert.match(content, /href="#validar-solicitudes"[^>]*>📋 Mis Solicitudes<\/a>/);
+    assert.doesNotMatch(content, /href="#mis-solicitudes"[^>]*>📋 Mis Solicitudes<\/a>/);
+  }
 
+  const mainJs = readFileSync('src/main.js', 'utf8');
+  assert.match(mainJs, /'#mis-solicitudes':\s*\(\)\s*=>\s*import\(`\.\/components\/ticketsServiceWidget\.js/);
 
+  const requesterOnly = { verified: true, enforced: true, codes: ['INT_TARJETA', 'INT_MIS'] };
+  assert.equal(allowedRoute('#validar-solicitudes', requesterOnly), true);
+  assert.equal(allowedRoute('#mis-solicitudes', requesterOnly), true);
+
+  const withoutMis = { verified: true, enforced: true, codes: ['INT_TARJETA', 'INT_CREAR'] };
+  assert.equal(allowedRoute('#validar-solicitudes', withoutMis), false);
+
+  const widgetContent = readFileSync('src/components/ticketsServiceWidget.js', 'utf8');
+  assert.match(widgetContent, /href="#solicitudes"[^>]*>Crear solicitud<\/a>/);
+  assert.match(widgetContent, /'Evaluar gestión':'Ver detalle'/);
+});

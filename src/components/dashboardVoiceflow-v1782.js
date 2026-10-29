@@ -339,7 +339,7 @@ export function render(container, userSession) {
           <p class="exact-card-desc">Realiza solicitudes de Operaciones, Mantenimiento y otros servicios internos.</p>
           <div class="exact-card-btn-group">
             <a href="#solicitudes" class="exact-btn dark">+ Crear Solicitud</a>
-            <a href="#mis-solicitudes" class="exact-btn gold">📋 Mis Solicitudes</a>
+            <a href="#validar-solicitudes" class="exact-btn gold">📋 Mis Solicitudes</a>
           </div>
         </div>
 

@@ -12,7 +12,7 @@ const routes = {
   '#vision-gerencial': () => import(`./components/ticketsManagementWidget.js?v=${APP_VERSION}`),
   '#inicio': () => import(`./components/dashboardVoiceflow-v1782.js?v=${APP_VERSION}`),
   '#solicitudes': () => import(`./components/solicitudesWidget.js?v=${APP_VERSION}`),
-  '#mis-solicitudes': () => import(`./components/misSolicitudesWidget.js?v=${APP_VERSION}`),
+  '#mis-solicitudes': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
   '#mis-tareas': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
   '#historial-tareas': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
   '#validar-solicitudes': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),

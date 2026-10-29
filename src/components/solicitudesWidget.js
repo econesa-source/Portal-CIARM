@@ -22,7 +22,7 @@ export function renderSolicitudesWidget(container, userSession) {
     <div class="card-container-wide solicitud-card">
       <div class="solicitud-topbar">
         <a href="#inicio" class="card-top-nav-link">← Volver al Inicio</a>
-        <a href="#mis-solicitudes" class="solicitud-secondary-link">📋 Ver Mis Solicitudes</a>
+        <a href="#validar-solicitudes" class="solicitud-secondary-link">📋 Ver Mis Solicitudes</a>
       </div>
 
       <div class="solicitud-heading">
@@ -153,7 +153,7 @@ export function renderSolicitudesWidget(container, userSession) {
       lock();const result=await completeCreationDraft(user.correo,files,context.csrfToken,controller.signal,text=>status(text));
       if(controller.signal.aborted)return;
       done=true;status(`✅ Solicitud ${result.ticket.id} registrada. Redirigiendo a Mis Solicitudes…`,'success');
-      timer=setTimeout(()=>{if(!controller.signal.aborted)window.location.hash='#mis-solicitudes';},2500);
+      timer=setTimeout(()=>{if(!controller.signal.aborted)window.location.hash='#validar-solicitudes';},2500);
     }catch(error){status(error.code==='FILE_REQUIRED'?'Selecciona los archivos originales faltantes y reintenta.':'No se pudo confirmar la solicitud. Tus datos se conservaron; reintenta para recuperar el mismo registro.','error');}
     finally{busy=false;if(!controller.signal.aborted)lock();}
   });

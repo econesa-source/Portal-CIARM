@@ -27,7 +27,7 @@ export function applyDashboardAccess(container, response) {
         element.querySelector('a[href="#solicitudes"]')?.remove();
       }
       if (!canSeeAction(permissions, card, 'mis')) {
-        element.querySelector('a[href="#mis-solicitudes"]')?.remove();
+        element.querySelector('a[href="#mis-solicitudes"], a[href="#validar-solicitudes"]')?.remove();
       }
       // El acceso Administrar requiere además la validación del backend de tickets.
       if (!canSeeAction(permissions, card, 'gestionar')) {
@@ -65,7 +65,7 @@ export function allowedRoute(hash, response) {
   if (!permissions) return false;
   if (hash === '#compras') return canSeeCard(permissions, 'compras') && ['crear','mis','area','todos','cancelar','firmar','prorroga','excepcion','elegir','recibir'].some(action => canSeeAction(permissions,'compras',action));
   if (hash === '#solicitudes') return canSeeAction(permissions, 'solicitudes', 'crear');
-  if (hash === '#mis-solicitudes') return canSeeAction(permissions, 'solicitudes', 'mis');
+  if (hash === '#mis-solicitudes' || hash === '#validar-solicitudes') return canSeeAction(permissions, 'solicitudes', 'mis');
   if (hash === '#mis-tareas' || hash === '#historial-tareas') {
     return canSeeAction(permissions, 'tareas', 'gestionar') || canSeeAction(permissions, 'solicitudes', 'gestionar');
   }

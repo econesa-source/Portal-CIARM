@@ -26,6 +26,10 @@ check(hash_equals(hash_hmac('sha256',$probe['envelope'],'fixture-secret'),$probe
 check(ciarm_ticket_csrf_valid('stored','stored'),'Matching token');
 check(!ciarm_ticket_csrf_valid('stored','wrong'),'Invalid token');
 check(!ciarm_ticket_csrf_valid('',''),'Empty token');
-check(ciarm_ticket_origin_valid('https://portal2.ciarm.edu.mx','portal2.ciarm.edu.mx'),'Same origin');
+check(ciarm_ticket_origin_valid('https://portal2.ciarm.edu.mx','portal2.ciarm.edu.mx'),'Same origin preprod');
+check(ciarm_ticket_origin_valid('https://portal.ciarm.edu.mx','portal.ciarm.edu.mx'),'Same origin prod');
+check(ciarm_ticket_origin_valid('https://portal.ciarm.mx','portal.ciarm.mx'),'Same origin alias');
+check(!ciarm_ticket_origin_valid('https://portal2.ciarm.edu.mx','portal.ciarm.edu.mx'),'Cross-environment origin denied');
 check(!ciarm_ticket_origin_valid('https://malicious.invalid','portal2.ciarm.edu.mx'),'Cross origin denied');
 echo "Tickets authorization: checks passed\n";
+

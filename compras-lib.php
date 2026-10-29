@@ -8,6 +8,15 @@ function ciarm_compras_config(): array {
     $raw = @file_get_contents(ciarm_private_path('compras.json'));
     $stored = $raw === false ? [] : json_decode($raw, true);
     $config = is_array($stored) ? $stored : [];
+    $currentHost = strtolower(explode(':', trim((string)($_SERVER['HTTP_HOST'] ?? '')), 2)[0]);
+    if (in_array($currentHost, ['portal.ciarm.edu.mx', 'portal2.ciarm.edu.mx'], true)) {
+        if ($currentHost === 'portal.ciarm.edu.mx' && is_array($config['production'] ?? null)) {
+            $config = array_replace($config, $config['production']);
+        }
+        if (!empty($config['origin']) && preg_match('~^https://portal2?\.ciarm\.edu\.mx$~i', (string)$config['origin'])) {
+            $config['origin'] = 'https://' . $currentHost;
+        }
+    }
     foreach (['enabled'=>'CIARM_COMPRAS_ENABLED','writes_enabled'=>'CIARM_COMPRAS_WRITES_ENABLED',
       'gas_url'=>'CIARM_COMPRAS_GAS_URL','hmac_key'=>'CIARM_COMPRAS_HMAC_KEY',
       'origin'=>'CIARM_COMPRAS_ORIGIN'] as $field=>$env) {

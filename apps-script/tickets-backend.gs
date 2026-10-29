@@ -7,10 +7,11 @@
  * - OAuth todav\u00eda NO implementado
  */
 var CONFIG = {
-  TICKETS_SPREADSHEET_ID: '1o33Gw6xWsH64SXmaxaN7EDlSsW0fUExDjPE4cGpnPbs',
-  DM03_SPREADSHEET_ID: '1h14cqmHseHSN3FzrEtK_AwVimzDGkz9qx8LcGBCQuDY',
+  TICKETS_SPREADSHEET_ID: (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties && PropertiesService.getScriptProperties().getProperty('TICKETS_SPREADSHEET_ID')) || '1o33Gw6xWsH64SXmaxaN7EDlSsW0fUExDjPE4cGpnPbs',
+  DM03_SPREADSHEET_ID: (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties && PropertiesService.getScriptProperties().getProperty('DM03_SPREADSHEET_ID')) || '1h14cqmHseHSN3FzrEtK_AwVimzDGkz9qx8LcGBCQuDY',
   DM03_SHEET_NAME: 'Cat\u00e1logo de colaboradores',
-  ATTACHMENTS_FOLDER_ID: '103wSYfCuSwVKW_aTbTFr2O7b-JyuT619'
+  ATTACHMENTS_FOLDER_ID: (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties && PropertiesService.getScriptProperties().getProperty('ATTACHMENTS_FOLDER_ID')) || '103wSYfCuSwVKW_aTbTFr2O7b-JyuT619',
+  PORTAL_BASE_URL: (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties && PropertiesService.getScriptProperties().getProperty('PORTAL_BASE_URL')) || 'https://portal2.ciarm.edu.mx'
 };
 /**
  * Ejecuta esta funci\u00f3n una vez con "\u25b7 Ejecutar" en el editor de Apps Script
@@ -1127,7 +1128,9 @@ function ticketBuildNotificationPlan(book,info){
   var norm=String(to).trim().toLowerCase(),seenKey=role+':'+norm;
   if(seen[seenKey]){skipped.push({role:role,reason:'DESTINATARIO_DUPLICADO',target:norm});return;}
   seen[seenKey]=true;
-  messages.push({role:role,to:norm,subject:subject,heading:heading,intro:intro,ctaLabel:ctaLabel,ctaUrl:'https://portal2.ciarm.edu.mx/'+ctaHash,comment:comment,dependency:dependency,followAt:followAt,evidence:evidence});
+  var rawBase=(info&&info.portalBaseUrl)||(typeof CONFIG!=='undefined'&&CONFIG.PORTAL_BASE_URL)||(typeof PropertiesService!=='undefined'&&PropertiesService.getScriptProperties&&PropertiesService.getScriptProperties().getProperty('PORTAL_BASE_URL'))||'https://portal2.ciarm.edu.mx';
+  var baseUrl=String(rawBase).replace(/\/+$/,'');
+  messages.push({role:role,to:norm,subject:subject,heading:heading,intro:intro,ctaLabel:ctaLabel,ctaUrl:baseUrl+'/'+ctaHash,comment:comment,dependency:dependency,followAt:followAt,evidence:evidence});
  }
 
  switch(ev){

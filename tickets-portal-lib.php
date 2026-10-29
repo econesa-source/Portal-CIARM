@@ -88,7 +88,8 @@ function ciarm_portal_bridge(array $user,string $action,array $payload,bool $per
     $secret=@file_get_contents(ciarm_private_path('tickets-admin.key'));if($secret===false||strlen(trim($secret))<32)throw new RuntimeException('CONFIGURATION');
     $signed=ciarm_ticket_envelope($user,$action,$payload,trim($secret),null,null,$perfProbe);$limit=in_array($action,['uploadAttachment','uploadEvidence'],true)?15*1024*1024:50000;
     if(strlen($signed['envelope'])>$limit)throw new RuntimeException('PAYLOAD_SIZE');
-    $response=ciarm_http_json(CIARM_TICKETS_WEBAPP,['post'=>true,'headers'=>['Accept: application/json','Content-Type: application/json'],'body'=>json_encode($signed,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),'timeout'=>in_array($action,['uploadAttachment','uploadEvidence','finalizeCreate'],true)?60:25]);
+    $webapp=function_exists('ciarm_tickets_active_webapp')?ciarm_tickets_active_webapp():CIARM_TICKETS_WEBAPP;
+    $response=ciarm_http_json($webapp,['post'=>true,'headers'=>['Accept: application/json','Content-Type: application/json'],'body'=>json_encode($signed,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),'timeout'=>in_array($action,['uploadAttachment','uploadEvidence','finalizeCreate'],true)?60:25]);
     if($response['status']!==200||!is_bool($response['body']['ok']??null))throw new RuntimeException('UPSTREAM');return $response['body'];
 }
 
@@ -222,8 +223,9 @@ function ciarm_ticket_build_notification_plan_php(string $ev, array $t, ?array $
     $followAt=trim((string)($input['followAt']??($waitReq['followAt']??'')));
     $comment=trim((string)($input['comment']??($input['changes']['observacion']??($ev==='ASSIGN'?($t['observaciones']??''):''))));
     $evidence=(is_array($input['evidence']??null)&&count($input['evidence'])>0)?$input['evidence']:(is_array($meta['evidence']??null)?$meta['evidence']:[]);
+    $baseUrl=function_exists('ciarm_tickets_active_base_url')?rtrim(ciarm_tickets_active_base_url(),'/'):'https://portal2.ciarm.edu.mx';
     $messages=[];$skipped=[];$seen=[];
-    $enqueue=static function(string $role,?string $to,string $subject,string $heading,string $intro,string $ctaLabel,string $ctaHash) use (&$messages,&$skipped,&$seen,$t,$comment,$dependency,$followAt,$evidence): void {
+    $enqueue=static function(string $role,?string $to,string $subject,string $heading,string $intro,string $ctaLabel,string $ctaHash) use (&$messages,&$skipped,&$seen,$t,$comment,$dependency,$followAt,$evidence,$baseUrl): void {
         if($to===null||trim($to)===''){
             $skipped[]=['role'=>$role,'reason'=>'SIN_CORREO_'.strtoupper($role),'target'=>$role==='responsable'?($t['responsable']??'SIN ASIGNAR'):''];
             return;
@@ -237,7 +239,7 @@ function ciarm_ticket_build_notification_plan_php(string $ev, array $t, ?array $
         $seen[$seenKey]=true;
         $messages[]=[
             'role'=>$role,'to'=>$norm,'subject'=>$subject,'heading'=>$heading,'intro'=>$intro,
-            'ctaLabel'=>$ctaLabel,'ctaUrl'=>'https://portal2.ciarm.edu.mx/'.$ctaHash,
+            'ctaLabel'=>$ctaLabel,'ctaUrl'=>$baseUrl.'/'.$ctaHash,
             'comment'=>$comment,'dependency'=>$dependency,'followAt'=>$followAt,'evidence'=>$evidence
         ];
     };

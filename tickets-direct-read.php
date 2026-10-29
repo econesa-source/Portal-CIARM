@@ -8,6 +8,7 @@ require_once __DIR__ . '/tickets-lib.php';
  * Never changes Sheets; mutations and their canonical version validation stay in GAS.
  */
 const CIARM_TICKETS_SHEET_ID = '1o33Gw6xWsH64SXmaxaN7EDlSsW0fUExDjPE4cGpnPbs';
+const CIARM_TICKETS_PROD_SHEET_ID = '1o33Gw6xWsH64SXmaxaN7EDlSsW0fUExDjPE4cGpnPbs';
 const CIARM_TICKETS_HEADERS = [
  'ID TICKET','FECHA SOLICITUD','HORA SOLICITUD','ÁREA SOLICITANTE',
  'SOLICITANTE','CORREO SOLICITANTE','TIPO DE SOLICITUD','DESCRIPCIÓN',
@@ -17,12 +18,18 @@ const CIARM_TICKETS_HEADERS = [
  'PRIORIDAD SOLICITADA','PLAZO SOLICITADO','ARCHIVOS ADJUNTOS'
 ];
 
+function ciarm_tickets_active_sheet_id(?string $host = null): string {
+ $cfg = function_exists('ciarm_tickets_env_config') ? ciarm_tickets_env_config($host) : [];
+ if (!empty($cfg['sheetId'])) return (string)$cfg['sheetId'];
+ return !empty($cfg['isProduction']) ? CIARM_TICKETS_PROD_SHEET_ID : CIARM_TICKETS_SHEET_ID;
+}
+
 function ciarm_tickets_batch_url(array $ranges, string $render): string {
  if (!in_array($render,['UNFORMATTED_VALUE','FORMULA'],true)) throw new RuntimeException('CONFIGURATION');
  // The REST API expects repeated "ranges" query keys (not PHP's ranges[0]).
  $query='valueRenderOption='.rawurlencode($render).'&dateTimeRenderOption=SERIAL_NUMBER';
  foreach($ranges as $range) $query.='&ranges='.rawurlencode($range);
- return 'https://sheets.googleapis.com/v4/spreadsheets/'.CIARM_TICKETS_SHEET_ID
+ return 'https://sheets.googleapis.com/v4/spreadsheets/'.ciarm_tickets_active_sheet_id()
     .'/values:batchGet?'.$query;
 }
 

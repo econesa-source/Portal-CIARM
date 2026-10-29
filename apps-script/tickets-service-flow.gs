@@ -239,7 +239,9 @@ function ticketBuildNotificationPlan(book,info){
   var norm=String(to).trim().toLowerCase(),seenKey=role+':'+norm;
   if(seen[seenKey]){skipped.push({role:role,reason:'DESTINATARIO_DUPLICADO',target:norm});return;}
   seen[seenKey]=true;
-  messages.push({role:role,to:norm,subject:subject,heading:heading,intro:intro,ctaLabel:ctaLabel,ctaUrl:'https://portal2.ciarm.edu.mx/'+ctaHash,comment:comment,dependency:dependency,followAt:followAt,evidence:evidence});
+  var rawBase=(info&&info.portalBaseUrl)||(typeof CONFIG!=='undefined'&&CONFIG.PORTAL_BASE_URL)||(typeof PropertiesService!=='undefined'&&PropertiesService.getScriptProperties&&PropertiesService.getScriptProperties().getProperty('PORTAL_BASE_URL'))||'https://portal2.ciarm.edu.mx';
+  var baseUrl=String(rawBase).replace(/\/+$/,'');
+  messages.push({role:role,to:norm,subject:subject,heading:heading,intro:intro,ctaLabel:ctaLabel,ctaUrl:baseUrl+'/'+ctaHash,comment:comment,dependency:dependency,followAt:followAt,evidence:evidence});
  }
 
  switch(ev){

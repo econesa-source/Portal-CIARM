@@ -4,7 +4,41 @@ require_once __DIR__ . '/auth-lib.php';
 require_once __DIR__ . '/portal-permissions-lib.php';
 
 const CIARM_TICKETS_WEBAPP = 'https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec';
+const CIARM_TICKETS_PROD_WEBAPP = 'https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec';
+const CIARM_TICKETS_ALLOWED_HOSTS = ['portal2.ciarm.edu.mx', 'portal.ciarm.edu.mx', 'portal.ciarm.mx'];
 const CIARM_TICKET_PERMISSIONS_RANGE = "'Permisos de usuario'!A1:M1010";
+
+function ciarm_tickets_is_production_host(?string $host = null): bool {
+    $raw = $host ?? (string)($_SERVER['HTTP_HOST'] ?? '');
+    $clean = strtolower(explode(':', trim($raw), 2)[0]);
+    return in_array($clean, ['portal.ciarm.edu.mx', 'portal.ciarm.mx'], true);
+}
+
+function ciarm_tickets_env_config(?string $host = null): array {
+    $isProd = ciarm_tickets_is_production_host($host);
+    $raw = @file_get_contents(ciarm_private_path('tickets-env.json'));
+    $stored = $raw === false ? [] : json_decode($raw, true);
+    $envKey = $isProd ? 'production' : 'staging';
+    $branch = (is_array($stored) && is_array($stored[$envKey] ?? null)) ? $stored[$envKey] : [];
+    $defaultWebapp = $isProd ? CIARM_TICKETS_PROD_WEBAPP : CIARM_TICKETS_WEBAPP;
+    $envWebapp = getenv($isProd ? 'CIARM_TICKETS_PROD_WEBAPP' : 'CIARM_TICKETS_STAGING_WEBAPP');
+    $webapp = (is_string($envWebapp) && $envWebapp !== '') ? $envWebapp : (string)($branch['webapp'] ?? $defaultWebapp);
+    $envSheet = getenv($isProd ? 'CIARM_TICKETS_PROD_SHEET_ID' : 'CIARM_TICKETS_STAGING_SHEET_ID');
+    $sheetId = (is_string($envSheet) && $envSheet !== '') ? $envSheet : (string)($branch['sheetId'] ?? '');
+    $cleanHost = strtolower(explode(':', trim($host ?? (string)($_SERVER['HTTP_HOST'] ?? '')), 2)[0]);
+    $baseUrl = in_array($cleanHost, CIARM_TICKETS_ALLOWED_HOSTS, true)
+        ? ('https://' . $cleanHost)
+        : ($isProd ? 'https://portal.ciarm.edu.mx' : 'https://portal2.ciarm.edu.mx');
+    return ['env' => $envKey, 'isProduction' => $isProd, 'webapp' => $webapp, 'sheetId' => $sheetId, 'baseUrl' => $baseUrl];
+}
+
+function ciarm_tickets_active_webapp(?string $host = null): string {
+    return ciarm_tickets_env_config($host)['webapp'];
+}
+
+function ciarm_tickets_active_base_url(?string $host = null): string {
+    return ciarm_tickets_env_config($host)['baseUrl'];
+}
 
 function ciarm_ticket_permission(array $rows, string $email): bool {
     $email = strtolower(trim($email));
@@ -52,7 +86,9 @@ function ciarm_ticket_csrf_valid(string $stored, string $received): bool {
 }
 
 function ciarm_ticket_origin_valid(string $origin, string $host): bool {
-    return $host === 'portal2.ciarm.edu.mx' && $origin === 'https://portal2.ciarm.edu.mx';
+    $cleanHost = strtolower(explode(':', trim($host), 2)[0]);
+    return in_array($cleanHost, CIARM_TICKETS_ALLOWED_HOSTS, true)
+        && $origin === 'https://' . $cleanHost;
 }
 
 function ciarm_ticket_envelope(array $sessionUser, string $action, array $payload, string $secret, ?int $issuedAt = null, ?string $nonce = null, bool $perfProbe = false): array {
@@ -74,7 +110,7 @@ function ciarm_ticket_bridge(array $sessionUser, string $action, array $payload,
     $secret = @file_get_contents(ciarm_private_path('tickets-admin.key'));
     if ($secret === false || strlen(trim($secret)) < 32) throw new RuntimeException('not_configured');
     $signed = ciarm_ticket_envelope($sessionUser, $action, $payload, trim($secret), null, null, $perfProbe);
-    $response = ciarm_http_json(CIARM_TICKETS_WEBAPP, [
+    $response = ciarm_http_json(ciarm_tickets_active_webapp(), [
         'post' => true,
         'headers' => ['Accept: application/json', 'Content-Type: application/json'],
         'body' => json_encode($signed, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),

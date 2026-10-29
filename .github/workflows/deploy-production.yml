@@ -1,0 +1,146 @@
+name: Despliegue Automático Portal CIARM Producción a Neubox (FTP)
+
+on:
+  push:
+    branches:
+      - production
+  workflow_dispatch:
+
+concurrency:
+  group: neubox-deploy-production
+  cancel-in-progress: true
+
+jobs:
+  web-deploy:
+    name: Desplegar y validar Portal Producción (portal.ciarm.edu.mx)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del Repositorio
+        uses: actions/checkout@v4
+
+      - name: Crear prueba de despliegue
+        run: |
+          printf 'commit=%s\nrun=%s\nenv=production\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > deploy-proof.txt
+
+      - name: Diagnosticar raíz real de la cuenta FTP de Producción
+        env:
+          FTP_SERVER: ${{ secrets.NEUBOX_PROD_FTP_SERVER || secrets.NEUBOX_FTP_SERVER || 'portal2.ciarm.edu.mx' }}
+          FTP_USERNAME: ${{ secrets.NEUBOX_PROD_FTP_USERNAME || secrets.NEUBOX_FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.NEUBOX_PROD_FTP_PASSWORD || secrets.NEUBOX_FTP_PASSWORD }}
+        run: |
+          set -u
+          echo "=== FTP / ==="
+          curl -sS --retry 4 --retry-delay 3 --retry-all-errors --connect-timeout 10 --max-time 30 \
+            --ssl-reqd --user "$FTP_USERNAME:$FTP_PASSWORD" --list-only "ftp://$FTP_SERVER/" || true
+
+      - name: Sincronizar archivos por FTP a Neubox Producción — intento 1
+        id: ftp_attempt_1
+        continue-on-error: true
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.NEUBOX_PROD_FTP_SERVER || secrets.NEUBOX_FTP_SERVER || 'portal2.ciarm.edu.mx' }}
+          username: ${{ secrets.NEUBOX_PROD_FTP_USERNAME || secrets.NEUBOX_FTP_USERNAME }}
+          password: ${{ secrets.NEUBOX_PROD_FTP_PASSWORD || secrets.NEUBOX_FTP_PASSWORD }}
+          server-dir: ${{ secrets.NEUBOX_PROD_FTP_DIR || './' }}
+          port: 21
+          protocol: ftps
+          dangerous-clean-slate: false
+
+      - name: Esperar antes del reintento 2
+        if: steps.ftp_attempt_1.outcome == 'failure'
+        run: sleep 15
+
+      - name: Sincronizar archivos por FTP a Neubox Producción — intento 2
+        id: ftp_attempt_2
+        if: steps.ftp_attempt_1.outcome == 'failure'
+        continue-on-error: true
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.NEUBOX_PROD_FTP_SERVER || secrets.NEUBOX_FTP_SERVER || 'portal2.ciarm.edu.mx' }}
+          username: ${{ secrets.NEUBOX_PROD_FTP_USERNAME || secrets.NEUBOX_FTP_USERNAME }}
+          password: ${{ secrets.NEUBOX_PROD_FTP_PASSWORD || secrets.NEUBOX_FTP_PASSWORD }}
+          server-dir: ${{ secrets.NEUBOX_PROD_FTP_DIR || './' }}
+          port: 21
+          protocol: ftps
+          dangerous-clean-slate: false
+
+      - name: Esperar antes del reintento 3
+        if: steps.ftp_attempt_1.outcome == 'failure' && steps.ftp_attempt_2.outcome == 'failure'
+        run: sleep 30
+
+      - name: Sincronizar archivos por FTP a Neubox Producción — intento 3
+        if: steps.ftp_attempt_1.outcome == 'failure' && steps.ftp_attempt_2.outcome == 'failure'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.NEUBOX_PROD_FTP_SERVER || secrets.NEUBOX_FTP_SERVER || 'portal2.ciarm.edu.mx' }}
+          username: ${{ secrets.NEUBOX_PROD_FTP_USERNAME || secrets.NEUBOX_FTP_USERNAME }}
+          password: ${{ secrets.NEUBOX_PROD_FTP_PASSWORD || secrets.NEUBOX_FTP_PASSWORD }}
+          server-dir: ${{ secrets.NEUBOX_PROD_FTP_DIR || './' }}
+          port: 21
+          protocol: ftps
+          dangerous-clean-slate: false
+
+      - name: Validar que portal.ciarm.edu.mx publica exactamente este commit
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          PROD_BASE_URL: ${{ secrets.NEUBOX_PROD_BASE_URL || 'https://portal.ciarm.edu.mx' }}
+        run: |
+          set -uo pipefail
+          BASE="$PROD_BASE_URL"
+          ERRORS=0
+
+          get() {
+            local url="$1"
+            local out="$2"
+            curl -sS -L \
+              --retry 4 \
+              --retry-delay 3 \
+              --retry-all-errors \
+              --connect-timeout 10 \
+              --max-time 30 \
+              -H 'Cache-Control: no-cache' \
+              -o "$out" -w '%{http_code}' "$url"
+          }
+
+          echo "=== VALIDACIÓN PÚBLICA END-TO-END PRODUCCIÓN ($BASE) ==="
+
+          CODE="$(get "$BASE/deploy-proof.txt?sha=$EXPECTED_SHA" /tmp/proof.txt || echo 000)"
+          echo "deploy-proof.txt HTTP=$CODE"
+          if [ "$CODE" = "200" ] && grep -F "commit=$EXPECTED_SHA" /tmp/proof.txt >/dev/null; then
+            echo "OK: el commit desplegado es visible públicamente en Producción."
+          else
+            echo "ERROR: FTP informó upload, pero deploy-proof.txt no corresponde al sitio público ($BASE)."
+            ERRORS=1
+          fi
+
+          EXPECTED_VERSION="$(sed -nE "s/^const APP_VERSION = '([0-9]+\.[0-9]+\.[0-9]+)';$/\1/p" src/main.js)"
+          if [ -z "$EXPECTED_VERSION" ] || ! grep -F "src/main.js?v=$EXPECTED_VERSION" index.html >/dev/null; then
+            echo "ERROR: el router y el HTML de origen no coinciden en versión."
+            exit 1
+          fi
+          CODE="$(get "$BASE/?sha=$EXPECTED_SHA" /tmp/root.html || echo 000)"
+          echo "root HTTP=$CODE"
+          if [ "$CODE" = "200" ] && \
+             grep -F "src/main.js?v=$EXPECTED_VERSION" /tmp/root.html >/dev/null && \
+             grep -F 'assets/images/ciarm-logo-header-v2.png?v=18.1.0' /tmp/root.html >/dev/null; then
+            echo "OK: el sitio público usa el router CIARM v$EXPECTED_VERSION y referencia el logo CIARM."
+          else
+            echo "ERROR: el sitio público NO usa el router vigente v$EXPECTED_VERSION."
+            ERRORS=1
+          fi
+
+          CODE="$(get "$BASE/auth-session.php?sha=$EXPECTED_SHA" /tmp/auth-session.json || echo 000)"
+          echo "auth-session.php HTTP=$CODE"
+          if [ "$CODE" = "401" ] && grep -F '"not_authenticated"' /tmp/auth-session.json >/dev/null; then
+            echo "OK: endpoint de sesión PHP ejecuta y deniega sesión inexistente."
+          else
+            echo "ERROR: auth-session.php no está ejecutándose como endpoint PHP."
+            ERRORS=1
+          fi
+
+          if [ "$ERRORS" -ne 0 ]; then
+            echo "VALIDACIÓN FALLIDA: el contenido subido por FTP y el contenido servido por $BASE NO son el mismo deployment."
+            exit 1
+          fi
+
+          echo "VALIDACIÓN OK: $BASE publica este commit de Producción."

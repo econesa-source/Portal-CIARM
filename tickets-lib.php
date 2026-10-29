@@ -4,7 +4,7 @@ require_once __DIR__ . '/auth-lib.php';
 require_once __DIR__ . '/portal-permissions-lib.php';
 
 const CIARM_TICKETS_WEBAPP = 'https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec';
-const CIARM_TICKETS_PROD_WEBAPP = 'https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec';
+const CIARM_TICKETS_PROD_WEBAPP = 'https://script.google.com/macros/s/AKfycbw9GAh1DLebjwnDviClopsEdmGyFeeZFz4mmj_lJMF3byuadI17X1GS0jyC5tsqLK68/exec';
 const CIARM_TICKETS_ALLOWED_HOSTS = ['portal2.ciarm.edu.mx', 'portal.ciarm.edu.mx', 'portal.ciarm.mx'];
 const CIARM_TICKET_PERMISSIONS_RANGE = "'Permisos de usuario'!A1:M1010";
 

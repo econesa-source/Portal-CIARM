@@ -153,3 +153,259 @@ function ciarm_upload_evidence_to_drive(array $file, array $user): array {
     return ['url'=>$url,'name'=>$fileName,'id'=>$fileId];
 }
 
+function ciarm_ticket_resolve_admins_php(?array $policy): array {
+    $emails=[];$seen=[];
+    $add=static function(mixed $raw) use (&$emails,&$seen): void {
+        $email=strtolower(trim((string)($raw??'')));
+        if($email!==''&&filter_var($email,FILTER_VALIDATE_EMAIL)&&!isset($seen[$email])){
+            $seen[$email]=true;$emails[]=$email;
+        }
+    };
+    if(is_array($policy['admins']??null)&&count($policy['admins'])>0){
+        foreach($policy['admins'] as $a){
+            $add(is_string($a)?$a:($a['email']??''));
+        }
+        if(count($emails)>0)return $emails;
+    }
+    if(is_array($policy['responsibles']??null)){
+        foreach($policy['responsibles'] as $r){
+            $em=strtolower(trim((string)($r['email']??'')));
+            if($em!==''&&(($r['admin']??false)===true||in_array($em,['d.lara@ciarm.edu.mx','e.conesa@ciarm.edu.mx','r.valencia@ciarm.edu.mx'],true))){
+                $add($em);
+            }
+        }
+    }
+    foreach(['d.lara@ciarm.edu.mx','e.conesa@ciarm.edu.mx','r.valencia@ciarm.edu.mx'] as $defaultAdmin){
+        $add($defaultAdmin);
+    }
+    return $emails;
+}
+
+function ciarm_ticket_resolve_executor_php(array $ticket, ?array $meta, ?array $policy): ?string {
+    $direct=strtolower(trim((string)($meta['email']??'')));
+    if($direct!==''&&filter_var($direct,FILTER_VALIDATE_EMAIL))return $direct;
+    if(is_array($meta['stageOwners']??null)){
+        foreach(['resolve','contain','start'] as $st){
+            $stEmail=strtolower(trim((string)($meta['stageOwners'][$st]??'')));
+            if($stEmail!==''&&filter_var($stEmail,FILTER_VALIDATE_EMAIL))return $stEmail;
+        }
+    }
+    $resp=trim((string)($ticket['responsable']??''));
+    if($resp===''||strtoupper($resp)==='SIN ASIGNAR')return null;
+    $cleanResp=strtolower(trim((string)preg_replace('/^PRUEBA\s*[\x{2014}\x{2013}-]\s*/iu','',$resp)));
+    if(is_array($policy['responsibles']??null)){
+        foreach($policy['responsibles'] as $r){
+            $rEmail=strtolower(trim((string)($r['email']??'')));
+            $rName=trim((string)($r['name']??''));
+            if($rEmail===''||$rName==='')continue;
+            $cleanRName=strtolower(trim((string)preg_replace('/^PRUEBA\s*[\x{2014}\x{2013}-]\s*/iu','',$rName)));
+            if(strtolower($rName)===strtolower($resp)||$cleanRName===$cleanResp||$cleanRName===strtolower($resp))return $rEmail;
+        }
+    }
+    if($cleanResp==='daniel lara')return 'd.lara@ciarm.edu.mx';
+    if($cleanResp==='ezequiel conesa')return 'e.conesa@ciarm.edu.mx';
+    if($cleanResp==='rodrigo valencia')return 'r.valencia@ciarm.edu.mx';
+    return null;
+}
+
+function ciarm_ticket_build_notification_plan_php(string $ev, array $t, ?array $meta, ?array $policy, array $input): ?array {
+    $ownerRaw=strtolower(trim((string)($t['correo']??'')));
+    $ownerEmail=($ownerRaw!==''&&filter_var($ownerRaw,FILTER_VALIDATE_EMAIL))?$ownerRaw:null;
+    $execEmail=ciarm_ticket_resolve_executor_php($t,$meta,$policy);
+    $adminEmails=ciarm_ticket_resolve_admins_php($policy);
+    $waitReq=$meta['waitRequest']??null;
+    if(!is_array($waitReq)&&is_array($meta['waits']??null)&&count($meta['waits'])>0){
+        $lastWait=$meta['waits'][count($meta['waits'])-1];
+        $waitReq=$lastWait['request']??null;
+    }
+    $dependency=trim((string)($input['dependency']??($waitReq['dependency']??'')));
+    $followAt=trim((string)($input['followAt']??($waitReq['followAt']??'')));
+    $comment=trim((string)($input['comment']??($input['changes']['observacion']??($ev==='ASSIGN'?($t['observaciones']??''):''))));
+    $evidence=(is_array($input['evidence']??null)&&count($input['evidence'])>0)?$input['evidence']:(is_array($meta['evidence']??null)?$meta['evidence']:[]);
+    $messages=[];$skipped=[];$seen=[];
+    $enqueue=static function(string $role,?string $to,string $subject,string $heading,string $intro,string $ctaLabel,string $ctaHash) use (&$messages,&$skipped,&$seen,$t,$comment,$dependency,$followAt,$evidence): void {
+        if($to===null||trim($to)===''){
+            $skipped[]=['role'=>$role,'reason'=>'SIN_CORREO_'.strtoupper($role),'target'=>$role==='responsable'?($t['responsable']??'SIN ASIGNAR'):''];
+            return;
+        }
+        $norm=strtolower(trim($to));
+        $seenKey=$role.':'.$norm;
+        if(isset($seen[$seenKey])){
+            $skipped[]=['role'=>$role,'reason'=>'DESTINATARIO_DUPLICADO','target'=>$norm];
+            return;
+        }
+        $seen[$seenKey]=true;
+        $messages[]=[
+            'role'=>$role,'to'=>$norm,'subject'=>$subject,'heading'=>$heading,'intro'=>$intro,
+            'ctaLabel'=>$ctaLabel,'ctaUrl'=>'https://portal2.ciarm.edu.mx/'.$ctaHash,
+            'comment'=>$comment,'dependency'=>$dependency,'followAt'=>$followAt,'evidence'=>$evidence
+        ];
+    };
+    $id=(string)($t['id']??'');$tipo=(string)($t['tipo']??'');$sol=(string)($t['solicitante']??'');
+    $area=(string)($t['area']??'');$resp=(string)($t['responsable']??'SIN ASIGNAR');
+    $prio=(string)($t['prioridad']??'POR DEFINIR');$comp=(string)($t['fechaCompromiso']??'por definir');
+    $est=(string)($t['estado']??'');
+    switch($ev){
+        case 'CREATE':
+            $enqueue('solicitante',$ownerEmail,"[Portal CIARM] Solicitud recibida {$id} ({$tipo})",'Hemos recibido tu solicitud',"Tu solicitud ha sido registrada con el folio {$id} en estado NUEVO y fue turnada a Administración para su clasificación y asignación.",'Ver mis solicitudes','#validar-solicitudes');
+            foreach($adminEmails as $adm){
+                $enqueue('admin',$adm,"[Portal CIARM] Nueva solicitud por asignar {$id} — {$tipo}",'Nueva solicitud pendiente de asignación',"Se ha registrado la solicitud {$id} de {$sol} ({$area}) en estado NUEVO. Ingresa al panel para asignarla.",'Asignar solicitud','#admin-solicitudes');
+            }
+            break;
+        case 'ASSIGN':
+            $enqueue('solicitante',$ownerEmail,"[Portal CIARM] Solicitud asignada {$id} ({$est})",'Tu solicitud ha sido asignada',"La solicitud {$id} fue asignada a {$resp} con prioridad {$prio} y fecha compromiso ".($comp!==''?$comp:'por definir').'.','Dar seguimiento','#validar-solicitudes');
+            $enqueue('responsable',$execEmail,"[Portal CIARM] Nueva tarea asignada {$id} — Prioridad {$prio}",'Tienes una solicitud asignada',"Se te ha asignado la solicitud {$id} ({$tipo}) solicitada por {$sol} ({$area}), con prioridad {$prio} y fecha compromiso ".($comp!==''?$comp:'por definir').'.','Gestionar mis tareas','#mis-tareas');
+            break;
+        case 'START':
+            $enqueue('solicitante',$ownerEmail,"[Portal CIARM] Solicitud en proceso {$id}",'Tu solicitud está siendo atendida',"El responsable {$resp} ha iniciado la atención de tu solicitud {$id}, cambiando su estado a EN PROCESO.",'Ver seguimiento','#validar-solicitudes');
+            break;
+        case 'CONTAIN':
+            $enqueue('solicitante',$ownerEmail,"[Portal CIARM] Contención registrada en solicitud {$id}",'Avance de contención en tu solicitud',"El responsable {$resp} registró una acción de contención para tu solicitud {$id} ({$est}).",'Ver seguimiento','#validar-solicitudes');
+            break;
+        case 'WAIT_REQUEST':
+            foreach($adminEmails as $adm){
+                $enqueue('admin',$adm,"[Portal CIARM] Solicitud de pausa por autorizar {$id}",'Solicitud de espera pendiente de autorización',"El responsable {$resp} solicitó poner en espera la solicitud {$id} por dependencia: ".($dependency!==''?$dependency:'No especificada').'. Requiere autorización administrativa para pausar el SLA.','Revisar y autorizar','#seguimiento-servicio');
+            }
+            break;
+        case 'WAIT_APPROVE':
+            $enqueue('solicitante',$ownerEmail,"[Portal CIARM] Solicitud en espera {$id}",'Tu solicitud se encuentra en espera',"Tu solicitud {$id} cambió al estado EN ESPERA debido a la dependencia: ".($dependency!==''?$dependency:'Externa').'. Próximo seguimiento programado: '.($followAt!==''?$followAt:'por definir').'.','Ver detalle','#validar-solicitudes');
+            $enqueue('responsable',$execEmail,"[Portal CIARM] Pausa autorizada en tarea {$id} (EN ESPERA)",'Espera autorizada por Administración',"Se ha autorizado la pausa de la solicitud {$id} (EN ESPERA). El reloj de nivel de servicio permanece pausado hasta su reanudación.",'Ver mis tareas','#mis-tareas');
+            break;
+        case 'RESUME':
+            $enqueue('solicitante',$ownerEmail,"[Portal CIARM] Atención reanudada en solicitud {$id}",'Se reanudó la atención de tu solicitud',"La atención de tu solicitud {$id} ha sido reanudada y se encuentra nuevamente EN PROCESO.",'Ver seguimiento','#validar-solicitudes');
+            $enqueue('responsable',$execEmail,"[Portal CIARM] Tarea reanudada {$id} (EN PROCESO)",'Tarea reactivada para atención',"Administración ha reanudado la solicitud {$id}, regresando al estado EN PROCESO.",'Ir a mis tareas','#mis-tareas');
+            break;
+        case 'RESOLVE':
+            $enqueue('solicitante',$ownerEmail,"[Portal CIARM] Solicitud resuelta {$id} — Pendiente de tu validación",'Tu solicitud ha sido marcada como resuelta',"El responsable {$resp} marcó tu solicitud {$id} como RESUELTO. Por favor ingresa al portal para validar la entrega (Conforme — cerrar o Disconforme — devolver).",'Validar mi solicitud','#validar-solicitudes');
+            foreach($adminEmails as $adm){
+                $enqueue('admin',$adm,"[Portal CIARM] Solicitud resuelta por validar {$id}",'Solicitud en espera de validación del solicitante',"El responsable {$resp} marcó la solicitud {$id} como RESUELTO. Queda pendiente la validación de conformidad por parte de {$sol}.",'Ver cumplimiento','#seguimiento-servicio');
+            }
+            break;
+        case 'ACCEPT':
+            $enqueue('solicitante',$ownerEmail,"[Portal CIARM] Solicitud cerrada con conformidad {$id}",'Tu solicitud ha sido cerrada',"Se registró tu validación de conformidad y la solicitud {$id} ha quedado concluida en estado CERRADO.",'Ver mis solicitudes','#validar-solicitudes');
+            $enqueue('responsable',$execEmail,"[Portal CIARM] Conformidad confirmada en tarea {$id} (CERRADO)",'El solicitante validó tu entrega con conformidad',"El solicitante {$sol} aceptó la solución de la solicitud {$id}, quedando formalmente en estado CERRADO.",'Ver historial de tareas','#historial-tareas');
+            foreach($adminEmails as $adm){
+                $enqueue('admin',$adm,"[Portal CIARM] Cierre definitivo de solicitud {$id} (CERRADO)",'Solicitud cerrada con conformidad',"El solicitante {$sol} confirmó la resolución de la solicitud {$id} atendida por {$resp}, pasando a estado CERRADO.",'Ver cumplimiento','#seguimiento-servicio');
+            }
+            break;
+        case 'REJECT':
+            $enqueue('responsable',$execEmail,"[Portal CIARM] Solicitud devuelta por disconformidad {$id} (ASIGNADO)",'Solicitud reabierta por disconformidad del solicitante',"El solicitante {$sol} devolvió la solicitud {$id} indicando disconformidad. La tarea regresa al estado ASIGNADO para su atención.",'Atender en mis tareas','#mis-tareas');
+            foreach($adminEmails as $adm){
+                $enqueue('admin',$adm,"[Portal CIARM] Alerta de devolución en solicitud {$id} (ASIGNADO)",'Devolución por disconformidad registrada',"El solicitante {$sol} rechazó la resolución de la solicitud {$id} asignada a {$resp}. El ticket regresó al estado ASIGNADO.",'Ver cumplimiento','#seguimiento-servicio');
+            }
+            break;
+        default:
+            return null;
+    }
+    return ['messages'=>$messages,'skipped'=>$skipped];
+}
+
+function ciarm_ticket_render_email_php(array $msg, array $t): string {
+    $esc=static fn(mixed $s): string=>htmlspecialchars((string)($s??''),ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
+    $rows=[
+        ['Folio',$t['id']??''],
+        ['Estado actual',$t['estado']??''],
+        ['Tipo de solicitud',$t['tipo']??''],
+        ['Solicitante',($t['solicitante']??'').(!empty($t['area'])?' ('.$t['area'].')':'')],
+        ['Responsable',!empty($t['responsable'])?$t['responsable']:'SIN ASIGNAR'],
+        ['Prioridad',!empty($t['prioridad'])?$t['prioridad']:(!empty($t['urgencia'])?$t['urgencia']:'POR DEFINIR')],
+        ['Fecha compromiso',!empty($t['fechaCompromiso'])?$t['fechaCompromiso']:(!empty($t['plazo'])?$t['plazo']:'Por definir')],
+        ['Descripción',$t['descripcion']??'']
+    ];
+    if(!empty($msg['comment']))$rows[]=['Comentario / Detalle',$msg['comment']];
+    if(!empty($msg['dependency']))$rows[]=['Dependencia de espera',$msg['dependency']];
+    if(!empty($msg['followAt']))$rows[]=['Próximo seguimiento',$msg['followAt']];
+    $htmlRows='';
+    foreach($rows as $r){
+        $htmlRows.='<tr><td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#334155;width:36%;">'.$esc($r[0]).'</td><td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#0f172a;">'.$esc($r[1]).'</td></tr>';
+    }
+    $htmlEvidence='';
+    if(!empty($msg['evidence'])&&is_array($msg['evidence'])){
+        $items='';
+        foreach($msg['evidence'] as $idx=>$u){
+            $items.='<li><a href="'.$esc($u).'" style="color:#1d4ed8;">Evidencia '.($idx+1).'</a></li>';
+        }
+        $htmlEvidence='<p style="margin:14px 0 6px;font-weight:600;color:#334155;">Evidencia adjunta:</p><ul style="margin:0 0 16px;padding-left:20px;">'.$items.'</ul>';
+    }
+    return '<div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;background:#ffffff;">'
+        .'<div style="background:#0f172a;color:#ffffff;padding:16px 20px;"><span style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#94a3b8;">Portal CIARM · Gestión de Solicitudes</span><h2 style="margin:6px 0 0;font-size:18px;">'.$esc($msg['heading']).'</h2></div>'
+        .'<div style="padding:20px;"><p style="margin:0 0 16px;color:#1e293b;line-height:1.5;">'.$esc($msg['intro']).'</p>'
+        .'<table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;">'.$htmlRows.'</table>'
+        .$htmlEvidence
+        .'<div style="margin-top:20px;"><a href="'.$esc($msg['ctaUrl']).'" style="display:inline-block;background:#1e3a8a;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:600;font-size:14px;">'.$esc($msg['ctaLabel']).'</a></div>'
+        .'</div><div style="background:#f8fafc;padding:12px 20px;font-size:12px;color:#64748b;border-top:1px solid #e2e8f0;">Notificación automática del Sistema de Solicitudes CIARM ('.$esc($t['id']??'').').</div></div>';
+}
+
+function ciarm_ticket_ensure_notifications(string $action, array $input, array $result, ?callable $mailer = null): array {
+    if(($result['ok']??false)!==true||!is_array($result['data']??null))return $result;
+    if(!in_array($action,['finalizeCreate','assign','serviceTransition'],true))return $result;
+    $gasAudit=$result['data']['notification']??null;
+    if(is_array($gasAudit)&&($gasAudit['status']??'')==='ENVIADO')return $result;
+    $ev=match($action){'finalizeCreate'=>'CREATE','assign'=>'ASSIGN','serviceTransition'=>(string)($input['event']??''),default=>''};
+    if($ev==='')return $result;
+    $ticket=is_array($result['data']['ticket']??null)?$result['data']['ticket']:[];
+    $meta=is_array($result['data']['service']??null)?$result['data']['service']:null;
+    $policy=is_array($meta['policy']??null)?$meta['policy']:null;
+    if($policy===null&&function_exists('ciarm_tickets_batch_get')){
+        try{
+            $cfgRange="'CONFIG SERVICIO'!A:F";
+            $sets=ciarm_tickets_batch_get([$cfgRange]);
+            $rows=$sets[$cfgRange]??[];
+            if(is_array($rows)&&count($rows)>1){
+                $last=$rows[count($rows)-1];
+                $decoded=json_decode((string)($last[1]??''),true);
+                if(is_array($decoded))$policy=$decoded;
+            }
+        }catch(Throwable $ignored){}
+    }
+    $plan=ciarm_ticket_build_notification_plan_php($ev,$ticket,$meta,$policy,$input);
+    if($plan===null)return $result;
+    $alreadySent=[];
+    if(is_array($gasAudit['deliveries']??null)){
+        foreach($gasAudit['deliveries'] as $d){
+            if(($d['status']??'')==='ENVIADO'){
+                $alreadySent[($d['role']??'').':'.strtolower(trim((string)($d['to']??'')))]=$d;
+            }
+        }
+    }
+    $deliveries=[];
+    $sendFn=$mailer??static function(string $to, string $subject, string $html): bool {
+        $encodedSubject='=?UTF-8?B?'.base64_encode($subject).'?=';
+        $fromName='=?UTF-8?B?'.base64_encode('Portal CIARM — Solicitudes').'?=';
+        $headers=implode("\r\n",[
+            'MIME-Version: 1.0',
+            'Content-Type: text/html; charset=UTF-8',
+            'Content-Transfer-Encoding: base64',
+            "From: {$fromName} <no-reply@portal2.ciarm.edu.mx>",
+            'Reply-To: no-reply@portal2.ciarm.edu.mx',
+            'X-Mailer: Portal-CIARM-Tickets/1.0'
+        ]);
+        return @mail($to,$encodedSubject,chunk_split(base64_encode($html)),$headers);
+    };
+    foreach($plan['messages'] as $msg){
+        $key=$msg['role'].':'.$msg['to'];
+        if(isset($alreadySent[$key])){
+            $deliveries[]=$alreadySent[$key];
+            continue;
+        }
+        $html=ciarm_ticket_render_email_php($msg,$ticket);
+        try{
+            $ok=(bool)$sendFn($msg['to'],$msg['subject'],$html);
+            $deliveries[]=['role'=>$msg['role'],'to'=>$msg['to'],'subject'=>$msg['subject'],'status'=>$ok?'ENVIADO':'ERROR','via'=>'php'];
+        }catch(Throwable $mailErr){
+            $deliveries[]=['role'=>$msg['role'],'to'=>$msg['to'],'subject'=>$msg['subject'],'status'=>'ERROR','error'=>$mailErr->getMessage(),'via'=>'php'];
+        }
+    }
+    $sentCount=count(array_filter($deliveries,static fn($d)=>($d['status']??'')==='ENVIADO'));
+    $errCount=count(array_filter($deliveries,static fn($d)=>($d['status']??'')==='ERROR'));
+    $overall=count($deliveries)===0?'OMITIDO':($errCount===0?'ENVIADO':($sentCount>0?'ERROR_PARCIAL':'ERROR'));
+    $result['data']['notification']=[
+        'event'=>$ev,
+        'timestamp'=>gmdate('Y-m-d H:i:s',time()-5*3600),
+        'status'=>$overall,
+        'deliveries'=>$deliveries,
+        'skipped'=>$plan['skipped']
+    ];
+    return $result;
+}
+

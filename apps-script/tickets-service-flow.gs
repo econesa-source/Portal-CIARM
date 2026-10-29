@@ -135,8 +135,8 @@ function serviceTransition(book,actor,input){
   set('ÚLTIMA ACTUALIZACIÓN',now);var payload={request:input,service:{before:meta,after:next}};if(Utilities.newBlob(JSON.stringify(payload)).getBytes().length>45000)adminFail('PAYLOAD_SIZE');journal.sheet.appendRow([input.operationId,'PENDIENTE',actor,hash,input.ticketId,JSON.stringify(before),JSON.stringify(after),now,JSON.stringify(payload),'SERVICIO']);event={row:[input.operationId,'PENDIENTE',actor,hash,input.ticketId,JSON.stringify(before),JSON.stringify(after),now,JSON.stringify(payload),'SERVICIO'],index:journal.sheet.getLastRow()};SpreadsheetApp.flush();
  }
  var prior=JSON.parse(event.row[5]),target=JSON.parse(event.row[6]),data=JSON.parse(event.row[8]),current=adminSnapshot(raw);if(current.some(function(v,i){return JSON.stringify(v)!==JSON.stringify(prior[i])&&JSON.stringify(v)!==JSON.stringify(target[i]);}))adminFail('CONFLICT');target.forEach(function(v,i){if(JSON.stringify(v)===JSON.stringify(current[i]))return;if(v&&typeof v==='object'&&v.formula)adminFail('SCHEMA');if(['FECHA INICIO','FECHA TERMINACIÓN','FECHA COMPROMISO','ÚLTIMA ACTUALIZACIÓN'].indexOf(raw.table.headers[i])>=0&&v)v=serviceDate(v.length===10?v+' 00:00:00':v);raw.table.sheet.getRange(raw.rowNumber,i+1).setValue(v);});SpreadsheetApp.flush();serviceSaveCase(book,input.ticketId,data.service.before,data.service.after);var confirmedRaw=adminFindTicket(book,input.ticketId);if(adminHash(adminSnapshot(confirmedRaw))!==adminHash(target))adminFail('CONFLICT');journal.sheet.getRange(event.index,2).setValue('CONFIRMADO');SpreadsheetApp.flush();
- ticketNotifyTransition(book,{event:input.event,operationId:input.operationId,journalSheet:journal.sheet,journalRowNumber:event.index,ticket:adminTicketView(confirmedRaw),meta:data.service.after,actor:actor,comment:input.comment||'',evidence:input.evidence||[],dependency:input.dependency||'',followAt:input.followAt||''});
- return serviceDetail(book,actor,input.ticketId);
+ var audit=ticketNotifyTransition(book,{event:input.event,operationId:input.operationId,journalSheet:journal.sheet,journalRowNumber:event.index,ticket:adminTicketView(confirmedRaw),meta:data.service.after,actor:actor,comment:input.comment||'',evidence:input.evidence||[],dependency:input.dependency||'',followAt:input.followAt||''});
+ var detail=serviceDetail(book,actor,input.ticketId);if(audit)detail.notification=audit;return detail;
 }
 function serviceList(book,actor,kind){
  var admin=adminPermission(actor);
@@ -236,9 +236,9 @@ function ticketBuildNotificationPlan(book,info){
 
  function enqueue(role,to,subject,heading,intro,ctaLabel,ctaHash){
   if(!to){skipped.push({role:role,reason:'SIN_CORREO_'+role.toUpperCase(),target:role==='responsable'?(t.responsable||'SIN ASIGNAR'):''});return;}
-  var norm=String(to).trim().toLowerCase();
-  if(seen[norm]){skipped.push({role:role,reason:'DESTINATARIO_DUPLICADO',target:norm});return;}
-  seen[norm]=true;
+  var norm=String(to).trim().toLowerCase(),seenKey=role+':'+norm;
+  if(seen[seenKey]){skipped.push({role:role,reason:'DESTINATARIO_DUPLICADO',target:norm});return;}
+  seen[seenKey]=true;
   messages.push({role:role,to:norm,subject:subject,heading:heading,intro:intro,ctaLabel:ctaLabel,ctaUrl:'https://portal2.ciarm.edu.mx/'+ctaHash,comment:comment,dependency:dependency,followAt:followAt,evidence:evidence});
  }
 

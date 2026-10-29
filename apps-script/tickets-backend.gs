@@ -13,6 +13,14 @@ var CONFIG = {
   ATTACHMENTS_FOLDER_ID: '103wSYfCuSwVKW_aTbTFr2O7b-JyuT619'
 };
 /**
+ * Ejecuta esta funci\u00f3n una vez con "\u25b7 Ejecutar" en el editor de Apps Script
+ * para autorizar el permiso de env\u00edo de correos (MailApp.sendEmail).
+ */
+function autorizarPermisosCorreo() {
+  var quota = typeof MailApp !== 'undefined' && MailApp.getRemainingDailyQuota ? MailApp.getRemainingDailyQuota() : 0;
+  Logger.log('Permiso MailApp autorizado correctamente. Cuota restante: ' + quota);
+}
+/**
  * POST \u2014 registra una nueva solicitud.
  */
 function legacyTicketPost(e) {
@@ -568,9 +576,9 @@ function adminAssign(book,actor,payload) {
   if(adminHash(adminSnapshot(adminFindTicket(book,payload.ticketId)))!==adminHash(after))adminFail('CONFLICT');
   if(typeof serviceAssignmentRecover==='function')serviceAssignmentRecover(book,payload.ticketId,JSON.parse(event.row[8]));
   journal.sheet.getRange(event.rowNumber,2).setValue('CONFIRMADO');SpreadsheetApp.flush();
-  var recoveredView=adminTicketView(adminFindTicket(book,payload.ticketId));
-  if(typeof ticketNotifyTransition==='function')ticketNotifyTransition(book,{event:'ASSIGN',operationId:payload.operationId,journalSheet:journal.sheet,journalRowNumber:event.rowNumber,ticket:recoveredView,meta:typeof serviceCase==='function'?serviceCase(book,payload.ticketId):null,actor:actor,comment:(payload.changes&&payload.changes.observacion)||''});
-  return {ticket:recoveredView,operationId:payload.operationId};
+  var recoveredView=adminTicketView(adminFindTicket(book,payload.ticketId)),recAudit=null;
+  if(typeof ticketNotifyTransition==='function')recAudit=ticketNotifyTransition(book,{event:'ASSIGN',operationId:payload.operationId,journalSheet:journal.sheet,journalRowNumber:event.rowNumber,ticket:recoveredView,meta:typeof serviceCase==='function'?serviceCase(book,payload.ticketId):null,actor:actor,comment:(payload.changes&&payload.changes.observacion)||''});
+  var recRes={ticket:recoveredView,operationId:payload.operationId};if(recAudit)recRes.notification=recAudit;return recRes;
  }
  if(journal&&journal.rows.slice(1).some(function(row){return row[4]===payload.ticketId&&row[1]==='PENDIENTE';}))adminFail('PENDING_OPERATION');
  var changes=adminAssignmentChanges(book,payload,ticket);
@@ -589,9 +597,9 @@ function adminAssign(book,actor,payload) {
  if(adminHash(adminSnapshot(adminFindTicket(book,payload.ticketId)))!==adminHash(after))adminFail('CONFLICT');
  if(plan)serviceSaveCase(book,payload.ticketId,plan.before,plan.after);
  journal.sheet.getRange(eventNumber,2).setValue('CONFIRMADO');SpreadsheetApp.flush();
- var assignedView=adminTicketView(adminFindTicket(book,payload.ticketId));
- if(typeof ticketNotifyTransition==='function')ticketNotifyTransition(book,{event:'ASSIGN',operationId:payload.operationId,journalSheet:journal.sheet,journalRowNumber:eventNumber,ticket:assignedView,meta:plan?plan.after:(typeof serviceCase==='function'?serviceCase(book,payload.ticketId):null),actor:actor,comment:changes.observacion||''});
- return {ticket:assignedView,operationId:payload.operationId};
+ var assignedView=adminTicketView(adminFindTicket(book,payload.ticketId)),assignAudit=null;
+ if(typeof ticketNotifyTransition==='function')assignAudit=ticketNotifyTransition(book,{event:'ASSIGN',operationId:payload.operationId,journalSheet:journal.sheet,journalRowNumber:eventNumber,ticket:assignedView,meta:plan?plan.after:(typeof serviceCase==='function'?serviceCase(book,payload.ticketId):null),actor:actor,comment:changes.observacion||''});
+ var assignRes={ticket:assignedView,operationId:payload.operationId};if(assignAudit)assignRes.notification=assignAudit;return assignRes;
 }
 function adminWriteAssignment(ticket,after) {
  // Write only I:M and T:U; preserve formulas and values in all original fields.
@@ -829,12 +837,14 @@ function portalFinalizeCreate(book,actor,input){
  if(adminHash(adminSnapshot(ticket))!==adminHash(reserved.after))adminFail('CONFLICT');
  if(typeof serviceCreationRecover==='function')serviceCreationRecover(book,reserved.id,data.serviceCreation);
  event.table.sheet.getRange(event.rowNumber,2).setValue('CONFIRMADO');event.row[1]='CONFIRMADO';
- var view=adminTicketView(ticket);
+ var view=adminTicketView(ticket),audit=null;
  if(typeof ticketNotifyTransition==='function'){
-  var audit=ticketNotifyTransition(book,{event:'CREATE',operationId:input.operationId,journalSheet:event.table.sheet,journalRowNumber:event.rowNumber,ticket:view,meta:typeof serviceCase==='function'?serviceCase(book,reserved.id):null,actor:actor});
+  audit=ticketNotifyTransition(book,{event:'CREATE',operationId:input.operationId,journalSheet:event.table.sheet,journalRowNumber:event.rowNumber,ticket:view,meta:typeof serviceCase==='function'?serviceCase(book,reserved.id):null,actor:actor});
   if(audit)event.payload.notification=audit;
  }
- return {operationId:event.row[0],state:event.row[1],finalizing:Boolean(event.payload.reservation),uploadedIndexes:event.payload.receipts.map(function(receipt){return receipt.index;}),ticket:view};
+ var res={operationId:event.row[0],state:event.row[1],finalizing:Boolean(event.payload.reservation),uploadedIndexes:event.payload.receipts.map(function(receipt){return receipt.index;}),ticket:view};
+ if(audit)res.notification=audit;
+ return res;
 }
 function portalCreationStatus(book,actor,id){return portalCreationView(book,portalCreationEvent(book,actor,id));}
 
@@ -1013,8 +1023,8 @@ function serviceTransition(book,actor,input){
   set('\u00daLTIMA ACTUALIZACI\u00d3N',now);var payload={request:input,service:{before:meta,after:next}};if(Utilities.newBlob(JSON.stringify(payload)).getBytes().length>45000)adminFail('PAYLOAD_SIZE');journal.sheet.appendRow([input.operationId,'PENDIENTE',actor,hash,input.ticketId,JSON.stringify(before),JSON.stringify(after),now,JSON.stringify(payload),'SERVICIO']);event={row:[input.operationId,'PENDIENTE',actor,hash,input.ticketId,JSON.stringify(before),JSON.stringify(after),now,JSON.stringify(payload),'SERVICIO'],index:journal.sheet.getLastRow()};SpreadsheetApp.flush();
  }
  var prior=JSON.parse(event.row[5]),target=JSON.parse(event.row[6]),data=JSON.parse(event.row[8]),current=adminSnapshot(raw);if(current.some(function(v,i){return JSON.stringify(v)!==JSON.stringify(prior[i])&&JSON.stringify(v)!==JSON.stringify(target[i]);}))adminFail('CONFLICT');target.forEach(function(v,i){if(JSON.stringify(v)===JSON.stringify(current[i]))return;if(v&&typeof v==='object'&&v.formula)adminFail('SCHEMA');if(['FECHA INICIO','FECHA TERMINACI\u00d3N','FECHA COMPROMISO','\u00daLTIMA ACTUALIZACI\u00d3N'].indexOf(raw.table.headers[i])>=0&&v)v=serviceDate(v.length===10?v+' 00:00:00':v);raw.table.sheet.getRange(raw.rowNumber,i+1).setValue(v);});SpreadsheetApp.flush();serviceSaveCase(book,input.ticketId,data.service.before,data.service.after);var confirmedRaw=adminFindTicket(book,input.ticketId);if(adminHash(adminSnapshot(confirmedRaw))!==adminHash(target))adminFail('CONFLICT');journal.sheet.getRange(event.index,2).setValue('CONFIRMADO');SpreadsheetApp.flush();
- ticketNotifyTransition(book,{event:input.event,operationId:input.operationId,journalSheet:journal.sheet,journalRowNumber:event.index,ticket:adminTicketView(confirmedRaw),meta:data.service.after,actor:actor,comment:input.comment||'',evidence:input.evidence||[],dependency:input.dependency||'',followAt:input.followAt||''});
- return serviceDetail(book,actor,input.ticketId);
+ var audit=ticketNotifyTransition(book,{event:input.event,operationId:input.operationId,journalSheet:journal.sheet,journalRowNumber:event.index,ticket:adminTicketView(confirmedRaw),meta:data.service.after,actor:actor,comment:input.comment||'',evidence:input.evidence||[],dependency:input.dependency||'',followAt:input.followAt||''});
+ var detail=serviceDetail(book,actor,input.ticketId);if(audit)detail.notification=audit;return detail;
 }
 function serviceList(book,actor,kind){
  var admin=adminPermission(actor);
@@ -1114,9 +1124,9 @@ function ticketBuildNotificationPlan(book,info){
 
  function enqueue(role,to,subject,heading,intro,ctaLabel,ctaHash){
   if(!to){skipped.push({role:role,reason:'SIN_CORREO_'+role.toUpperCase(),target:role==='responsable'?(t.responsable||'SIN ASIGNAR'):''});return;}
-  var norm=String(to).trim().toLowerCase();
-  if(seen[norm]){skipped.push({role:role,reason:'DESTINATARIO_DUPLICADO',target:norm});return;}
-  seen[norm]=true;
+  var norm=String(to).trim().toLowerCase(),seenKey=role+':'+norm;
+  if(seen[seenKey]){skipped.push({role:role,reason:'DESTINATARIO_DUPLICADO',target:norm});return;}
+  seen[seenKey]=true;
   messages.push({role:role,to:norm,subject:subject,heading:heading,intro:intro,ctaLabel:ctaLabel,ctaUrl:'https://portal2.ciarm.edu.mx/'+ctaHash,comment:comment,dependency:dependency,followAt:followAt,evidence:evidence});
  }
 

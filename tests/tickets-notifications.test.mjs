@@ -220,3 +220,37 @@ test('fallo de MailApp se registra en BITACORA TICKETS sin abortar la confirmaci
  assert.match(journalPayload.notification.deliveries[0].error, /Quota limit reached/);
  assert.equal(journalPayload.notification.deliveries[1].status, 'ENVIADO');
 });
+
+test('cuando el solicitante también es administrador recibe ambos correos (solicitante y admin) y se expone notification en la respuesta', async () => {
+ const s = portalFixture();
+ activate(s);
+
+ const createOp = {
+  operationId: crypto.randomUUID(),
+  tipo: 'Soporte Tecnológico / TI',
+  descripcion: 'Prueba desde cuenta de administrador',
+  prioridadSolicitada: '🔴 Urgente',
+  fechaProgramada: '',
+  files: []
+ };
+ assert.equal(s.call('beginCreate', createOp, 'e.conesa@ciarm.edu.mx').ok, true);
+ const created = s.call('finalizeCreate', {operationId: createOp.operationId}, 'e.conesa@ciarm.edu.mx');
+ assert.equal(created.ok, true);
+ assert.equal(created.data.notification.status, 'ENVIADO');
+ assert.equal(s.sentEmails.length, 3);
+ assert.deepEqual(
+  s.sentEmails.map(m => ({to: m.to, isAdmin: /Nueva solicitud por asignar/.test(m.subject)})),
+  [
+   {to: 'e.conesa@ciarm.edu.mx', isAdmin: false},
+   {to: 'd.lara@ciarm.edu.mx', isAdmin: true},
+   {to: 'e.conesa@ciarm.edu.mx', isAdmin: true}
+  ]
+ );
+
+ const fs = await import('node:fs');
+ const phpLib = fs.readFileSync(new URL('../tickets-portal-lib.php', import.meta.url), 'utf8');
+ const phpApi = fs.readFileSync(new URL('../tickets-api.php', import.meta.url), 'utf8');
+ assert.match(phpLib, /function ciarm_ticket_ensure_notifications\(/);
+ assert.match(phpApi, /ciarm_ticket_ensure_notifications\(\$action,\s*\$input,\s*\$result\)/);
+});
+

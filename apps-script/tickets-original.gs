@@ -13,6 +13,14 @@ var CONFIG = {
   ATTACHMENTS_FOLDER_ID: '103wSYfCuSwVKW_aTbTFr2O7b-JyuT619'
 };
 /**
+ * Ejecuta esta función una vez con "▷ Ejecutar" en el editor de Apps Script
+ * para autorizar el permiso de envío de correos (MailApp.sendEmail).
+ */
+function autorizarPermisosCorreo() {
+  var quota = typeof MailApp !== 'undefined' && MailApp.getRemainingDailyQuota ? MailApp.getRemainingDailyQuota() : 0;
+  Logger.log('Permiso MailApp autorizado correctamente. Cuota restante: ' + quota);
+}
+/**
  * POST — registra una nueva solicitud.
  */
 function doPost(e) {

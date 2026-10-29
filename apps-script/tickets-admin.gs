@@ -176,9 +176,9 @@ function adminAssign(book,actor,payload) {
   if(adminHash(adminSnapshot(adminFindTicket(book,payload.ticketId)))!==adminHash(after))adminFail('CONFLICT');
   if(typeof serviceAssignmentRecover==='function')serviceAssignmentRecover(book,payload.ticketId,JSON.parse(event.row[8]));
   journal.sheet.getRange(event.rowNumber,2).setValue('CONFIRMADO');SpreadsheetApp.flush();
-  var recoveredView=adminTicketView(adminFindTicket(book,payload.ticketId));
-  if(typeof ticketNotifyTransition==='function')ticketNotifyTransition(book,{event:'ASSIGN',operationId:payload.operationId,journalSheet:journal.sheet,journalRowNumber:event.rowNumber,ticket:recoveredView,meta:typeof serviceCase==='function'?serviceCase(book,payload.ticketId):null,actor:actor,comment:(payload.changes&&payload.changes.observacion)||''});
-  return {ticket:recoveredView,operationId:payload.operationId};
+  var recoveredView=adminTicketView(adminFindTicket(book,payload.ticketId)),recAudit=null;
+  if(typeof ticketNotifyTransition==='function')recAudit=ticketNotifyTransition(book,{event:'ASSIGN',operationId:payload.operationId,journalSheet:journal.sheet,journalRowNumber:event.rowNumber,ticket:recoveredView,meta:typeof serviceCase==='function'?serviceCase(book,payload.ticketId):null,actor:actor,comment:(payload.changes&&payload.changes.observacion)||''});
+  var recRes={ticket:recoveredView,operationId:payload.operationId};if(recAudit)recRes.notification=recAudit;return recRes;
  }
  if(journal&&journal.rows.slice(1).some(function(row){return row[4]===payload.ticketId&&row[1]==='PENDIENTE';}))adminFail('PENDING_OPERATION');
  var changes=adminAssignmentChanges(book,payload,ticket);
@@ -197,9 +197,9 @@ function adminAssign(book,actor,payload) {
  if(adminHash(adminSnapshot(adminFindTicket(book,payload.ticketId)))!==adminHash(after))adminFail('CONFLICT');
  if(plan)serviceSaveCase(book,payload.ticketId,plan.before,plan.after);
  journal.sheet.getRange(eventNumber,2).setValue('CONFIRMADO');SpreadsheetApp.flush();
- var assignedView=adminTicketView(adminFindTicket(book,payload.ticketId));
- if(typeof ticketNotifyTransition==='function')ticketNotifyTransition(book,{event:'ASSIGN',operationId:payload.operationId,journalSheet:journal.sheet,journalRowNumber:eventNumber,ticket:assignedView,meta:plan?plan.after:(typeof serviceCase==='function'?serviceCase(book,payload.ticketId):null),actor:actor,comment:changes.observacion||''});
- return {ticket:assignedView,operationId:payload.operationId};
+ var assignedView=adminTicketView(adminFindTicket(book,payload.ticketId)),assignAudit=null;
+ if(typeof ticketNotifyTransition==='function')assignAudit=ticketNotifyTransition(book,{event:'ASSIGN',operationId:payload.operationId,journalSheet:journal.sheet,journalRowNumber:eventNumber,ticket:assignedView,meta:plan?plan.after:(typeof serviceCase==='function'?serviceCase(book,payload.ticketId):null),actor:actor,comment:changes.observacion||''});
+ var assignRes={ticket:assignedView,operationId:payload.operationId};if(assignAudit)assignRes.notification=assignAudit;return assignRes;
 }
 function adminWriteAssignment(ticket,after) {
  // Write only I:M and T:U; preserve formulas and values in all original fields.

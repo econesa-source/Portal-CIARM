@@ -205,6 +205,9 @@ try {
   }
   $ticketPerf['apps_script']=(microtime(true)-$gasStamp)*1000;
   if(!$readDirect)header('X-CIARM-Tickets-Read-Source: apps-script');
+  if($method==='POST'&&($result['ok']??false)===true){
+   $result=ciarm_ticket_ensure_notifications($action,$input,$result);
+  }
  }
  $gasPerf=$result['_perf']??null;
  unset($result['_perf']);

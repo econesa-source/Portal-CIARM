@@ -1,6 +1,6 @@
 /** Called only while holding the shared script lock. Never counts a fixed range. */
 function portalReserveTicketSlot(book,journal,now) {
- var table=adminTicketTable(book),idColumn=table.headers.indexOf('ID TICKET'),maximum=0,seen={},rowNumber=table.sheet.getLastRow()+1;
+ var table=adminTicketTable(book),idColumn=table.headers.indexOf('ID TICKET'),maximum=0,seen={},reservedRows={};
  function numberOf(value){
   var match=/^TKT-\d{4}-(\d+)$/.exec(value);if(!match)adminFail('SCHEMA');
   var n=Number(match[1]);if(!Number.isSafeInteger(n)||n<1)adminFail('SCHEMA');return n;
@@ -15,11 +15,17 @@ function portalReserveTicketSlot(book,journal,now) {
   if(event[1]==='PENDIENTE'&&event[9]==='CREAR'){
    var payload;try{payload=JSON.parse(event[8]);}catch(error){adminFail('SCHEMA');}
    var reserved=payload.reservation;
-   if(reserved){if(!Number.isSafeInteger(reserved.rowNumber)||reserved.rowNumber<2)adminFail('SCHEMA');rowNumber=Math.max(rowNumber,reserved.rowNumber+1);}
+   if(reserved){if(!Number.isSafeInteger(reserved.rowNumber)||reserved.rowNumber<2)adminFail('SCHEMA');reservedRows[reserved.rowNumber]=true;}
   }
  });
  if(!Number.isSafeInteger(maximum+1))adminFail('SCHEMA');
- rowNumber=Math.max(2,rowNumber);
+ var rowNumber=2;
+ while(true){
+  if(reservedRows[rowNumber]){rowNumber++;continue;}
+  var existing=table.rows[rowNumber-1];
+  if(existing&&String(existing[idColumn]||'').trim()!==''){rowNumber++;continue;}
+  break;
+ }
  if(typeof table.sheet.getMaxRows==='function'&&rowNumber>table.sheet.getMaxRows())table.sheet.insertRowsAfter(table.sheet.getMaxRows(),rowNumber-table.sheet.getMaxRows());
  var range=table.sheet.getRange(rowNumber,1,1,table.headers.length),before=range.getValues()[0],formulas=range.getFormulas()[0];
  if(before.some(function(value,i){return value!==''&&value!==null&&!formulas[i];}))adminFail('CONFLICT');

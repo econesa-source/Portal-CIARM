@@ -120,7 +120,7 @@ function ciarm_tickets_ticket_view(array $row,array $table): array {
 function ciarm_tickets_pending_ids(array $values): array {
  if($values===[])return [];
  $headers=is_array($values[0]??null)?array_map(static fn($v)=>trim((string)$v),$values[0]):[];
- if(!in_array('ESTADO',$headers,true)||!in_array('TICKET',$headers,true))return [];
+ if(array_filter($headers,static fn($v)=>$v!=='')===[])return [];
  $hasAccion=in_array('ACCIÓN',$headers,true);
  $table=ciarm_tickets_table($values,$hasAccion?['ESTADO','TICKET','ACCIÓN']:['ESTADO','TICKET']);
  $out=[];

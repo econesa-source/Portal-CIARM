@@ -70,15 +70,15 @@ function portalUploadAttachment(book,actor,input){
  event.payload.receipts.sort(function(a,b){return a.index-b.index;});portalPersistEvent(event);
  return portalCreationView(book,event);
 }
-function portalFinalizeCreate(book,actor,input){
+function portalFinalizeCreate(book,actor,input,request){
  if(!input||Object.keys(input).some(function(k){return k!=='operationId';}))adminFail('VALIDATION');
  var event=portalCreationEvent(book,actor,input.operationId);
  if(event.row[1]==='CONFIRMADO')return portalCreationView(book,event);
- var data=event.payload,request=data.request;
- if(data.receipts.length!==request.files.length||request.files.some(function(file){return !data.receipts.some(function(receipt){return receipt.index===file.index&&receipt.sha256===file.sha256;});}))adminFail('VALIDATION');
+ var data=event.payload,requestData=data.request;
+ if(data.receipts.length!==requestData.files.length||requestData.files.some(function(file){return !data.receipts.some(function(receipt){return receipt.index===file.index&&receipt.sha256===file.sha256;});}))adminFail('VALIDATION');
  var table=adminTicketTable(book),headers=table.headers;
  if(!data.reservation){
-  var slot=portalPreparedReservation(book,actor,request,data.receipts,event.table,table);
+  var slot=portalPreparedReservation(book,actor,requestData,data.receipts,event.table,table);
   data.reservation=slot;event.row[4]=slot.id;
   event.table.sheet.getRange(event.rowNumber,5).setValue(slot.id);portalPersistEvent(event);
  }
@@ -103,7 +103,7 @@ function portalFinalizeCreate(book,actor,input){
  event.table.sheet.getRange(event.rowNumber,2).setValue('CONFIRMADO');event.row[1]='CONFIRMADO';
  var view=adminTicketView(ticket),audit=null;
  if(typeof ticketNotifyTransition==='function'){
-  audit=ticketNotifyTransition(book,{event:'CREATE',operationId:input.operationId,journalSheet:event.table.sheet,journalRowNumber:event.rowNumber,ticket:view,meta:typeof serviceCase==='function'?serviceCase(book,reserved.id):null,actor:actor});
+  audit=ticketNotifyTransition(book,{event:'CREATE',operationId:input.operationId,journalSheet:event.table.sheet,journalRowNumber:event.rowNumber,ticket:view,meta:typeof serviceCase==='function'?serviceCase(book,reserved.id):null,actor:actor,portalBaseUrl:request&&request.portalBaseUrl});
   if(audit)event.payload.notification=audit;
  }
  var res={operationId:event.row[0],state:event.row[1],finalizing:Boolean(event.payload.reservation),uploadedIndexes:event.payload.receipts.map(function(receipt){return receipt.index;}),ticket:view};

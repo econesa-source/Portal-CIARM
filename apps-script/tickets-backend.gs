@@ -7,12 +7,50 @@
  * - OAuth todav\u00eda NO implementado
  */
 var CONFIG = {
-  TICKETS_SPREADSHEET_ID: (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties && PropertiesService.getScriptProperties().getProperty('TICKETS_SPREADSHEET_ID')) || '1o33Gw6xWsH64SXmaxaN7EDlSsW0fUExDjPE4cGpnPbs',
+  TICKETS_SPREADSHEET_ID: (function() {
+    try {
+      if (typeof SpreadsheetApp !== 'undefined' && SpreadsheetApp.getActiveSpreadsheet) {
+        var a = SpreadsheetApp.getActiveSpreadsheet();
+        if (a && a.getId()) return a.getId();
+      }
+    } catch(e) {}
+    try {
+      if (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties) {
+        var p = PropertiesService.getScriptProperties().getProperty('TICKETS_SPREADSHEET_ID');
+        if (p) return p;
+      }
+    } catch(e) {}
+    return '104dJVUe63EF-BlEMniiBkzP7O8lQE4QxJJQOiJgvibA';
+  })(),
   DM03_SPREADSHEET_ID: (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties && PropertiesService.getScriptProperties().getProperty('DM03_SPREADSHEET_ID')) || '1h14cqmHseHSN3FzrEtK_AwVimzDGkz9qx8LcGBCQuDY',
   DM03_SHEET_NAME: 'Cat\u00e1logo de colaboradores',
   ATTACHMENTS_FOLDER_ID: (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties && PropertiesService.getScriptProperties().getProperty('ATTACHMENTS_FOLDER_ID')) || '103wSYfCuSwVKW_aTbTFr2O7b-JyuT619',
-  PORTAL_BASE_URL: (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties && PropertiesService.getScriptProperties().getProperty('PORTAL_BASE_URL')) || 'https://portal2.ciarm.edu.mx'
+  PORTAL_BASE_URL: (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties && PropertiesService.getScriptProperties().getProperty('PORTAL_BASE_URL')) || 'https://portal.ciarm.edu.mx'
 };
+
+function ticketResolveBook(request) {
+  if (request && typeof request.spreadsheetId === 'string' && /^[a-zA-Z0-9_-]{20,80}$/.test(request.spreadsheetId)) {
+    try {
+      var bookFromReq = SpreadsheetApp.openById(request.spreadsheetId);
+      if (bookFromReq) return bookFromReq;
+    } catch (e) {}
+  }
+  try {
+    if (typeof SpreadsheetApp !== 'undefined' && SpreadsheetApp.getActiveSpreadsheet) {
+      var active = SpreadsheetApp.getActiveSpreadsheet();
+      if (active && active.getId()) return active;
+    }
+  } catch (e) {}
+  try {
+    if (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties) {
+      var propId = PropertiesService.getScriptProperties().getProperty('TICKETS_SPREADSHEET_ID');
+      if (propId && /^[a-zA-Z0-9_-]{20,80}$/.test(propId)) {
+        return SpreadsheetApp.openById(propId);
+      }
+    }
+  } catch (e) {}
+  return SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID);
+}
 /**
  * Ejecuta esta funci\u00f3n una vez con "\u25b7 Ejecutar" en el editor de Apps Script
  * para autorizar el permiso de env\u00edo de correos (MailApp.sendEmail).
@@ -157,9 +195,9 @@ function obtenerColaboradorDM03(correoRecibido) {
 function registrarSolicitudEnSheets(data) {
   var ss;
   try {
-    ss = SpreadsheetApp.getActiveSpreadsheet();
+    ss = ticketResolveBook();
   } catch (e) {
-    ss = SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID);
+    ss = SpreadsheetApp.getActiveSpreadsheet();
   }
   var sheet = ss.getSheetByName('TICKETS') || ss.getSheets()[0];
   // Determinar la primera fila libre contando folios TKT-
@@ -332,11 +370,9 @@ function legacyTicketGet(e) {
   try {
     var ss;
     try {
-      ss = SpreadsheetApp.getActiveSpreadsheet();
+      ss = ticketResolveBook();
     } catch (err) {
-      ss = SpreadsheetApp.openById(
-        CONFIG.TICKETS_SPREADSHEET_ID
-      );
+      ss = SpreadsheetApp.getActiveSpreadsheet();
     }
     var sheet =
       ss.getSheetByName('TICKETS') || ss.getSheets()[0];
@@ -475,13 +511,13 @@ function handleAdminEnvelope(envelope,signature) {
   locked=lock.tryLock(15000);clock.mark('lock');if(!locked) adminFail('BUSY');
   var cache=CacheService.getScriptCache();var nonceKey='ticket-admin-'+request.nonce;
   if(cache.get(nonceKey)) adminFail('REPLAY');cache.put(nonceKey,'1',300);clock.mark('nonce');
-  var book=SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID);clock.mark('open');
+  var book=ticketResolveBook(request);clock.mark('open');
   var data;
   switch(request.action) {
    case 'list': data=adminTicketList(book);break;
    case 'detail': data=adminTicketView(adminFindTicket(book,(request.payload||{}).id));var pending=adminPendingOperation(book,data.id,request.actor);if(pending)data.pendingOperation=pending;break;
    case 'catalogs': data=adminCatalogs(book);break;
-   case 'assign': data=adminAssign(book,request.actor,request.payload);break;
+   case 'assign': data=adminAssign(book,request.actor,request.payload,request);break;
    default:adminFail('VALIDATION');
   }
   clock.mark('work');return ticketPerfReply({ok:true,data:data},request,clock);
@@ -560,7 +596,7 @@ function adminPendingOperation(book,id,actor) {
  if(rows.length>1)adminFail('PENDING_OPERATION');
  if(rows.length!==1)return null;var data=JSON.parse(rows[0][8]);return data.request||data;
 }
-function adminAssign(book,actor,payload) {
+function adminAssign(book,actor,payload,request) {
  if(!payload||typeof payload.operationId!=='string'||!/^[a-zA-Z0-9-]{16,80}$/.test(payload.operationId)||typeof payload.expectedVersion!=='string')adminFail('VALIDATION');
  var ticket=adminFindTicket(book,payload.ticketId);var hash=adminHash(payload);
  var journalSheet=book.getSheetByName('BITACORA TICKETS');var journal=journalSheet?adminJournalTable(book):null;
@@ -578,7 +614,7 @@ function adminAssign(book,actor,payload) {
   if(typeof serviceAssignmentRecover==='function')serviceAssignmentRecover(book,payload.ticketId,JSON.parse(event.row[8]));
   journal.sheet.getRange(event.rowNumber,2).setValue('CONFIRMADO');SpreadsheetApp.flush();
   var recoveredView=adminTicketView(adminFindTicket(book,payload.ticketId)),recAudit=null;
-  if(typeof ticketNotifyTransition==='function')recAudit=ticketNotifyTransition(book,{event:'ASSIGN',operationId:payload.operationId,journalSheet:journal.sheet,journalRowNumber:event.rowNumber,ticket:recoveredView,meta:typeof serviceCase==='function'?serviceCase(book,payload.ticketId):null,actor:actor,comment:(payload.changes&&payload.changes.observacion)||''});
+  if(typeof ticketNotifyTransition==='function')recAudit=ticketNotifyTransition(book,{event:'ASSIGN',operationId:payload.operationId,journalSheet:journal.sheet,journalRowNumber:event.rowNumber,ticket:recoveredView,meta:typeof serviceCase==='function'?serviceCase(book,payload.ticketId):null,actor:actor,comment:(payload.changes&&payload.changes.observacion)||'',portalBaseUrl:request&&request.portalBaseUrl});
   var recRes={ticket:recoveredView,operationId:payload.operationId};if(recAudit)recRes.notification=recAudit;return recRes;
  }
  if(journal&&journal.rows.slice(1).some(function(row){return row[4]===payload.ticketId&&row[1]==='PENDIENTE';}))adminFail('PENDING_OPERATION');
@@ -599,7 +635,7 @@ function adminAssign(book,actor,payload) {
  if(plan)serviceSaveCase(book,payload.ticketId,plan.before,plan.after);
  journal.sheet.getRange(eventNumber,2).setValue('CONFIRMADO');SpreadsheetApp.flush();
  var assignedView=adminTicketView(adminFindTicket(book,payload.ticketId)),assignAudit=null;
- if(typeof ticketNotifyTransition==='function')assignAudit=ticketNotifyTransition(book,{event:'ASSIGN',operationId:payload.operationId,journalSheet:journal.sheet,journalRowNumber:eventNumber,ticket:assignedView,meta:plan?plan.after:(typeof serviceCase==='function'?serviceCase(book,payload.ticketId):null),actor:actor,comment:changes.observacion||''});
+ if(typeof ticketNotifyTransition==='function')assignAudit=ticketNotifyTransition(book,{event:'ASSIGN',operationId:payload.operationId,journalSheet:journal.sheet,journalRowNumber:eventNumber,ticket:assignedView,meta:plan?plan.after:(typeof serviceCase==='function'?serviceCase(book,payload.ticketId):null),actor:actor,comment:changes.observacion||'',portalBaseUrl:request&&request.portalBaseUrl});
  var assignRes={ticket:assignedView,operationId:payload.operationId};if(assignAudit)assignRes.notification=assignAudit;return assignRes;
 }
 function adminWriteAssignment(ticket,after) {
@@ -654,19 +690,19 @@ function handleTicketEnvelope(envelope,signature) {
   lock=LockService.getScriptLock();locked=lock.tryLock(15000);clock.mark('lock');if(!locked)adminFail('BUSY');
   var cache=CacheService.getScriptCache(),key='ticket-admin-'+request.nonce;
   if(cache.get(key))adminFail('REPLAY');cache.put(key,'1',300);clock.mark('nonce');
-  var book=SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID),data;clock.mark('open');
+  var book=ticketResolveBook(request),data;clock.mark('open');
   switch(request.action){
    case 'serviceContext':data={protocol:'tickets-service-v1',enabled:Boolean(serviceConfig(book)),canAdmin:adminPermission(request.actor)};break;
    case 'serviceSettings':data=serviceSettings(book,request.actor);break;
    case 'saveServicePolicy':data=servicePublish(book,request.actor,request.payload);break;
    case 'serviceDetail':data=serviceDetail(book,request.actor,request.payload.id);break;
-   case 'serviceTransition':data=serviceTransition(book,request.actor,request.payload);break;
+   case 'serviceTransition':data=serviceTransition(book,request.actor,request.payload,request);break;
    case 'serviceList':data=serviceList(book,request.actor,request.payload.kind);break;
    case 'capabilities':data={protocol:'tickets-portal-v1',serviceProtocol:'tickets-service-v1',maxFiles:5,maxFileBytes:10*1024*1024};break;
    case 'mine':data=adminTicketList(book).filter(function(ticket){return ticket.correo.trim().toLowerCase()===collaborator.correoDM03;});break;
    case 'beginCreate':data=portalBeginCreate(book,request.actor,request.payload);break;
    case 'uploadAttachment':data=portalUploadAttachment(book,request.actor,request.payload);break;
-   case 'finalizeCreate':data=portalFinalizeCreate(book,request.actor,request.payload);break;
+   case 'finalizeCreate':data=portalFinalizeCreate(book,request.actor,request.payload,request);break;
    case 'creationStatus':data=portalCreationStatus(book,request.actor,(request.payload||{}).operationId);break;
    case 'uploadEvidence':data=serviceUploadEvidence(book,request.actor,request.payload);break;
    default:adminFail('VALIDATION');
@@ -807,15 +843,15 @@ function portalUploadAttachment(book,actor,input){
  event.payload.receipts.sort(function(a,b){return a.index-b.index;});portalPersistEvent(event);
  return portalCreationView(book,event);
 }
-function portalFinalizeCreate(book,actor,input){
+function portalFinalizeCreate(book,actor,input,request){
  if(!input||Object.keys(input).some(function(k){return k!=='operationId';}))adminFail('VALIDATION');
  var event=portalCreationEvent(book,actor,input.operationId);
  if(event.row[1]==='CONFIRMADO')return portalCreationView(book,event);
- var data=event.payload,request=data.request;
- if(data.receipts.length!==request.files.length||request.files.some(function(file){return !data.receipts.some(function(receipt){return receipt.index===file.index&&receipt.sha256===file.sha256;});}))adminFail('VALIDATION');
+ var data=event.payload,requestData=data.request;
+ if(data.receipts.length!==requestData.files.length||requestData.files.some(function(file){return !data.receipts.some(function(receipt){return receipt.index===file.index&&receipt.sha256===file.sha256;});}))adminFail('VALIDATION');
  var table=adminTicketTable(book),headers=table.headers;
  if(!data.reservation){
-  var slot=portalPreparedReservation(book,actor,request,data.receipts,event.table,table);
+  var slot=portalPreparedReservation(book,actor,requestData,data.receipts,event.table,table);
   data.reservation=slot;event.row[4]=slot.id;
   event.table.sheet.getRange(event.rowNumber,5).setValue(slot.id);portalPersistEvent(event);
  }
@@ -840,7 +876,7 @@ function portalFinalizeCreate(book,actor,input){
  event.table.sheet.getRange(event.rowNumber,2).setValue('CONFIRMADO');event.row[1]='CONFIRMADO';
  var view=adminTicketView(ticket),audit=null;
  if(typeof ticketNotifyTransition==='function'){
-  audit=ticketNotifyTransition(book,{event:'CREATE',operationId:input.operationId,journalSheet:event.table.sheet,journalRowNumber:event.rowNumber,ticket:view,meta:typeof serviceCase==='function'?serviceCase(book,reserved.id):null,actor:actor});
+  audit=ticketNotifyTransition(book,{event:'CREATE',operationId:input.operationId,journalSheet:event.table.sheet,journalRowNumber:event.rowNumber,ticket:view,meta:typeof serviceCase==='function'?serviceCase(book,reserved.id):null,actor:actor,portalBaseUrl:request&&request.portalBaseUrl});
   if(audit)event.payload.notification=audit;
  }
  var res={operationId:event.row[0],state:event.row[1],finalizing:Boolean(event.payload.reservation),uploadedIndexes:event.payload.receipts.map(function(receipt){return receipt.index;}),ticket:view};
@@ -1001,7 +1037,7 @@ function serviceDetail(book,actor,id){var raw=adminFindTicket(book,id),ticket=ad
  return {ticket:ticket,pendingOperation:operation||undefined,service:meta?serviceView(meta,ticket):null,history:history,roles:{admin:adminPermission(actor),owner:ticket.correo.trim().toLowerCase()===actor,executor:serviceIsExecutor(ticket,meta,actor,book)}};}
 function serviceView(meta,ticket){var value=JSON.parse(JSON.stringify(meta)),now=new Date();value.effectiveDeadlines={};Object.keys(value.deadlines||{}).forEach(function(k){var completed=k==='start'?value.startedAt:k==='resolve'?value.resolvedAt:value.containedAt;var cutoff=completed?serviceDate(completed):now,pauseHours=0;if(k!=='start')value.waits.forEach(function(w){var from=serviceDate(w.from),to=w.to?serviceDate(w.to):now;if(to>cutoff)to=cutoff;if(to>from)pauseHours+=serviceElapsedHours(from,to,value.policy);});value.effectiveDeadlines[k]=Utilities.formatDate(serviceDeadline(serviceDate(value.deadlines[k]),pauseHours,value.policy),'America/Cancun','yyyy-MM-dd HH:mm:ss');});value.overdue=Object.keys(value.effectiveDeadlines).filter(function(k){var done=k==='start'?value.startedAt:k==='resolve'?value.resolvedAt:value.containedAt;return serviceDate(done||serviceNow()).getTime()>serviceDate(value.effectiveDeadlines[k]).getTime();});if(value.resolvedAt){value.validationDeadline=Utilities.formatDate(serviceDeadline(serviceDate(value.resolvedAt),value.policy.validationHours,value.policy),'America/Cancun','yyyy-MM-dd HH:mm:ss');value.validationOverdue=serviceDate(value.closedAt||serviceNow()).getTime()>serviceDate(value.validationDeadline).getTime();}var wait=value.waits[value.waits.length-1];if(wait&&!wait.to){value.waitFollowAt=wait.request.followAt;value.waitFollowOverdue=now.getTime()>serviceDate(value.waitFollowAt).getTime();}value.assignmentOverdue=value.assignmentDeadline?serviceDate(value.firstAssignedAt||value.assignedAt||serviceNow()).getTime()>serviceDate(value.assignmentDeadline).getTime():null;value.totalHours=(now.getTime()-serviceDate(value.createdAt).getTime())/3600000;return value;}
 
-function serviceTransition(book,actor,input){
+function serviceTransition(book,actor,input,request){
  portalOperationId(input.operationId);if(typeof input.expectedVersion!=='string'||typeof input.ticketId!=='string'||typeof input.comment!=='string'||input.comment.length>4000)adminFail('VALIDATION');var valid=['TRIAGE','START','WAIT_REQUEST','WAIT_APPROVE','RESUME','CONTAIN','RESOLVE','ACCEPT','REJECT','EXCEPTION'];if(valid.indexOf(input.event)<0)adminFail('VALIDATION');var raw=adminFindTicket(book,input.ticketId),ticket=adminTicketView(raw),meta=serviceCase(book,input.ticketId);if(!meta)adminFail('SERVICE_NOT_ENABLED');serviceAuthorize(ticket,meta,actor,input.event,book);
  var journal=portalJournal(book),hash=adminHash(input),events=journal.rows.slice(1).map(function(r,i){return {row:r,index:i+2};}).filter(function(e){return e.row[0]===input.operationId;});if(events.length>1)adminFail('OPERATION_REUSED');var event;
  if(events.length){event=events[0];if(event.row[9]!=='SERVICIO'||event.row[2]!==actor||event.row[3]!==hash)adminFail('OPERATION_REUSED');if(event.row[1]==='CONFIRMADO')return serviceDetail(book,actor,input.ticketId);}
@@ -1024,7 +1060,7 @@ function serviceTransition(book,actor,input){
   set('\u00daLTIMA ACTUALIZACI\u00d3N',now);var payload={request:input,service:{before:meta,after:next}};if(Utilities.newBlob(JSON.stringify(payload)).getBytes().length>45000)adminFail('PAYLOAD_SIZE');journal.sheet.appendRow([input.operationId,'PENDIENTE',actor,hash,input.ticketId,JSON.stringify(before),JSON.stringify(after),now,JSON.stringify(payload),'SERVICIO']);event={row:[input.operationId,'PENDIENTE',actor,hash,input.ticketId,JSON.stringify(before),JSON.stringify(after),now,JSON.stringify(payload),'SERVICIO'],index:journal.sheet.getLastRow()};SpreadsheetApp.flush();
  }
  var prior=JSON.parse(event.row[5]),target=JSON.parse(event.row[6]),data=JSON.parse(event.row[8]),current=adminSnapshot(raw);if(current.some(function(v,i){return JSON.stringify(v)!==JSON.stringify(prior[i])&&JSON.stringify(v)!==JSON.stringify(target[i]);}))adminFail('CONFLICT');target.forEach(function(v,i){if(JSON.stringify(v)===JSON.stringify(current[i]))return;if(v&&typeof v==='object'&&v.formula)adminFail('SCHEMA');if(['FECHA INICIO','FECHA TERMINACI\u00d3N','FECHA COMPROMISO','\u00daLTIMA ACTUALIZACI\u00d3N'].indexOf(raw.table.headers[i])>=0&&v)v=serviceDate(v.length===10?v+' 00:00:00':v);raw.table.sheet.getRange(raw.rowNumber,i+1).setValue(v);});SpreadsheetApp.flush();serviceSaveCase(book,input.ticketId,data.service.before,data.service.after);var confirmedRaw=adminFindTicket(book,input.ticketId);if(adminHash(adminSnapshot(confirmedRaw))!==adminHash(target))adminFail('CONFLICT');journal.sheet.getRange(event.index,2).setValue('CONFIRMADO');SpreadsheetApp.flush();
- var audit=ticketNotifyTransition(book,{event:input.event,operationId:input.operationId,journalSheet:journal.sheet,journalRowNumber:event.index,ticket:adminTicketView(confirmedRaw),meta:data.service.after,actor:actor,comment:input.comment||'',evidence:input.evidence||[],dependency:input.dependency||'',followAt:input.followAt||''});
+ var audit=ticketNotifyTransition(book,{event:input.event,operationId:input.operationId,journalSheet:journal.sheet,journalRowNumber:event.index,ticket:adminTicketView(confirmedRaw),meta:data.service.after,actor:actor,comment:input.comment||'',evidence:input.evidence||[],dependency:input.dependency||'',followAt:input.followAt||'',portalBaseUrl:request&&request.portalBaseUrl});
  var detail=serviceDetail(book,actor,input.ticketId);if(audit)detail.notification=audit;return detail;
 }
 function serviceList(book,actor,kind){

@@ -74,13 +74,13 @@ function handleAdminEnvelope(envelope,signature) {
   locked=lock.tryLock(15000);clock.mark('lock');if(!locked) adminFail('BUSY');
   var cache=CacheService.getScriptCache();var nonceKey='ticket-admin-'+request.nonce;
   if(cache.get(nonceKey)) adminFail('REPLAY');cache.put(nonceKey,'1',300);clock.mark('nonce');
-  var book=SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID);clock.mark('open');
+  var book=ticketResolveBook(request);clock.mark('open');
   var data;
   switch(request.action) {
    case 'list': data=adminTicketList(book);break;
    case 'detail': data=adminTicketView(adminFindTicket(book,(request.payload||{}).id));var pending=adminPendingOperation(book,data.id,request.actor);if(pending)data.pendingOperation=pending;break;
    case 'catalogs': data=adminCatalogs(book);break;
-   case 'assign': data=adminAssign(book,request.actor,request.payload);break;
+   case 'assign': data=adminAssign(book,request.actor,request.payload,request);break;
    default:adminFail('VALIDATION');
   }
   clock.mark('work');return ticketPerfReply({ok:true,data:data},request,clock);
@@ -159,7 +159,7 @@ function adminPendingOperation(book,id,actor) {
  if(rows.length>1)adminFail('PENDING_OPERATION');
  if(rows.length!==1)return null;var data=JSON.parse(rows[0][8]);return data.request||data;
 }
-function adminAssign(book,actor,payload) {
+function adminAssign(book,actor,payload,request) {
  if(!payload||typeof payload.operationId!=='string'||!/^[a-zA-Z0-9-]{16,80}$/.test(payload.operationId)||typeof payload.expectedVersion!=='string')adminFail('VALIDATION');
  var ticket=adminFindTicket(book,payload.ticketId);var hash=adminHash(payload);
  var journalSheet=book.getSheetByName('BITACORA TICKETS');var journal=journalSheet?adminJournalTable(book):null;
@@ -177,7 +177,7 @@ function adminAssign(book,actor,payload) {
   if(typeof serviceAssignmentRecover==='function')serviceAssignmentRecover(book,payload.ticketId,JSON.parse(event.row[8]));
   journal.sheet.getRange(event.rowNumber,2).setValue('CONFIRMADO');SpreadsheetApp.flush();
   var recoveredView=adminTicketView(adminFindTicket(book,payload.ticketId)),recAudit=null;
-  if(typeof ticketNotifyTransition==='function')recAudit=ticketNotifyTransition(book,{event:'ASSIGN',operationId:payload.operationId,journalSheet:journal.sheet,journalRowNumber:event.rowNumber,ticket:recoveredView,meta:typeof serviceCase==='function'?serviceCase(book,payload.ticketId):null,actor:actor,comment:(payload.changes&&payload.changes.observacion)||''});
+  if(typeof ticketNotifyTransition==='function')recAudit=ticketNotifyTransition(book,{event:'ASSIGN',operationId:payload.operationId,journalSheet:journal.sheet,journalRowNumber:event.rowNumber,ticket:recoveredView,meta:typeof serviceCase==='function'?serviceCase(book,payload.ticketId):null,actor:actor,comment:(payload.changes&&payload.changes.observacion)||'',portalBaseUrl:request&&request.portalBaseUrl});
   var recRes={ticket:recoveredView,operationId:payload.operationId};if(recAudit)recRes.notification=recAudit;return recRes;
  }
  if(journal&&journal.rows.slice(1).some(function(row){return row[4]===payload.ticketId&&row[1]==='PENDIENTE';}))adminFail('PENDING_OPERATION');
@@ -198,7 +198,7 @@ function adminAssign(book,actor,payload) {
  if(plan)serviceSaveCase(book,payload.ticketId,plan.before,plan.after);
  journal.sheet.getRange(eventNumber,2).setValue('CONFIRMADO');SpreadsheetApp.flush();
  var assignedView=adminTicketView(adminFindTicket(book,payload.ticketId)),assignAudit=null;
- if(typeof ticketNotifyTransition==='function')assignAudit=ticketNotifyTransition(book,{event:'ASSIGN',operationId:payload.operationId,journalSheet:journal.sheet,journalRowNumber:eventNumber,ticket:assignedView,meta:plan?plan.after:(typeof serviceCase==='function'?serviceCase(book,payload.ticketId):null),actor:actor,comment:changes.observacion||''});
+ if(typeof ticketNotifyTransition==='function')assignAudit=ticketNotifyTransition(book,{event:'ASSIGN',operationId:payload.operationId,journalSheet:journal.sheet,journalRowNumber:eventNumber,ticket:assignedView,meta:plan?plan.after:(typeof serviceCase==='function'?serviceCase(book,payload.ticketId):null),actor:actor,comment:changes.observacion||'',portalBaseUrl:request&&request.portalBaseUrl});
  var assignRes={ticket:assignedView,operationId:payload.operationId};if(assignAudit)assignRes.notification=assignAudit;return assignRes;
 }
 function adminWriteAssignment(ticket,after) {

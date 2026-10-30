@@ -7,12 +7,50 @@
  * - OAuth todavía NO implementado
  */
 var CONFIG = {
-  TICKETS_SPREADSHEET_ID: (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties && PropertiesService.getScriptProperties().getProperty('TICKETS_SPREADSHEET_ID')) || '1o33Gw6xWsH64SXmaxaN7EDlSsW0fUExDjPE4cGpnPbs',
+  TICKETS_SPREADSHEET_ID: (function() {
+    try {
+      if (typeof SpreadsheetApp !== 'undefined' && SpreadsheetApp.getActiveSpreadsheet) {
+        var a = SpreadsheetApp.getActiveSpreadsheet();
+        if (a && a.getId()) return a.getId();
+      }
+    } catch(e) {}
+    try {
+      if (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties) {
+        var p = PropertiesService.getScriptProperties().getProperty('TICKETS_SPREADSHEET_ID');
+        if (p) return p;
+      }
+    } catch(e) {}
+    return '104dJVUe63EF-BlEMniiBkzP7O8lQE4QxJJQOiJgvibA';
+  })(),
   DM03_SPREADSHEET_ID: (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties && PropertiesService.getScriptProperties().getProperty('DM03_SPREADSHEET_ID')) || '1h14cqmHseHSN3FzrEtK_AwVimzDGkz9qx8LcGBCQuDY',
   DM03_SHEET_NAME: 'Catálogo de colaboradores',
   ATTACHMENTS_FOLDER_ID: (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties && PropertiesService.getScriptProperties().getProperty('ATTACHMENTS_FOLDER_ID')) || '103wSYfCuSwVKW_aTbTFr2O7b-JyuT619',
-  PORTAL_BASE_URL: (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties && PropertiesService.getScriptProperties().getProperty('PORTAL_BASE_URL')) || 'https://portal2.ciarm.edu.mx'
+  PORTAL_BASE_URL: (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties && PropertiesService.getScriptProperties().getProperty('PORTAL_BASE_URL')) || 'https://portal.ciarm.edu.mx'
 };
+
+function ticketResolveBook(request) {
+  if (request && typeof request.spreadsheetId === 'string' && /^[a-zA-Z0-9_-]{20,80}$/.test(request.spreadsheetId)) {
+    try {
+      var bookFromReq = SpreadsheetApp.openById(request.spreadsheetId);
+      if (bookFromReq) return bookFromReq;
+    } catch (e) {}
+  }
+  try {
+    if (typeof SpreadsheetApp !== 'undefined' && SpreadsheetApp.getActiveSpreadsheet) {
+      var active = SpreadsheetApp.getActiveSpreadsheet();
+      if (active && active.getId()) return active;
+    }
+  } catch (e) {}
+  try {
+    if (typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties) {
+      var propId = PropertiesService.getScriptProperties().getProperty('TICKETS_SPREADSHEET_ID');
+      if (propId && /^[a-zA-Z0-9_-]{20,80}$/.test(propId)) {
+        return SpreadsheetApp.openById(propId);
+      }
+    }
+  } catch (e) {}
+  return SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID);
+}
 /**
  * Ejecuta esta función una vez con "▷ Ejecutar" en el editor de Apps Script
  * para autorizar el permiso de envío de correos (MailApp.sendEmail).
@@ -157,9 +195,9 @@ function obtenerColaboradorDM03(correoRecibido) {
 function registrarSolicitudEnSheets(data) {
   var ss;
   try {
-    ss = SpreadsheetApp.getActiveSpreadsheet();
+    ss = ticketResolveBook();
   } catch (e) {
-    ss = SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID);
+    ss = SpreadsheetApp.getActiveSpreadsheet();
   }
   var sheet = ss.getSheetByName('TICKETS') || ss.getSheets()[0];
   // Determinar la primera fila libre contando folios TKT-
@@ -332,11 +370,9 @@ function doGet(e) {
   try {
     var ss;
     try {
-      ss = SpreadsheetApp.getActiveSpreadsheet();
+      ss = ticketResolveBook();
     } catch (err) {
-      ss = SpreadsheetApp.openById(
-        CONFIG.TICKETS_SPREADSHEET_ID
-      );
+      ss = SpreadsheetApp.getActiveSpreadsheet();
     }
     var sheet =
       ss.getSheetByName('TICKETS') || ss.getSheets()[0];

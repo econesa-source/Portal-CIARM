@@ -18,10 +18,12 @@ const CIARM_TICKETS_HEADERS = [
  'PRIORIDAD SOLICITADA','PLAZO SOLICITADO','ARCHIVOS ADJUNTOS'
 ];
 
-function ciarm_tickets_active_sheet_id(?string $host = null): string {
- $cfg = function_exists('ciarm_tickets_env_config') ? ciarm_tickets_env_config($host) : [];
- if (!empty($cfg['sheetId'])) return (string)$cfg['sheetId'];
- return !empty($cfg['isProduction']) ? CIARM_TICKETS_PROD_SHEET_ID : CIARM_TICKETS_SHEET_ID;
+if (!function_exists('ciarm_tickets_active_sheet_id')) {
+ function ciarm_tickets_active_sheet_id(?string $host = null): string {
+  $cfg = function_exists('ciarm_tickets_env_config') ? ciarm_tickets_env_config($host) : [];
+  if (!empty($cfg['sheetId'])) return (string)$cfg['sheetId'];
+  return !empty($cfg['isProduction']) ? CIARM_TICKETS_PROD_SHEET_ID : CIARM_TICKETS_SHEET_ID;
+ }
 }
 
 function ciarm_tickets_batch_url(array $ranges, string $render): string {
@@ -115,10 +117,15 @@ function ciarm_tickets_ticket_view(array $row,array $table): array {
  ];
 }
 function ciarm_tickets_pending_ids(array $values): array {
- $table=ciarm_tickets_table($values,['ESTADO','TICKET','ACCIÓN']);
+ if($values===[])return [];
+ $headers=is_array($values[0]??null)?array_map(static fn($v)=>trim((string)$v),$values[0]):[];
+ if(!in_array('ESTADO',$headers,true)||!in_array('TICKET',$headers,true))return [];
+ $hasAccion=in_array('ACCIÓN',$headers,true);
+ $table=ciarm_tickets_table($values,$hasAccion?['ESTADO','TICKET','ACCIÓN']:['ESTADO','TICKET']);
  $out=[];
  foreach($table['rows'] as $row){
-  if(ciarm_tickets_value($row,$table,'ACCIÓN')==='CREAR'
+  $action=$hasAccion?ciarm_tickets_value($row,$table,'ACCIÓN'):'CREAR';
+  if(($action==='CREAR'||$action==='')
      &&ciarm_tickets_value($row,$table,'ESTADO')==='PENDIENTE'){
    $id=ciarm_tickets_text(ciarm_tickets_value($row,$table,'TICKET'));
    if($id!=='')$out[$id]=true;
@@ -127,6 +134,7 @@ function ciarm_tickets_pending_ids(array $values): array {
  return $out;
 }
 function ciarm_tickets_direct_list(array $tickets,array $journal): array {
+ if($tickets===[])return [];
  $table=ciarm_tickets_table($tickets,CIARM_TICKETS_HEADERS);
  $pending=ciarm_tickets_pending_ids($journal);
  $out=[];
@@ -143,9 +151,9 @@ function ciarm_tickets_direct_list(array $tickets,array $journal): array {
  return $out;
 }
 function ciarm_tickets_direct_catalogs(array $catalogs,array $people,array $config): array {
- $catalogs=ciarm_tickets_table($catalogs,['PRIORIDADES']);
- $people=ciarm_tickets_table($people,['RESPONSABLE']);
- $config=ciarm_tickets_table($config,['VERSION','REGLAS','ACTOR','FECHA','OPERACION','HASH']);
+ $catalogs=$catalogs===[]?['headers'=>['PRIORIDADES'],'rows'=>[]]:ciarm_tickets_table($catalogs,['PRIORIDADES']);
+ $people=$people===[]?['headers'=>['RESPONSABLE'],'rows'=>[]]:ciarm_tickets_table($people,['RESPONSABLE']);
+ $config=$config===[]?['headers'=>['VERSION','REGLAS','ACTOR','FECHA','OPERACION','HASH'],'rows'=>[]]:ciarm_tickets_table($config,['VERSION','REGLAS','ACTOR','FECHA','OPERACION','HASH']);
  $priorityAllowed=['CRITICA','URGENTE','ALTA','MEDIA','BAJA'];
  $priorities=[];$names=[];
  foreach($catalogs['rows'] as $row){
@@ -158,11 +166,15 @@ function ciarm_tickets_direct_catalogs(array $catalogs,array $people,array $conf
  }
  if($config['rows']){
   $last=end($config['rows']);
-  $policy=json_decode(ciarm_tickets_text(ciarm_tickets_value($last,$config,'REGLAS')),true,512,JSON_THROW_ON_ERROR);
-  if(!is_array($policy)||!isset($policy['responsibles'])||!is_array($policy['responsibles']))throw new RuntimeException('SCHEMA');
-  foreach($policy['responsibles'] as $person) {
-   $name=trim(ciarm_tickets_text($person['name']??''));
-   if($name!==''&&!in_array($name,$names,true))$names[]=$name;
+  $raw=ciarm_tickets_text(ciarm_tickets_value($last,$config,'REGLAS'));
+  if($raw!==''){
+   $policy=json_decode($raw,true,512,JSON_THROW_ON_ERROR);
+   if(is_array($policy)&&isset($policy['responsibles'])&&is_array($policy['responsibles'])){
+    foreach($policy['responsibles'] as $person) {
+     $name=trim(ciarm_tickets_text($person['name']??''));
+     if($name!==''&&!in_array($name,$names,true))$names[]=$name;
+    }
+   }
   }
  }
  return ['prioridades'=>$priorities,'responsables'=>$names];
@@ -246,6 +258,7 @@ function ciarm_tickets_parity_report(string $kind,array $legacy,array $direct): 
  * The current policy remains defined exclusively by CONFIG SERVICIO.
  */
 function ciarm_tickets_direct_service_context(array $configRows,bool $canAdmin): array {
+ if($configRows===[])return ['protocol'=>'tickets-service-v1','enabled'=>false,'canAdmin'=>$canAdmin];
  $sheet=ciarm_tickets_table($configRows,['VERSION','REGLAS','ACTOR','FECHA','OPERACION','HASH']);
  $enabled=false;
  if($sheet['rows']){
@@ -292,7 +305,7 @@ function ciarm_tickets_is_executor(array $ticket,?array $meta,string $actor,stri
 function ciarm_tickets_direct_service_list(array $ticketRows,array $journalRows,array $serviceRows,string $actor,string $kind,string $actorName=''): array {
  if(!in_array($kind,['all','mine','assigned'],true))throw new RuntimeException('VALIDATION');
  if(!preg_match('/^[a-z0-9._+\-]+@ciarm\.edu\.mx$/',$actor))throw new RuntimeException('FORBIDDEN');
- $table=ciarm_tickets_table($serviceRows,['FOLIO','SEGUIMIENTO']);
+ $table=$serviceRows===[]?['headers'=>['FOLIO','SEGUIMIENTO'],'rows'=>[]]:ciarm_tickets_table($serviceRows,['FOLIO','SEGUIMIENTO']);
  $cases=[];
  foreach($table['rows'] as $row){
   $id=trim(ciarm_tickets_text(ciarm_tickets_value($row,$table,'FOLIO')));

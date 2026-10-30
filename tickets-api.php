@@ -190,6 +190,8 @@ try {
    // authorization already checked above and the canonical GAS behavior.
    $ticketPerf['sheets_direct']=(microtime(true)-$stamp)*1000;
    header('X-CIARM-Tickets-Read-Source: apps-script-fallback');
+   header('X-CIARM-Tickets-Fallback-Reason: ' . substr(rawurlencode($directReadError->getMessage() . ' in ' . basename($directReadError->getFile()) . ':' . $directReadError->getLine()), 0, 200));
+   error_log('tickets-api sheets-direct fallback: ' . $directReadError->getMessage() . ' in ' . $directReadError->getFile() . ':' . $directReadError->getLine());
   }
  }
  if($result===null){

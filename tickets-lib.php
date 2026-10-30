@@ -40,6 +40,14 @@ function ciarm_tickets_active_base_url(?string $host = null): string {
     return ciarm_tickets_env_config($host)['baseUrl'];
 }
 
+function ciarm_tickets_active_sheet_id(?string $host = null): string {
+    $cfg = ciarm_tickets_env_config($host);
+    if (!empty($cfg['sheetId'])) return (string)$cfg['sheetId'];
+    return !empty($cfg['isProduction'])
+        ? '104dJVUe63EF-BlEMniiBkzP7O8lQE4QxJJQOiJgvibA'
+        : '1o33Gw6xWsH64SXmaxaN7EDlSsW0fUExDjPE4cGpnPbs';
+}
+
 function ciarm_ticket_permission(array $rows, string $email): bool {
     $email = strtolower(trim($email));
     if (!in_array($email, ['d.lara@ciarm.edu.mx', 'e.conesa@ciarm.edu.mx', 'r.valencia@ciarm.edu.mx'], true) || count($rows) < 2) return false;
@@ -101,6 +109,14 @@ function ciarm_ticket_envelope(array $sessionUser, string $action, array $payloa
         'nonce' => $nonce ?? bin2hex(random_bytes(24)),
         'payload' => $payload,
     ];
+    $sheetId = ciarm_tickets_active_sheet_id();
+    if ($sheetId !== '') {
+        $data['spreadsheetId'] = $sheetId;
+    }
+    $baseUrl = ciarm_tickets_active_base_url();
+    if ($baseUrl !== '') {
+        $data['portalBaseUrl'] = $baseUrl;
+    }
     if ($perfProbe) $data['perfProbe'] = true;
     $envelope = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     return ['envelope' => $envelope, 'signature' => hash_hmac('sha256', $envelope, $secret)];

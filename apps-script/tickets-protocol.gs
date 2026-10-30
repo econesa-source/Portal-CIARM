@@ -39,19 +39,19 @@ function handleTicketEnvelope(envelope,signature) {
   lock=LockService.getScriptLock();locked=lock.tryLock(15000);clock.mark('lock');if(!locked)adminFail('BUSY');
   var cache=CacheService.getScriptCache(),key='ticket-admin-'+request.nonce;
   if(cache.get(key))adminFail('REPLAY');cache.put(key,'1',300);clock.mark('nonce');
-  var book=SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID),data;clock.mark('open');
+  var book=ticketResolveBook(request),data;clock.mark('open');
   switch(request.action){
    case 'serviceContext':data={protocol:'tickets-service-v1',enabled:Boolean(serviceConfig(book)),canAdmin:adminPermission(request.actor)};break;
    case 'serviceSettings':data=serviceSettings(book,request.actor);break;
    case 'saveServicePolicy':data=servicePublish(book,request.actor,request.payload);break;
    case 'serviceDetail':data=serviceDetail(book,request.actor,request.payload.id);break;
-   case 'serviceTransition':data=serviceTransition(book,request.actor,request.payload);break;
+   case 'serviceTransition':data=serviceTransition(book,request.actor,request.payload,request);break;
    case 'serviceList':data=serviceList(book,request.actor,request.payload.kind);break;
    case 'capabilities':data={protocol:'tickets-portal-v1',serviceProtocol:'tickets-service-v1',maxFiles:5,maxFileBytes:10*1024*1024};break;
    case 'mine':data=adminTicketList(book).filter(function(ticket){return ticket.correo.trim().toLowerCase()===collaborator.correoDM03;});break;
    case 'beginCreate':data=portalBeginCreate(book,request.actor,request.payload);break;
    case 'uploadAttachment':data=portalUploadAttachment(book,request.actor,request.payload);break;
-   case 'finalizeCreate':data=portalFinalizeCreate(book,request.actor,request.payload);break;
+   case 'finalizeCreate':data=portalFinalizeCreate(book,request.actor,request.payload,request);break;
    case 'creationStatus':data=portalCreationStatus(book,request.actor,(request.payload||{}).operationId);break;
    case 'uploadEvidence':data=serviceUploadEvidence(book,request.actor,request.payload);break;
    default:adminFail('VALIDATION');

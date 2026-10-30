@@ -39,7 +39,7 @@ function handleTicketEnvelope(envelope,signature) {
   lock=LockService.getScriptLock();locked=lock.tryLock(15000);clock.mark('lock');if(!locked)adminFail('BUSY');
   var cache=CacheService.getScriptCache(),key='ticket-admin-'+request.nonce;
   if(cache.get(key))adminFail('REPLAY');cache.put(key,'1',300);clock.mark('nonce');
-  var book=ticketResolveBook(request),data;clock.mark('open');
+  var book=(typeof ticketResolveBook==='function'?ticketResolveBook(request):SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID)),data;clock.mark('open');
   switch(request.action){
    case 'serviceContext':data={protocol:'tickets-service-v1',enabled:Boolean(serviceConfig(book)),canAdmin:adminPermission(request.actor)};break;
    case 'serviceSettings':data=serviceSettings(book,request.actor);break;

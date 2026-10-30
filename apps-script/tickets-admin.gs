@@ -18,23 +18,24 @@ function adminFail(code, detail) { var error = new Error(detail ? code + ': ' + 
 function adminHex(bytes) { return bytes.map(function(b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join(''); }
 function adminHash(value) { return adminHex(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, JSON.stringify(value), Utilities.Charset.UTF_8)); }
 function adminEqual(a,b) { if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false; var diff=0; for(var i=0;i<a.length;i++) diff |= a.charCodeAt(i)^b.charCodeAt(i); return diff===0; }
+function adminStripZeroWidth(s) {
+ return String(s||'').split(String.fromCharCode(8203)).join('').split(String.fromCharCode(8204)).join('').split(String.fromCharCode(8205)).join('').split(String.fromCharCode(65279)).join('');
+}
 function adminNormalizeHeader(h) {
- return String(h||'')
+ return adminStripZeroWidth(h)
   .trim()
-  .replace(/[\u200B-\u200D\uFEFF]/g,'')
-  .replace(/\u221A\u00C5|\u00C3\u0081/g,'A')
-  .replace(/\u221A\u00CC|\u00C3\u0093/g,'O')
-  .replace(/\u221A\u00DA|\u00C3\u009A/g,'U')
-  .replace(/\u221A\u00C9|\u00C3\u0089/g,'E')
-  .replace(/\u221A\u00CD|\u00C3\u008D/g,'I')
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g,'')
+  .replace(/[ÁÀÄÂáàäâ]/g,'A')
+  .replace(/[ÉÈËÊéèëê]/g,'E')
+  .replace(/[ÍÌÏÎíìïî]/g,'I')
+  .replace(/[ÓÒÖÔóòöô]/g,'O')
+  .replace(/[ÚÙÜÛúùüû]/g,'U')
+  .replace(/[Ññ]/g,'N')
   .toUpperCase();
 }
 function adminTable(book,name,required,valuesOnly) {
  var sheet=book.getSheetByName(name); if(!sheet) adminFail('SCHEMA', 'hoja ' + name + ' no existe');
  var range=sheet.getDataRange();var rows=range.getValues();var formulas=valuesOnly?null:range.getFormulas();
- var headers=rows[0].map(function(v){return String(v).trim().replace(/[\u200B-\u200D\uFEFF]/g,'');});
+ var headers=rows[0].map(function(v){return adminStripZeroWidth(v).trim();});
  var normHeaders=headers.map(adminNormalizeHeader);
  required.forEach(function(h){
   var normH=adminNormalizeHeader(h);
@@ -74,7 +75,7 @@ function handleAdminEnvelope(envelope,signature) {
   locked=lock.tryLock(15000);clock.mark('lock');if(!locked) adminFail('BUSY');
   var cache=CacheService.getScriptCache();var nonceKey='ticket-admin-'+request.nonce;
   if(cache.get(nonceKey)) adminFail('REPLAY');cache.put(nonceKey,'1',300);clock.mark('nonce');
-  var book=ticketResolveBook(request);clock.mark('open');
+  var book=(typeof ticketResolveBook==='function'?ticketResolveBook(request):SpreadsheetApp.openById(CONFIG.TICKETS_SPREADSHEET_ID));clock.mark('open');
   var data;
   switch(request.action) {
    case 'list': data=adminTicketList(book);break;
@@ -115,7 +116,7 @@ function adminCellValue(value,header) {
 function adminSnapshot(ticket) { return ticket.row.map(function(value,i){return ticket.formulas&&ticket.formulas[i]?{formula:ticket.formulas[i]}:adminCellValue(value,ticket.table.headers[i]);}); }
 function adminTicketView(ticket) {
  var row=ticket.row;var headers=ticket.table.headers;
- function get(h){return String(adminCellValue(row[headers.indexOf(h)],h)).replace(/^\u200B(?=[=+@'-])/,'');}
+ function get(h){var v=String(adminCellValue(row[headers.indexOf(h)],h));return (v.charCodeAt(0)===8203&&/^[=+@'-]/.test(v.slice(1)))?v.slice(1):v;}
  return {id:get('ID TICKET'),fecha:get('FECHA SOLICITUD'),hora:get('HORA SOLICITUD'),solicitante:get('SOLICITANTE'),correo:get('CORREO SOLICITANTE'),area:get('ÁREA SOLICITANTE'),tipo:get('TIPO DE SOLICITUD'),descripcion:get('DESCRIPCIÓN'),urgencia:get('PRIORIDAD SOLICITADA'),plazo:get('PLAZO SOLICITADO'),prioridad:get('PRIORIDAD'),responsable:get('RESPONSABLE'),fechaAsignacion:get('FECHA ASIGNACIÓN'),fechaCompromiso:get('FECHA COMPROMISO'),estado:get('ESTADO'),observaciones:get('OBSERVACIONES'),adjuntos:get('ARCHIVOS ADJUNTOS'),version:adminHash(adminSnapshot(ticket))};
 }
 function adminTicketList(book) {
@@ -127,7 +128,7 @@ function adminCatalogs(book) {
  function unique(table,h){var seen={};return table.rows.slice(1).map(function(row){return String(row[table.headers.indexOf(h)]||'').trim();}).filter(function(v){if(!v||seen[v])return false;seen[v]=true;return true;});}
  return {prioridades:unique(priorities,'PRIORIDADES').filter(function(p){return ['CRITICA','URGENTE','ALTA','MEDIA','BAJA'].indexOf(p)>=0;}),responsables:unique(people,'RESPONSABLE').concat(typeof serviceConfig==='function'&&serviceConfig(book)?serviceConfig(book).responsibles.map(function(r){return r.name;}):[]).filter(function(v,i,a){return a.indexOf(v)===i;})};
 }
-function adminLiteral(value) { return /^[=+@'-]/.test(value)?'\u200B'+value:value; }
+function adminLiteral(value) { return /^[=+@'-]/.test(value)?String.fromCharCode(8203)+value:value; }
 function adminAssignmentChanges(book,payload,ticket) {
  var changes=payload.changes;var catalogs=adminCatalogs(book);
  if(!changes||Object.keys(changes).some(function(k){return ['responsable','prioridad','fechaCompromiso','observacion'].indexOf(k)<0;}))adminFail('VALIDATION');

@@ -21,13 +21,43 @@ if (($_GET['action'] ?? '') === 'ping') {
     $canRead = false;
     $sheetErr = null;
     $ticketCount = null;
+    $serviceListResult = null;
+    $serviceListErr = null;
+    $webAppResult = null;
+    $webAppErr = null;
     try {
-        $sets = ciarm_tickets_batch_get(["'TICKETS'!A1:B20"]);
-        $canRead = is_array($sets);
-        $ticketCount = count($sets["'TICKETS'!A1:B20"] ?? []);
+        $ranges = ["'TICKETS'!A:X", "'BITACORA TICKETS'!A:J", "'SEGUIMIENTO SERVICIO'!A:B"];
+        $sets = ciarm_tickets_batch_get($ranges);
+        $serviceListResult = ciarm_tickets_direct_service_list(
+            $sets[$ranges[0]], $sets[$ranges[1]], $sets[$ranges[2]], 'e.conesa@ciarm.edu.mx', 'mine', 'Ezequiel Conesa'
+        );
     } catch (Throwable $e) {
-        $sheetErr = $e->getMessage();
+        $serviceListErr = $e->getMessage() . ' in ' . basename($e->getFile()) . ':' . $e->getLine();
     }
+
+    try {
+        $secret = @file_get_contents(ciarm_private_path('tickets-admin.key'));
+        if ($secret !== false && strlen(trim($secret)) >= 32) {
+            $userMock = ['correo' => 'e.conesa@ciarm.edu.mx', 'nombre' => 'Ezequiel Conesa'];
+            $signed = ciarm_ticket_envelope($userMock, 'serviceList', ['kind' => 'mine'], trim($secret));
+            $res = ciarm_http_json(ciarm_tickets_active_webapp(), [
+                'post' => true,
+                'headers' => ['Accept: application/json', 'Content-Type: application/json'],
+                'body' => json_encode($signed, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+                'timeout' => 15,
+            ]);
+            $webAppResult = [
+                'status' => $res['status'],
+                'ok' => $res['body']['ok'] ?? null,
+                'code' => $res['body']['code'] ?? null,
+                'itemCount' => is_array($res['body']['data'] ?? null) ? count($res['body']['data']) : null,
+                'items' => is_array($res['body']['data'] ?? null) ? array_slice($res['body']['data'], 0, 3) : null,
+            ];
+        }
+    } catch (Throwable $e) {
+        $webAppErr = $e->getMessage() . ' in ' . basename($e->getFile()) . ':' . $e->getLine();
+    }
+
     echo json_encode([
         'ok' => true,
         'http_host' => $_SERVER['HTTP_HOST'] ?? '',
@@ -42,6 +72,10 @@ if (($_GET['action'] ?? '') === 'ping') {
         'can_read_sheets' => $canRead,
         'sheet_read_error' => $sheetErr,
         'ticket_rows_read' => $ticketCount,
+        'direct_service_list_error' => $serviceListErr,
+        'direct_service_list_items' => $serviceListResult ? count($serviceListResult['items'] ?? []) : null,
+        'webapp_result' => $webAppResult,
+        'webapp_error' => $webAppErr,
     ], JSON_PRETTY_PRINT);
     exit;
 }

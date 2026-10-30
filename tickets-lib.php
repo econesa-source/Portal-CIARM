@@ -3,15 +3,16 @@ declare(strict_types=1);
 require_once __DIR__ . '/auth-lib.php';
 require_once __DIR__ . '/portal-permissions-lib.php';
 
-const CIARM_TICKETS_WEBAPP = 'https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec';
+const CIARM_TICKETS_WEBAPP = 'https://script.google.com/macros/s/AKfycbw9GAh1DLebjwnDviClopsEdmGyFeeZFz4mmj_lJMF3byuadI17X1GS0jyC5tsqLK68/exec';
 const CIARM_TICKETS_PROD_WEBAPP = 'https://script.google.com/macros/s/AKfycbw9GAh1DLebjwnDviClopsEdmGyFeeZFz4mmj_lJMF3byuadI17X1GS0jyC5tsqLK68/exec';
+const CIARM_TICKETS_STAGING_WEBAPP = 'https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec';
 const CIARM_TICKETS_ALLOWED_HOSTS = ['portal2.ciarm.edu.mx', 'portal.ciarm.edu.mx', 'portal.ciarm.mx'];
 const CIARM_TICKET_PERMISSIONS_RANGE = "'Permisos de usuario'!A1:M1010";
 
 function ciarm_tickets_is_production_host(?string $host = null): bool {
-    $raw = $host ?? (string)($_SERVER['HTTP_HOST'] ?? '');
+    $raw = $host ?? (string)($_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? '');
     $clean = strtolower(explode(':', trim($raw), 2)[0]);
-    return in_array($clean, ['portal.ciarm.edu.mx', 'portal.ciarm.mx'], true);
+    return $clean !== 'portal2.ciarm.edu.mx';
 }
 
 function ciarm_tickets_env_config(?string $host = null): array {
@@ -20,12 +21,12 @@ function ciarm_tickets_env_config(?string $host = null): array {
     $stored = $raw === false ? [] : json_decode($raw, true);
     $envKey = $isProd ? 'production' : 'staging';
     $branch = (is_array($stored) && is_array($stored[$envKey] ?? null)) ? $stored[$envKey] : [];
-    $defaultWebapp = $isProd ? CIARM_TICKETS_PROD_WEBAPP : CIARM_TICKETS_WEBAPP;
+    $defaultWebapp = $isProd ? CIARM_TICKETS_PROD_WEBAPP : CIARM_TICKETS_STAGING_WEBAPP;
     $envWebapp = getenv($isProd ? 'CIARM_TICKETS_PROD_WEBAPP' : 'CIARM_TICKETS_STAGING_WEBAPP');
     $webapp = (is_string($envWebapp) && $envWebapp !== '') ? $envWebapp : (string)($branch['webapp'] ?? $defaultWebapp);
     $envSheet = getenv($isProd ? 'CIARM_TICKETS_PROD_SHEET_ID' : 'CIARM_TICKETS_STAGING_SHEET_ID');
     $sheetId = (is_string($envSheet) && $envSheet !== '') ? $envSheet : (string)($branch['sheetId'] ?? '');
-    $cleanHost = strtolower(explode(':', trim($host ?? (string)($_SERVER['HTTP_HOST'] ?? '')), 2)[0]);
+    $cleanHost = strtolower(explode(':', trim($host ?? (string)($_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? '')), 2)[0]);
     $baseUrl = in_array($cleanHost, CIARM_TICKETS_ALLOWED_HOSTS, true)
         ? ('https://' . $cleanHost)
         : ($isProd ? 'https://portal.ciarm.edu.mx' : 'https://portal2.ciarm.edu.mx');
@@ -43,9 +44,9 @@ function ciarm_tickets_active_base_url(?string $host = null): string {
 function ciarm_tickets_active_sheet_id(?string $host = null): string {
     $cfg = ciarm_tickets_env_config($host);
     if (!empty($cfg['sheetId'])) return (string)$cfg['sheetId'];
-    return !empty($cfg['isProduction'])
-        ? '104dJVUe63EF-BlEMniiBkzP7O8lQE4QxJJQOiJgvibA'
-        : '1o33Gw6xWsH64SXmaxaN7EDlSsW0fUExDjPE4cGpnPbs';
+    return ($cfg['env'] ?? 'production') === 'staging'
+        ? '1o33Gw6xWsH64SXmaxaN7EDlSsW0fUExDjPE4cGpnPbs'
+        : '104dJVUe63EF-BlEMniiBkzP7O8lQE4QxJJQOiJgvibA';
 }
 
 function ciarm_ticket_permission(array $rows, string $email): bool {

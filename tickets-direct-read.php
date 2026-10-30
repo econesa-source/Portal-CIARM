@@ -7,8 +7,9 @@ require_once __DIR__ . '/tickets-lib.php';
  * PHP authenticates via DM03/DM05 before calling this adapter.
  * Never changes Sheets; mutations and their canonical version validation stay in GAS.
  */
-const CIARM_TICKETS_SHEET_ID = '1o33Gw6xWsH64SXmaxaN7EDlSsW0fUExDjPE4cGpnPbs';
+const CIARM_TICKETS_SHEET_ID = '104dJVUe63EF-BlEMniiBkzP7O8lQE4QxJJQOiJgvibA';
 const CIARM_TICKETS_PROD_SHEET_ID = '104dJVUe63EF-BlEMniiBkzP7O8lQE4QxJJQOiJgvibA';
+const CIARM_TICKETS_STAGING_SHEET_ID = '1o33Gw6xWsH64SXmaxaN7EDlSsW0fUExDjPE4cGpnPbs';
 const CIARM_TICKETS_HEADERS = [
  'ID TICKET','FECHA SOLICITUD','HORA SOLICITUD','ÁREA SOLICITANTE',
  'SOLICITANTE','CORREO SOLICITANTE','TIPO DE SOLICITUD','DESCRIPCIÓN',
@@ -22,7 +23,7 @@ if (!function_exists('ciarm_tickets_active_sheet_id')) {
  function ciarm_tickets_active_sheet_id(?string $host = null): string {
   $cfg = function_exists('ciarm_tickets_env_config') ? ciarm_tickets_env_config($host) : [];
   if (!empty($cfg['sheetId'])) return (string)$cfg['sheetId'];
-  return !empty($cfg['isProduction']) ? CIARM_TICKETS_PROD_SHEET_ID : CIARM_TICKETS_SHEET_ID;
+  return ($cfg['env'] ?? 'production') === 'staging' ? CIARM_TICKETS_STAGING_SHEET_ID : CIARM_TICKETS_SHEET_ID;
  }
 }
 

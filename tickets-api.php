@@ -25,9 +25,24 @@ if (($_GET['action'] ?? '') === 'ping') {
     $serviceListErr = null;
     $webAppResult = null;
     $webAppErr = null;
+    $nonEmptyRows = [];
     try {
         $ranges = ["'TICKETS'!A:X", "'BITACORA TICKETS'!A:J", "'SEGUIMIENTO SERVICIO'!A:B"];
         $sets = ciarm_tickets_batch_get($ranges);
+        $canRead = true;
+        $ticketCount = count($sets[$ranges[0]] ?? []);
+        foreach (($sets[$ranges[0]] ?? []) as $idx => $r) {
+            if ($idx === 0) continue;
+            $folio = trim((string)($r[0] ?? ''));
+            if ($folio !== '') {
+                $nonEmptyRows[] = [
+                    'row' => $idx + 1,
+                    'id' => $folio,
+                    'correo' => trim((string)($r[5] ?? '')),
+                    'estado' => trim((string)($r[12] ?? '')),
+                ];
+            }
+        }
         $serviceListResult = ciarm_tickets_direct_service_list(
             $sets[$ranges[0]], $sets[$ranges[1]], $sets[$ranges[2]], 'e.conesa@ciarm.edu.mx', 'mine', 'Ezequiel Conesa'
         );
@@ -74,6 +89,7 @@ if (($_GET['action'] ?? '') === 'ping') {
         'ticket_rows_read' => $ticketCount,
         'direct_service_list_error' => $serviceListErr,
         'direct_service_list_items' => $serviceListResult ? count($serviceListResult['items'] ?? []) : null,
+        'non_empty_ticket_rows' => $nonEmptyRows,
         'webapp_result' => $webAppResult,
         'webapp_error' => $webAppErr,
     ], JSON_PRETTY_PRINT);

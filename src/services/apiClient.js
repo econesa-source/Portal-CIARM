@@ -2,7 +2,7 @@
  * Cliente API de Integración Preproductiva - Portal CIARM
  * Conexión resiliente con Google Apps Script WebApp
  */
-export const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxy9ezQII2g5l4GIEviuQgquS2YJVzGQSJsqvOgYCBPh98Z2DDeL5sshjg2NnWUnDA/exec";
+export const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbw9GAh1DLebjwnDviClopsEdmGyFeeZFz4mmj_lJMF3byuadI17X1GS0jyC5tsqLK68/exec";
 
 const STAGING_CONFIG = {
   WEB_APP_URL: GAS_WEBAPP_URL

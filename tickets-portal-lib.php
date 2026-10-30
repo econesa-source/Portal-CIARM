@@ -88,7 +88,7 @@ function ciarm_portal_bridge(array $user,string $action,array $payload,bool $per
     $secret=@file_get_contents(ciarm_private_path('tickets-admin.key'));if($secret===false||strlen(trim($secret))<32)throw new RuntimeException('CONFIGURATION');
     $signed=ciarm_ticket_envelope($user,$action,$payload,trim($secret),null,null,$perfProbe);$limit=in_array($action,['uploadAttachment','uploadEvidence'],true)?15*1024*1024:50000;
     if(strlen($signed['envelope'])>$limit)throw new RuntimeException('PAYLOAD_SIZE');
-    $webapp=function_exists('ciarm_tickets_active_webapp')?ciarm_tickets_active_webapp():CIARM_TICKETS_WEBAPP;
+    $webapp=function_exists('ciarm_tickets_active_webapp')?ciarm_tickets_active_webapp():CIARM_TICKETS_PROD_WEBAPP;
     $response=ciarm_http_json($webapp,['post'=>true,'headers'=>['Accept: application/json','Content-Type: application/json'],'body'=>json_encode($signed,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),'timeout'=>in_array($action,['uploadAttachment','uploadEvidence','finalizeCreate'],true)?60:25]);
     if($response['status']!==200||!is_bool($response['body']['ok']??null))throw new RuntimeException('UPSTREAM');return $response['body'];
 }
@@ -223,7 +223,7 @@ function ciarm_ticket_build_notification_plan_php(string $ev, array $t, ?array $
     $followAt=trim((string)($input['followAt']??($waitReq['followAt']??'')));
     $comment=trim((string)($input['comment']??($input['changes']['observacion']??($ev==='ASSIGN'?($t['observaciones']??''):''))));
     $evidence=(is_array($input['evidence']??null)&&count($input['evidence'])>0)?$input['evidence']:(is_array($meta['evidence']??null)?$meta['evidence']:[]);
-    $baseUrl=function_exists('ciarm_tickets_active_base_url')?rtrim(ciarm_tickets_active_base_url(),'/'):'https://portal2.ciarm.edu.mx';
+    $baseUrl=function_exists('ciarm_tickets_active_base_url')?rtrim(ciarm_tickets_active_base_url(),'/'):'https://portal.ciarm.edu.mx';
     $messages=[];$skipped=[];$seen=[];
     $enqueue=static function(string $role,?string $to,string $subject,string $heading,string $intro,string $ctaLabel,string $ctaHash) use (&$messages,&$skipped,&$seen,$t,$comment,$dependency,$followAt,$evidence,$baseUrl): void {
         if($to===null||trim($to)===''){
@@ -359,7 +359,7 @@ function ciarm_ticket_smtp_cmd($fp, string $cmd, array $expectCodes = [250]): ar
 function ciarm_ticket_send_raw_mime(string $to, string $subject, string $html, string $fromEmail = 'no-reply@ciarm.edu.mx'): string {
     $encodedSubject='=?UTF-8?B?'.base64_encode($subject).'?=';
     $fromName='=?UTF-8?B?'.base64_encode('Portal CIARM — Solicitudes').'?=';
-    $msgId='<'.bin2hex(random_bytes(12)).'@portal2.ciarm.edu.mx>';
+    $msgId='<'.bin2hex(random_bytes(12)).'@portal.ciarm.edu.mx>';
     $date=date('r');
     $headers=[
         "Date: {$date}",
@@ -385,12 +385,12 @@ function ciarm_ticket_smtp_mx_send(string $to, string $subject, string $html, st
     stream_set_timeout($fp,8);
     $banner=ciarm_ticket_smtp_read($fp);
     if((int)substr($banner,0,3)!==220){fclose($fp);return ['ok'=>false,'stage'=>'banner','ip'=>$ipv4,'error'=>trim($banner)];}
-    $ehlo=ciarm_ticket_smtp_cmd($fp,'EHLO portal2.ciarm.edu.mx',[250]);
+    $ehlo=ciarm_ticket_smtp_cmd($fp,'EHLO portal.ciarm.edu.mx',[250]);
     if(!$ehlo['ok']){fclose($fp);return ['ok'=>false,'stage'=>'ehlo','error'=>$ehlo['resp']];}
     if(stripos($ehlo['resp'],'STARTTLS')!==false){
         $tls=ciarm_ticket_smtp_cmd($fp,'STARTTLS',[220]);
         if($tls['ok']&&@stream_socket_enable_crypto($fp,true,STREAM_CRYPTO_METHOD_TLS_CLIENT)){
-            $ehlo=ciarm_ticket_smtp_cmd($fp,'EHLO portal2.ciarm.edu.mx',[250]);
+            $ehlo=ciarm_ticket_smtp_cmd($fp,'EHLO portal.ciarm.edu.mx',[250]);
         }
     }
     $from='no-reply@ciarm.edu.mx';

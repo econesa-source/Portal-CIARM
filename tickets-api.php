@@ -16,6 +16,35 @@ function ciarm_ticket_perf_headers(array $durations, float $start): void {
  }
  header('Server-Timing: '.implode(', ',$parts));
 }
+if (($_GET['action'] ?? '') === 'ping') {
+    header('Content-Type: application/json; charset=utf-8');
+    $canRead = false;
+    $sheetErr = null;
+    $ticketCount = null;
+    try {
+        $sets = ciarm_tickets_batch_get(["'TICKETS'!A1:B20"]);
+        $canRead = is_array($sets);
+        $ticketCount = count($sets["'TICKETS'!A1:B20"] ?? []);
+    } catch (Throwable $e) {
+        $sheetErr = $e->getMessage();
+    }
+    echo json_encode([
+        'ok' => true,
+        'http_host' => $_SERVER['HTTP_HOST'] ?? '',
+        'server_name' => $_SERVER['SERVER_NAME'] ?? '',
+        'is_production' => ciarm_tickets_is_production_host(),
+        'active_sheet' => ciarm_tickets_active_sheet_id(),
+        'active_webapp' => ciarm_tickets_active_webapp(),
+        'active_base_url' => ciarm_tickets_active_base_url(),
+        'tickets_env_file_exists' => @file_exists(ciarm_private_path('tickets-env.json')),
+        'service_account_exists' => @file_exists(ciarm_private_path('service-account.json')),
+        'admin_key_exists' => @file_exists(ciarm_private_path('tickets-admin.key')),
+        'can_read_sheets' => $canRead,
+        'sheet_read_error' => $sheetErr,
+        'ticket_rows_read' => $ticketCount,
+    ], JSON_PRETTY_PRINT);
+    exit;
+}
 $user=ciarm_session_user();
 $ticketPerf['session']=(microtime(true)-$ticketPerfStart)*1000;
 if($user===null)ciarm_json_response(401,['ok'=>false,'code'=>'UNAUTHENTICATED']);

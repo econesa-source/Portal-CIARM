@@ -123,6 +123,11 @@ function inicializarHojasTusCompras(book) {
   return { ok: true, spreadsheetId: ss.getId(), name: ss.getName() };
 }
 
+function autorizarPermisosCorreoTusCompras() {
+  var quota = typeof MailApp !== 'undefined' && MailApp.getRemainingDailyQuota ? MailApp.getRemainingDailyQuota() : 0;
+  Logger.log('Permiso MailApp autorizado correctamente para Tus Compras. Cuota restante: ' + quota);
+}
+
 function doGet(e) {
   return ContentService
     .createTextOutput(JSON.stringify({ ok: false, code: 'FORBIDDEN', module: 'tus-compras' }))
@@ -133,6 +138,27 @@ function doPost(e) {
   try {
     var raw = e && e.postData && e.postData.contents ? e.postData.contents : '{}';
     var body = JSON.parse(raw);
+    if (body && body.action === 'sendNotifications' && Array.isArray(body.messages)) {
+      var deliveries = [];
+      for (var i = 0; i < body.messages.length; i++) {
+        var msg = body.messages[i] || {};
+        try {
+          MailApp.sendEmail({
+            to: String(msg.to || ''),
+            subject: String(msg.subject || ''),
+            body: String(msg.text || msg.intro || ''),
+            htmlBody: String(msg.html || ''),
+            name: 'Portal CIARM — Tus Compras'
+          });
+          deliveries.push({ role: msg.role || '', to: msg.to || '', status: 'ENVIADO', via: 'gas-mailapp' });
+        } catch (mailErr) {
+          deliveries.push({ role: msg.role || '', to: msg.to || '', status: 'ERROR', error: String(mailErr), via: 'gas-mailapp' });
+        }
+      }
+      return ContentService
+        .createTextOutput(JSON.stringify({ ok: true, deliveries: deliveries }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     var ss = tusComprasResolveBook(body);
     inicializarHojasTusCompras(ss);
     return ContentService

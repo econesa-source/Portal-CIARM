@@ -12,44 +12,6 @@ if (!in_array($method, ['GET', 'POST'], true)) {
     ciarm_json_response(405, ['ok' => false, 'code' => 'METHOD_NOT_ALLOWED']);
 }
 
-if ($method === 'GET' && ((string)($_GET['mailDiag'] ?? '')) === '8f9d2a7b4c1e6f03') {
-    try {
-        $store = ciarm_tus_compras_fetch_all();
-        $pedidos = ciarm_tus_compras_parse_pedidos($store['pedidosRows']);
-        ciarm_tus_compras_sync_normalized_orders($pedidos, $store['sheetId'], $store['token']);
-        $bitacora = ciarm_tus_compras_parse_bitacora($store['bitacoraRows']);
-        $ip = gethostbyname('smtp.google.com');
-        $errno = 0;
-        $errstr = '';
-        $fp = @stream_socket_client("tcp://{$ip}:25", $errno, $errstr, 4);
-        $smtpOpen = false;
-        $banner = '';
-        if ($fp) {
-            stream_set_timeout($fp, 4);
-            $banner = trim(ciarm_ticket_smtp_read($fp));
-            $smtpOpen = ((int)substr($banner, 0, 3) === 220);
-            @ciarm_ticket_smtp_cmd($fp, 'QUIT', [221, 250]);
-            fclose($fp);
-        }
-        ciarm_json_response(200, [
-            'ok' => true,
-            'sheetId' => $store['sheetId'],
-            'smtpGoogleMx' => ['ip' => $ip, 'open' => $smtpOpen, 'banner' => $banner, 'err' => $errstr],
-            'pedidosCount' => count($pedidos),
-            'pedidos' => array_map(static fn($p) => [
-                'id' => $p['id'],
-                'tipo' => $p['tipo'],
-                'monto' => $p['monto'],
-                'estado' => $p['estado'],
-                'correo' => $p['correo'],
-            ], $pedidos),
-            'bitacora' => $bitacora,
-        ]);
-    } catch (Throwable $diagErr) {
-        ciarm_json_response(500, ['ok' => false, 'err' => $diagErr->getMessage()]);
-    }
-}
-
 if ($method === 'POST') {
     $origin = (string)($_SERVER['HTTP_ORIGIN'] ?? '');
     $host = (string)($_SERVER['HTTP_HOST'] ?? '');

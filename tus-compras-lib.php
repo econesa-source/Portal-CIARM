@@ -166,6 +166,7 @@ function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): arr
         'canCreate' => false,
         'canAdmin' => false,
         'canApprove' => false,
+        'canGerencial' => false,
         'isDocenteDirector' => false,
         'isAdministracion' => false,
         'correo' => $email,
@@ -240,8 +241,10 @@ function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): arr
 
     $isDocenteDirector = $profile['isDocenteDirector'];
     $isAdministracion = $profile['isAdministracion'];
+    $normNombre = ciarm_tus_compras_normalize_token($nombre);
     $isDanielLara = ($email === strtolower(CIARM_TUS_COMPRAS_ADMIN_EMAIL))
-        || (ciarm_tus_compras_normalize_token($nombre) === 'daniel lara');
+        || ($normNombre === 'daniel lara')
+        || ($normNombre === 'daniel lira');
 
     // Pueden crear pedidos de compra:
     // 1) Usuarios con AG="docente" y AJ="director"
@@ -249,6 +252,8 @@ function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): arr
     $canCreate = $isDocenteDirector || ($isAdministracion && !$isDanielLara);
     $canAdmin = $isAdministracion && !$isDocenteDirector;
     $canApprove = $isAdministracion && !$isDocenteDirector;
+    // Vista Gerencial: usuarios con AG="administración" y AJ="administración" distintos de Daniel Lara
+    $canGerencial = $isAdministracion && !$isDocenteDirector && !$isDanielLara;
     $visible = $isDocenteDirector || $isAdministracion;
 
     $approverList = array_values(array_unique(array_merge(
@@ -261,6 +266,7 @@ function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): arr
         'canCreate' => $canCreate,
         'canAdmin' => $canAdmin,
         'canApprove' => $canApprove,
+        'canGerencial' => $canGerencial,
         'isDocenteDirector' => $isDocenteDirector,
         'isAdministracion' => $isAdministracion,
         'correo' => $email,

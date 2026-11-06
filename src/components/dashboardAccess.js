@@ -94,11 +94,12 @@ export function allowedRoute(hash, response) {
   if (hash === '#admin-solicitudes' || hash === '#vision-gerencial') {
     return true;
   }
-  if (hash === '#tus-compras' || hash === '#tus-compras-nuevo' || hash === '#admin-tus-compras') {
+  if (hash === '#tus-compras' || hash === '#tus-compras-nuevo' || hash === '#admin-tus-compras' || hash === '#vision-gerencial-compras') {
     const tc = response?.tusCompras;
     if (tc?.visible === true || permissions.has('TUS_COMPRAS_TARJETA')) {
       if (hash === '#tus-compras-nuevo') return tc ? tc.canCreate === true : true;
       if (hash === '#admin-tus-compras') return tc ? (tc.canAdmin === true || tc.canApprove === true) : true;
+      if (hash === '#vision-gerencial-compras') return tc ? tc.canGerencial === true : true;
       return true;
     }
     return false;

@@ -8,7 +8,8 @@ import {
   evaluateOrderApprovalRequirement,
   resolveEffectiveOrderState,
   normalizeOrdersStates,
-  computeAllowedActions
+  computeAllowedActions,
+  computeTusComprasExecutiveMetrics
 } from '../src/services/tusComprasService.js';
 import { allowedRoute } from '../src/components/dashboardAccess.js';
 
@@ -134,9 +135,69 @@ test('Visibilidad y rutas de Tus compras gobernadas por perfil DM03 (AG=docente,
     verified: true,
     enforced: true,
     codes: ['INT_TARJETA'],
-    tusCompras: { visible: true, canCreate: true, canAdmin: true, canApprove: false }
+    tusCompras: { visible: true, canCreate: false, canAdmin: true, canApprove: false, canGerencial: false }
   };
   assert.equal(allowedRoute('#admin-tus-compras', danielAdmin), true);
+  assert.equal(allowedRoute('#vision-gerencial-compras', danielAdmin), false);
+
+  const ezequielAdmin = {
+    verified: true,
+    enforced: true,
+    codes: ['INT_TARJETA'],
+    tusCompras: { visible: true, canCreate: true, canAdmin: true, canApprove: true, canGerencial: true }
+  };
+  assert.equal(allowedRoute('#admin-tus-compras', ezequielAdmin), true);
+  assert.equal(allowedRoute('#vision-gerencial-compras', ezequielAdmin), true);
+});
+
+test('Indicadores gerenciales: tiempos de entrega, cierre y gestión de Daniel Lara separados por OPEX y CAPEX', () => {
+  const orders = [
+    {
+      id: 'CMP-2026-00001',
+      fecha: '2026-11-01',
+      hora: '08:00:00',
+      area: 'Docente',
+      solicitante: 'Dir Docente',
+      tipo: 'OPEX',
+      monto: 3000,
+      requiereAprobacion: false,
+      estado: TUS_COMPRAS_STATES.CONFORME,
+      fechaRecepcionAdm: '2026-11-02 08:00:00', // 24h en abastecimiento por Daniel
+      fechaEntrega: '2026-11-02 20:00:00',      // 12h en entrega interna por Daniel (total gestión Daniel = 36h, entrega total = 36h)
+      ultimaActualizacion: '2026-11-03 08:00:00' // 12h validación solicitante (total cierre = 48h)
+    },
+    {
+      id: 'CMP-2026-00003',
+      fecha: '2026-11-01',
+      hora: '08:00:00',
+      area: 'Docente',
+      solicitante: 'Dir Docente',
+      tipo: 'CAPEX',
+      monto: 350000,
+      requiereAprobacion: true,
+      estado: TUS_COMPRAS_STATES.CONFORME,
+      fechaAprobacion: '2026-11-02 08:00:00',   // 24h en aprobación ejecutiva (no imputable a Daniel)
+      fechaRecepcionAdm: '2026-11-04 08:00:00', // 48h en abastecimiento por Daniel desde aprobación
+      fechaEntrega: '2026-11-05 08:00:00',      // 24h en entrega interna por Daniel (total gestión Daniel = 72h, entrega total = 96h)
+      ultimaActualizacion: '2026-11-06 08:00:00' // 24h validación solicitante (total cierre = 120h)
+    }
+  ];
+
+  const metrics = computeTusComprasExecutiveMetrics(orders, { tipo: 'ALL' });
+  assert.equal(metrics.totalOrders, 2);
+  assert.equal(metrics.opex.count, 1);
+  assert.equal(metrics.capex.count, 1);
+
+  // Entrega y cierre OPEX vs CAPEX
+  assert.equal(Math.round(metrics.opex.avgEndToEndDeliveryHours), 36);
+  assert.equal(Math.round(metrics.opex.avgEndToEndClosureHours), 48);
+  assert.equal(Math.round(metrics.capex.avgEndToEndDeliveryHours), 96);
+  assert.equal(Math.round(metrics.capex.avgEndToEndClosureHours), 120);
+
+  // Tiempo neto de gestión de Daniel Lara (descontando las 24h de aprobación en CAPEX)
+  assert.equal(Math.round(metrics.opex.avgDanielTotalCompletedHours), 36);
+  assert.equal(Math.round(metrics.capex.avgDanielTotalCompletedHours), 72);
+  assert.equal(Math.round(metrics.capex.avgApprovalHours), 24);
 });
 
 test('Configuración de doble Base de Datos (Preprod portal2 y Prod portal) y reglas en PHP/GAS', () => {

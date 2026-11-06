@@ -10,12 +10,14 @@ import {
   evaluateOrderApprovalRequirement,
   resolveEffectiveOrderState,
   normalizeOrdersStates,
+  formatDurationHours,
+  computeTusComprasExecutiveMetrics,
   getTusComprasContext,
   listTusCompras,
   createTusCompra,
   transitionTusCompra,
   uploadTusCompraAttachment
-} from '../services/tusComprasService.js?v=18.7.16-tc2';
+} from '../services/tusComprasService.js?v=18.7.16-tc6';
 
 const ACTION_META = Object.freeze({
   RECEIVE_OPEX: {
@@ -173,6 +175,7 @@ export async function render(container, userSession) {
 
   const access = ctx.access || {};
   const canCreate = Boolean(access.canCreate);
+  const canGerencial = Boolean(access.canGerencial);
   const isAdministracion = Boolean(access.isAdministracion || (access.isDocenteDirector !== true && (access.canAdmin || access.canApprove)));
 
   if (route === '#tus-compras-nuevo') {
@@ -184,6 +187,22 @@ export async function render(container, userSession) {
     return;
   }
 
+  if (route === '#vision-gerencial-compras') {
+    if (!canGerencial) {
+      container.innerHTML = `
+        <div class="card-container-wide">
+          <div class="solicitud-topbar">
+            <a href="#admin-tus-compras" class="card-top-nav-link">← Volver a Gestión y Aprobaciones</a>
+          </div>
+          <p role="alert" style="color:#991b1b;font-weight:600;">La Vista Gerencial de Tus compras está reservada para perfiles de Administración con rol directivo/autorizador.</p>
+        </div>
+      `;
+      return;
+    }
+    await renderExecutiveDashboardView(container, ctx, controller);
+    return;
+  }
+
   const isAdminView = route === '#admin-tus-compras' && isAdministracion;
   await renderListView(container, ctx, isAdminView ? 'all' : 'mine', controller);
 }
@@ -192,13 +211,16 @@ function renderTopNavigation(activeRoute, access) {
   const canCreate = Boolean(access?.canCreate);
   // El menú de Gestión y Aprobaciones solo corresponde a usuarios con perfil "administración" en área (AG) y nivel (AJ)
   const showAdminMenu = Boolean(access?.isAdministracion === true);
+  // Vista Gerencial: usuarios con área y nivel "administración" distintos de Daniel Lara
+  const showGerencialMenu = Boolean(access?.canGerencial === true);
   return `
     <div class="solicitud-topbar" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
       <a href="#inicio" class="card-top-nav-link">← Volver al Inicio</a>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         ${canCreate ? `<a href="#tus-compras-nuevo" class="solicitud-secondary-link" style="${activeRoute === '#tus-compras-nuevo' ? 'background:#26487F;color:#fff;border-color:#26487F;' : ''}">+ Crear Pedido</a>` : ''}
         <a href="#tus-compras" class="solicitud-secondary-link" style="${activeRoute === '#tus-compras' ? 'background:#26487F;color:#fff;border-color:#26487F;' : ''}">Mis Compras</a>
         ${showAdminMenu ? `<a href="#admin-tus-compras" class="solicitud-secondary-link" style="${activeRoute === '#admin-tus-compras' ? 'background:#26487F;color:#fff;border-color:#26487F;' : ''}">Gestión y Aprobaciones</a>` : ''}
+        ${showGerencialMenu ? `<a href="#vision-gerencial-compras" class="solicitud-secondary-link" style="${activeRoute === '#vision-gerencial-compras' ? 'background:#26487F;color:#fff;border-color:#26487F;font-weight:700;' : 'border-color:#26487F;color:#26487F;font-weight:700;'}">📊 Vista Gerencial</a>` : ''}
       </div>
     </div>
   `;
@@ -393,7 +415,7 @@ async function renderListView(container, ctx, kind, controller) {
     <section class="ticket-admin">
       ${renderTopNavigation(activeRoute, access)}
 
-      <header class="ticket-admin-header" style="margin-bottom:14px;">
+      <header class="ticket-admin-header" style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
         <div>
           <h1>${kind === 'all' ? 'Gestión y Aprobaciones · Tus compras' : 'Mis Compras y Validación de Recepción'}</h1>
           <p>${
@@ -402,6 +424,11 @@ async function renderListView(container, ctx, kind, controller) {
               : 'Consulta el estado informativo de tus tickets de compra. Cuando tu compra sea entregada podrás cerrar el ticket clasificándolo como Recepción Conforme o Recepción Disconforme.'
           }</p>
         </div>
+        ${
+          kind === 'all' && access?.canGerencial
+            ? `<a href="#vision-gerencial-compras" class="exact-btn dark" style="background:var(--primary-color, #26487F);color:#ffffff;padding:9px 16px;border-radius:8px;font-weight:700;text-decoration:none;white-space:nowrap;">📊 Vista Gerencial</a>`
+            : ''
+        }
       </header>
 
       ${
@@ -725,6 +752,407 @@ async function renderListView(container, ctx, kind, controller) {
   });
 
   renderCards();
+}
+
+async function renderExecutiveDashboardView(container, ctx, controller) {
+  const signal = controller.signal;
+  const active = () => !signal.aborted && container.isConnected;
+  const access = ctx.access || {};
+
+  let listData;
+  try {
+    listData = await listTusCompras('all', signal);
+  } catch (err) {
+    if (!active()) return;
+    container.innerHTML = `<section class="ticket-admin"><p role="alert">No se pudieron consultar los indicadores gerenciales de Tus compras.</p></section>`;
+    return;
+  }
+  if (!active()) return;
+
+  const allItems = normalizeOrdersStates(Array.isArray(listData.items) ? listData.items : []);
+  const areas = [...new Set(allItems.map(x => String(x.area || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+  const filters = { days: '30', tipo: '', area: '' };
+
+  container.innerHTML = `
+    <section class="ticket-admin ticket-management">
+      ${renderTopNavigation('#vision-gerencial-compras', access)}
+
+      <header class="ticket-executive-heading" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+        <div>
+          <h1 style="margin:0;color:#0f172a;">Vista Gerencial · Tus compras</h1>
+          <p style="margin:4px 0 0;color:#475569;">Evolución gráfica de tickets de compra, tiempos de entrega y cierre (OPEX vs CAPEX) y desempeño operativo de gestión de compra (Daniel Lara).</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <a href="#admin-tus-compras" class="solicitud-secondary-link" style="padding:8px 14px;border-radius:6px;text-decoration:none;">← Gestión y Aprobaciones</a>
+          <button type="button" id="tc-exec-refresh" style="background:var(--primary-color, #26487F);border:1px solid var(--primary-color, #26487F);color:#ffffff;font-weight:600;padding:8px 14px;border-radius:6px;cursor:pointer;">Actualizar indicadores</button>
+        </div>
+      </header>
+
+      <form id="tc-exec-filters" class="ticket-filters" aria-label="Filtros gerenciales de compras" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;background:#ffffff;padding:14px;border:1px solid #cbd5e1;border-radius:10px;margin-bottom:18px;">
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:#334155;">
+          Período de análisis
+          <select name="days" style="padding:7px 10px;border:1px solid #cbd5e1;border-radius:6px;">
+            <option value="7">Últimos 7 días</option>
+            <option value="30" selected>Últimos 30 días</option>
+            <option value="90">Últimos 90 días</option>
+            <option value="0">Todo el historial</option>
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:#334155;">
+          Tipo de compra
+          <select name="tipo" style="padding:7px 10px;border:1px solid #cbd5e1;border-radius:6px;">
+            <option value="">Todos (OPEX + CAPEX)</option>
+            <option value="OPEX">Solo OPEX (≤ $10,000 directo / exceso)</option>
+            <option value="CAPEX">Solo CAPEX (Inversión)</option>
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:#334155;">
+          Área solicitante
+          <select name="area" style="padding:7px 10px;border:1px solid #cbd5e1;border-radius:6px;">
+            <option value="">Todas las áreas</option>
+            ${areas.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('')}
+          </select>
+        </label>
+      </form>
+
+      <div id="tc-exec-body" aria-live="polite"></div>
+      <dialog id="tc-exec-modal" class="ticket-modal" style="max-width:680px;width:94%;border-radius:10px;border:1px solid #cbd5e1;padding:20px;"></dialog>
+    </section>
+  `;
+
+  const bodyEl = container.querySelector('#tc-exec-body');
+  const modalEl = container.querySelector('#tc-exec-modal');
+  const formEl = container.querySelector('#tc-exec-filters');
+
+  function openDetail(orderId) {
+    const order = allItems.find(x => x.id === orderId);
+    if (!order) return;
+    const history = Array.isArray(order.history) ? order.history : [];
+    modalEl.innerHTML = `
+      <div>
+        <div>
+          <h3 style="margin:0;color:#1e3a8a;">Detalle y Trazabilidad · ${escapeHtml(order.id)}</h3>
+        </div>
+        ${renderStepProgress(order.estado)}
+        <table style="width:100%;border-collapse:collapse;font-size:13.5px;margin:12px 0;">
+          <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Estado Actual</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.estado)}</td></tr>
+          <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Solicitante / Área</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.solicitante)} (${escapeHtml(order.correo)}) · ${escapeHtml(order.area)}</td></tr>
+          <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Tipo y Monto</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.tipo)} · ${formatCurrency(order.monto)} (Acumulado área: ${formatCurrency(order.acumuladoMesArea)})</td></tr>
+          <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Artículos</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.descripcion)}</td></tr>
+          ${order.aprobador ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Aprobación</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.aprobador)} ${order.fechaAprobacion ? `(${escapeHtml(order.fechaAprobacion)})` : ''}</td></tr>` : ''}
+        </table>
+        <h4 style="margin:14px 0 8px;color:#0f172a;">Bitácora de Trazabilidad</h4>
+        ${
+          history.length
+            ? `<div style="max-height:220px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px;padding:8px;">
+                ${history
+                  .map(
+                    h => `
+                  <div style="padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:12.5px;">
+                    <div><strong>${escapeHtml(h.fechaHora)}</strong> · ${escapeHtml(h.actorNombre)} (${escapeHtml(h.rol)})</div>
+                    <div>Cambio: <em>${escapeHtml(h.estadoAnterior)}</em> → <strong>${escapeHtml(h.estadoNuevo)}</strong> · Correo: ${escapeHtml(h.notificacion)}</div>
+                    ${h.comentario ? `<div style="color:#475569;">Nota: ${escapeHtml(h.comentario)}</div>` : ''}
+                  </div>
+                `
+                  )
+                  .join('')}
+              </div>`
+            : '<p style="font-size:13px;color:#64748b;">Sin eventos registrados en bitácora.</p>'
+        }
+        <div style="display:flex;justify-content:flex-end;margin-top:14px;">
+          <button type="button" id="tc-exec-detail-close" class="ticket-action-pill" style="background:var(--primary-color, #26487F);border:1px solid var(--primary-color, #26487F);color:#ffffff;font-weight:600;padding:7px 16px;border-radius:6px;cursor:pointer;">Cerrar</button>
+        </div>
+      </div>
+    `;
+    modalEl.querySelector('#tc-exec-detail-close')?.addEventListener('click', () => modalEl.close());
+    if (typeof modalEl.showModal === 'function') modalEl.showModal();
+    else modalEl.setAttribute('open', 'open');
+  }
+
+  function paintDashboard() {
+    const m = computeTusComprasExecutiveMetrics(allItems, filters);
+    const opex = m.opex;
+    const capex = m.capex;
+
+    const opexDanielHeadline =
+      opex.avgDanielTotalCompletedHours !== null
+        ? formatDurationHours(opex.avgDanielTotalCompletedHours)
+        : opex.avgDanielActiveAgingHours !== null
+        ? `${formatDurationHours(opex.avgDanielActiveAgingHours)} (en curso)`
+        : 'Sin casos';
+
+    const capexDanielHeadline =
+      capex.avgDanielTotalCompletedHours !== null
+        ? formatDurationHours(capex.avgDanielTotalCompletedHours)
+        : capex.avgDanielActiveAgingHours !== null
+        ? `${formatDurationHours(capex.avgDanielActiveAgingHours)} (en curso)`
+        : 'Sin casos';
+
+    const maxTimeRef = Math.max(
+      1,
+      opex.avgEndToEndDeliveryHours || 0,
+      opex.avgEndToEndClosureHours || 0,
+      opex.avgDanielTotalCompletedHours || 0,
+      opex.avgDanielActiveAgingHours || 0,
+      capex.avgEndToEndDeliveryHours || 0,
+      capex.avgEndToEndClosureHours || 0,
+      capex.avgDanielTotalCompletedHours || 0,
+      capex.avgDanielActiveAgingHours || 0
+    );
+
+    const barWidth = val => (val !== null && Number.isFinite(val) ? Math.min(100, Math.max(6, Math.round((val / maxTimeRef) * 100))) : 0);
+
+    const orderedStates = [
+      TUS_COMPRAS_STATES.ENVIADA,
+      TUS_COMPRAS_STATES.EN_APROBACION,
+      TUS_COMPRAS_STATES.EN_PROCESO,
+      TUS_COMPRAS_STATES.RECIBIDOS_ADM,
+      TUS_COMPRAS_STATES.ENTREGADA,
+      TUS_COMPRAS_STATES.CONFORME,
+      TUS_COMPRAS_STATES.DISCONFORME,
+      TUS_COMPRAS_STATES.RECHAZADA
+    ];
+    const maxStateCount = Math.max(1, ...orderedStates.map(st => m.stateCounts[st]?.total || 0));
+
+    bodyEl.innerHTML = `
+      <!-- Tarjetas KPI Superiores -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-bottom:18px;">
+        <div style="background:#ffffff;border:1px solid #cbd5e1;border-top:4px solid #26487F;border-radius:10px;padding:14px;">
+          <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;">Volumen Total de Pedidos</div>
+          <div style="font-size:24px;font-weight:800;color:#0f172a;margin:4px 0;">${m.totalOrders} pedidos</div>
+          <div style="font-size:12.5px;color:#334155;">Monto: <strong>${formatCurrency(m.totalMonto)}</strong> (${opex.count} OPEX · ${capex.count} CAPEX)</div>
+        </div>
+
+        <div style="background:#ffffff;border:1px solid #cbd5e1;border-top:4px solid #0284c7;border-radius:10px;padding:14px;">
+          <div style="font-size:12px;font-weight:700;color:#0369a1;text-transform:uppercase;">Entrega y Cierre · OPEX</div>
+          <div style="font-size:20px;font-weight:800;color:#0f172a;margin:4px 0;">Entrega: ${formatDurationHours(opex.avgEndToEndDeliveryHours)}</div>
+          <div style="font-size:12.5px;color:#334155;">Cierre total (Estado 5): <strong>${formatDurationHours(opex.avgEndToEndClosureHours)}</strong></div>
+        </div>
+
+        <div style="background:#ffffff;border:1px solid #cbd5e1;border-top:4px solid #7c3aed;border-radius:10px;padding:14px;">
+          <div style="font-size:12px;font-weight:700;color:#6d28d9;text-transform:uppercase;">Entrega y Cierre · CAPEX</div>
+          <div style="font-size:20px;font-weight:800;color:#0f172a;margin:4px 0;">Entrega: ${formatDurationHours(capex.avgEndToEndDeliveryHours)}</div>
+          <div style="font-size:12.5px;color:#334155;">Cierre total (Estado 5): <strong>${formatDurationHours(capex.avgEndToEndClosureHours)}</strong></div>
+        </div>
+
+        <div style="background:#ffffff;border:1px solid #cbd5e1;border-top:4px solid #d97706;border-radius:10px;padding:14px;">
+          <div style="font-size:12px;font-weight:700;color:#b45309;text-transform:uppercase;">Gestión Daniel Lara · OPEX</div>
+          <div style="font-size:20px;font-weight:800;color:#0f172a;margin:4px 0;">${opexDanielHeadline}</div>
+          <div style="font-size:12.5px;color:#334155;">En cancha de Daniel hoy: <strong>${opex.inDanielCourtCount}</strong> · En aprob.: <strong>${opex.inApprovalCount}</strong></div>
+        </div>
+
+        <div style="background:#ffffff;border:1px solid #cbd5e1;border-top:4px solid #9333ea;border-radius:10px;padding:14px;">
+          <div style="font-size:12px;font-weight:700;color:#7e22ce;text-transform:uppercase;">Gestión Daniel Lara · CAPEX</div>
+          <div style="font-size:20px;font-weight:800;color:#0f172a;margin:4px 0;">${capexDanielHeadline}</div>
+          <div style="font-size:12.5px;color:#334155;">En cancha de Daniel hoy: <strong>${capex.inDanielCourtCount}</strong> · En aprob.: <strong>${capex.inApprovalCount}</strong></div>
+        </div>
+
+        <div style="background:#ffffff;border:1px solid #cbd5e1;border-top:4px solid #059669;border-radius:10px;padding:14px;">
+          <div style="font-size:12px;font-weight:700;color:#047857;text-transform:uppercase;">Calidad de Recepción (Estado 5)</div>
+          <div style="font-size:22px;font-weight:800;color:#0f172a;margin:4px 0;">${m.quality.conformeRatePct !== null ? `${m.quality.conformeRatePct}% Conforme` : 'Sin cierres'}</div>
+          <div style="font-size:12.5px;color:#334155;">Conformes: <strong>${m.quality.totalConforme}</strong> · Disconformes: <strong style="color:#dc2626;">${m.quality.totalDisconforme}</strong></div>
+        </div>
+      </div>
+
+      <!-- Fila Principal de Gráficos -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px;margin-bottom:18px;">
+        <!-- Panel 1: Tiempos de Gestión de Daniel Lara y Tiempos de Entrega/Cierre por Tipo (OPEX vs CAPEX) -->
+        <section style="background:#ffffff;border:1px solid #cbd5e1;border-radius:10px;padding:18px;">
+          <h2 style="margin:0 0 6px;font-size:16px;color:#1e3a8a;">⏱️ Tiempos de Gestión de Daniel Lara vs. Entrega y Cierre (OPEX vs CAPEX)</h2>
+          <p style="margin:0 0 14px;font-size:12.5px;color:#475569;">Mide por separado cuánto demora Daniel Lara desde que el pedido está listo para compra (creado en 1 para OPEX directo, o aprobado en 2a para CAPEX/excesos) hasta su entrega en Estado 4, frente al tiempo total hasta el cierre.</p>
+
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            ${[
+              {
+                title: '1. Tiempo Neto de Gestión de Daniel Lara (Entregados: Disponible → 4 Entrega)',
+                opexVal: opex.avgDanielTotalCompletedHours,
+                capexVal: capex.avgDanielTotalCompletedHours
+              },
+              {
+                title: '2. Antigüedad Promedio Actual en Cancha de Daniel (Abiertos en 1, 2a o 3)',
+                opexVal: opex.avgDanielActiveAgingHours,
+                capexVal: capex.avgDanielActiveAgingHours
+              },
+              {
+                title: '3. Sub-etapa Daniel: Compra y Llegada a Adm. (2a En Proceso → 3 Recibidos Adm.)',
+                opexVal: opex.avgDanielProcurementHours,
+                capexVal: capex.avgDanielProcurementHours
+              },
+              {
+                title: '4. Sub-etapa Daniel: Entrega física al Solicitante (3 Recibidos Adm. → 4 Entregada)',
+                opexVal: opex.avgDanielInternalDeliveryHours,
+                capexVal: capex.avgDanielInternalDeliveryHours
+              },
+              {
+                title: '5. Tiempo de Autorización Ejecutiva (2b En aprobación → Aprobada 2a)',
+                opexVal: opex.avgApprovalHours,
+                capexVal: capex.avgApprovalHours
+              },
+              {
+                title: '6. Tiempo Total hasta Entrega al Solicitante (Creación → 4 Compra Entregada)',
+                opexVal: opex.avgEndToEndDeliveryHours,
+                capexVal: capex.avgEndToEndDeliveryHours
+              },
+              {
+                title: '7. Tiempo Total hasta Cierre del Ticket (Creación → 5 Conforme / Disconforme)',
+                opexVal: opex.avgEndToEndClosureHours,
+                capexVal: capex.avgEndToEndClosureHours
+              }
+            ]
+              .map(
+                row => `
+              <div style="border-bottom:1px solid #f1f5f9;padding-bottom:10px;">
+                <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:6px;">${escapeHtml(row.title)}</div>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                  <span style="width:58px;font-size:11.5px;font-weight:700;color:#0369a1;">OPEX</span>
+                  <div style="flex:1;background:#f1f5f9;height:10px;border-radius:999px;overflow:hidden;">
+                    <div style="width:${barWidth(row.opexVal)}%;height:100%;background:#0284c7;border-radius:999px;"></div>
+                  </div>
+                  <span style="min-width:115px;text-align:right;font-size:12px;font-weight:600;color:#0f172a;">${formatDurationHours(row.opexVal)}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="width:58px;font-size:11.5px;font-weight:700;color:#7e22ce;">CAPEX</span>
+                  <div style="flex:1;background:#f1f5f9;height:10px;border-radius:999px;overflow:hidden;">
+                    <div style="width:${barWidth(row.capexVal)}%;height:100%;background:#9333ea;border-radius:999px;"></div>
+                  </div>
+                  <span style="min-width:115px;text-align:right;font-size:12px;font-weight:600;color:#0f172a;">${formatDurationHours(row.capexVal)}</span>
+                </div>
+              </div>
+            `
+              )
+              .join('')}
+          </div>
+        </section>
+
+        <!-- Panel 2: Evolución Gráfica de Estados del Pipeline (OPEX vs CAPEX) -->
+        <section style="background:#ffffff;border:1px solid #cbd5e1;border-radius:10px;padding:18px;">
+          <h2 style="margin:0 0 6px;font-size:16px;color:#1e3a8a;">📊 Evolución de la Gestión por Estado (Pipeline OPEX vs CAPEX)</h2>
+          <p style="margin:0 0 14px;font-size:12.5px;color:#475569;">Distribución actual de los tickets a lo largo de las 5 etapas del flujo y monto acumulado por estado.</p>
+
+          <div style="display:flex;flex-direction:column;gap:11px;">
+            ${orderedStates
+              .map(st => {
+                const info = m.stateCounts[st] || { total: 0, OPEX: 0, CAPEX: 0, monto: 0 };
+                const opexW = Math.round((info.OPEX / maxStateCount) * 100);
+                const capexW = Math.round((info.CAPEX / maxStateCount) * 100);
+                return `
+                  <div style="border-bottom:1px solid #f1f5f9;padding-bottom:8px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:4px;">
+                      <span style="font-weight:700;color:#1e293b;">${escapeHtml(st)}</span>
+                      <span style="font-size:12px;color:#334155;"><strong>${info.total}</strong> (${info.OPEX} OPEX · ${info.CAPEX} CAPEX) · ${formatCurrency(info.monto)}</span>
+                    </div>
+                    <div style="display:flex;height:12px;background:#f1f5f9;border-radius:999px;overflow:hidden;">
+                      <div style="width:${opexW}%;background:#0284c7;" title="OPEX: ${info.OPEX}"></div>
+                      <div style="width:${capexW}%;background:#9333ea;" title="CAPEX: ${info.CAPEX}"></div>
+                    </div>
+                  </div>
+                `;
+              })
+              .join('')}
+          </div>
+          <div style="margin-top:12px;display:flex;gap:16px;font-size:12px;color:#475569;">
+            <span><strong style="color:#0284c7;">■</strong> OPEX</span>
+            <span><strong style="color:#9333ea;">■</strong> CAPEX</span>
+          </div>
+        </section>
+      </div>
+
+      <!-- Segunda Fila: Ejecución Presupuestaria Mensual OPEX por Área + Backlog de Daniel Lara -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px;margin-bottom:18px;">
+        <section style="background:#ffffff;border:1px solid #cbd5e1;border-radius:10px;padding:18px;">
+          <h2 style="margin:0 0 6px;font-size:16px;color:#1e3a8a;">💰 Consumo Mensual OPEX por Área vs. Tope ($10,000 MXN)</h2>
+          <p style="margin:0 0 14px;font-size:12.5px;color:#475569;">Monitoreo del límite mensual de $10,000.00 MXN por área solicitante (sobre el cual los pedidos pasan automáticamente a 2b En aprobación).</p>
+          ${
+            m.areaBudgets.length
+              ? m.areaBudgets
+                  .map(ab => {
+                    const pctUsed = Math.round((ab.currentMonthMonto / TUS_COMPRAS_OPEX_LIMIT) * 100);
+                    const barColor = pctUsed > 100 ? '#dc2626' : pctUsed >= 75 ? '#d97706' : '#059669';
+                    return `
+                      <div style="margin-bottom:12px;">
+                        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
+                          <strong>${escapeHtml(ab.area)} (${ab.count} pedidos OPEX)</strong>
+                          <span style="font-weight:700;color:${barColor};">${formatCurrency(ab.currentMonthMonto)} / ${formatCurrency(TUS_COMPRAS_OPEX_LIMIT)} (${pctUsed}%)</span>
+                        </div>
+                        <div style="height:10px;background:#f1f5f9;border-radius:999px;overflow:hidden;">
+                          <div style="width:${Math.min(100, pctUsed)}%;height:100%;background:${barColor};"></div>
+                        </div>
+                      </div>
+                    `;
+                  })
+                  .join('')
+              : '<p style="font-size:13px;color:#64748b;">No hay consumos OPEX registrados para este filtro.</p>'
+          }
+        </section>
+
+        <section style="background:#ffffff;border:1px solid #cbd5e1;border-radius:10px;padding:18px;">
+          <h2 style="margin:0 0 6px;font-size:16px;color:#1e3a8a;">📌 Pedidos Activos en Gestión de Daniel Lara (Por Antigüedad)</h2>
+          <p style="margin:0 0 12px;font-size:12.5px;color:#475569;">Tickets que ya están listos para gestión operativa de Daniel Lara (estados 1, 2a o 3), ordenados por mayor tiempo de demora acumulada.</p>
+          ${
+            m.danielBacklog.length
+              ? `
+              <div class="ticket-table-wrap">
+                <table class="ticket-table" style="font-size:13px;">
+                  <thead>
+                    <tr>
+                      <th>Folio</th>
+                      <th>Tipo / Monto</th>
+                      <th>Estado</th>
+                      <th>Tiempo en gestión Daniel</th>
+                      <th>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${m.danielBacklog
+                      .map(
+                        item => `
+                      <tr>
+                        <td><strong>${escapeHtml(item.order.id)}</strong><div style="font-size:11.5px;color:#64748b;">${escapeHtml(item.order.area)}</div></td>
+                        <td><strong>${escapeHtml(item.tipo)}</strong><div>${formatCurrency(item.order.monto)}</div></td>
+                        <td><span style="padding:3px 8px;border-radius:999px;font-size:11.5px;font-weight:700;${stateBadgeStyle(item.state)}">${escapeHtml(item.state)}</span></td>
+                        <td style="font-weight:700;color:${item.elapsedHours > 72 ? '#dc2626' : item.elapsedHours > 24 ? '#b45309' : '#0f172a'};">${formatDurationHours(item.elapsedHours)}</td>
+                        <td>
+                          <button type="button" class="ticket-action-pill" data-exec-detail="${escapeHtml(item.order.id)}" style="background:var(--primary-color, #26487F);border-color:var(--primary-color, #26487F);color:#ffffff;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;">
+                            Ver detalle
+                          </button>
+                        </td>
+                      </tr>
+                    `
+                      )
+                      .join('')}
+                  </tbody>
+                </table>
+              </div>
+            `
+              : '<p style="font-size:13px;color:#64748b;">Actualmente no hay pedidos detenidos en la bandeja operativa de Daniel Lara (todos los pedidos están en 2b En aprobación o ya fueron entregados).</p>'
+          }
+        </section>
+      </div>
+    `;
+  }
+
+  formEl?.addEventListener('change', ev => {
+    const target = ev.target;
+    if (target && target.name) {
+      filters[target.name] = target.value;
+      paintDashboard();
+    }
+  });
+
+  container.querySelector('#tc-exec-refresh')?.addEventListener('click', () => {
+    controller.abort();
+    modalEl?.close?.();
+    render(container);
+  });
+
+  bodyEl?.addEventListener('click', ev => {
+    const btn = ev.target.closest('button[data-exec-detail]');
+    if (btn) {
+      openDetail(btn.dataset.execDetail);
+    }
+  });
+
+  paintDashboard();
 }
 
 export const renderTusComprasWidget = render;

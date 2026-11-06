@@ -71,10 +71,13 @@ assert_true($accAdmDir['visible'] === false && $accAdmDir['canCreate'] === false
 $accDaniel = ciarm_tus_compras_evaluate_access_rows($dm03Rows, 'd.lara@ciarm.edu.mx');
 assert_true($accDaniel['visible'] === true && $accDaniel['isAdministracion'] === true && $accDaniel['canAdmin'] === true, 'Administracion + Administracion is Admin');
 assert_true($accDaniel['canCreate'] === false, 'Daniel Lara cannot create purchase requests');
+assert_true($accDaniel['canGerencial'] === false, 'Daniel Lara does not see Vista Gerencial');
 
 $accEzequiel = ciarm_tus_compras_evaluate_access_rows($dm03Rows, 'e.conesa@ciarm.edu.mx');
 assert_true($accEzequiel['visible'] === true && $accEzequiel['isAdministracion'] === true && $accEzequiel['canApprove'] === true, 'Administracion + Administracion is Approver');
 assert_true($accEzequiel['canCreate'] === true, 'Administracion + Administracion (except Daniel Lara) CAN create purchase requests');
+assert_true($accEzequiel['canGerencial'] === true, 'Administracion + Administracion (except Daniel Lara) CAN see Vista Gerencial');
+assert_true($accDocDir['canGerencial'] === false, 'Docente + Director does not see Vista Gerencial');
 
 // 2. Verificar acumulado mensual Opex de $10,000 MXN por área solicitante y paso automático a 2b) En aprobación
 $existingOrders = [

@@ -139,6 +139,276 @@ export function computeAllowedActions(order, access, viewKind = 'all') {
   return actions;
 }
 
+export function parseTusComprasTimestamp(rawDateOrFull, rawTime = '') {
+  const dStr = String(rawDateOrFull || '').trim();
+  if (!dStr) return null;
+  const parenMatch = dStr.match(/\((\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\)/);
+  const cleanStr = parenMatch ? parenMatch[1] : (rawTime ? `${dStr} ${String(rawTime).trim()}` : dStr);
+  const isoCandidate = cleanStr.includes('T')
+    ? cleanStr
+    : cleanStr.length === 10
+    ? `${cleanStr}T00:00:00-05:00`
+    : `${cleanStr.replace(' ', 'T')}-05:00`;
+  const ms = Date.parse(isoCandidate);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+export function formatDurationHours(hours) {
+  if (hours === null || hours === undefined || !Number.isFinite(hours)) return 'Sin casos';
+  if (hours < 1) {
+    const mins = Math.max(1, Math.round(hours * 60));
+    return `${mins} min`;
+  }
+  if (hours < 24) {
+    return `${hours.toFixed(1)} h`;
+  }
+  const days = hours / 24;
+  return `${days.toFixed(1)} días (${Math.round(hours)} h)`;
+}
+
+export function computeTusComprasExecutiveMetrics(orders, filters = {}, nowMs = Date.now()) {
+  const normalized = normalizeOrdersStates(Array.isArray(orders) ? [...orders] : []);
+  const daysFilter = Number(filters.days) || 0;
+  const tipoFilter = String(filters.tipo || '').toUpperCase();
+  const areaFilter = String(filters.area || '').trim().toLowerCase();
+
+  const cutoffMs = daysFilter > 0 ? nowMs - daysFilter * 86400000 : null;
+
+  const filtered = normalized.filter(order => {
+    if (tipoFilter && tipoFilter !== 'ALL' && String(order.tipo || '').toUpperCase() !== tipoFilter) return false;
+    if (areaFilter && areaFilter !== 'all' && String(order.area || '').trim().toLowerCase() !== areaFilter) return false;
+    if (cutoffMs !== null) {
+      const createdMs = parseTusComprasTimestamp(order.fecha, order.hora || '00:00:00');
+      if (createdMs !== null && createdMs < cutoffMs) return false;
+    }
+    return true;
+  });
+
+  const avg = arr => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
+
+  const buckets = {
+    OPEX: {
+      count: 0,
+      montoTotal: 0,
+      openCount: 0,
+      inDanielCourtCount: 0,
+      inApprovalCount: 0,
+      deliveredCount: 0,
+      closedCount: 0,
+      conformeCount: 0,
+      disconformeCount: 0,
+      rejectedCount: 0,
+      endToEndDeliveryHours: [],
+      endToEndClosureHours: [],
+      approvalHours: [],
+      danielReceptionHours: [],
+      danielProcurementHours: [],
+      danielInternalDeliveryHours: [],
+      danielTotalCompletedHours: [],
+      danielActiveAgingHours: [],
+      requesterValidationHours: []
+    },
+    CAPEX: {
+      count: 0,
+      montoTotal: 0,
+      openCount: 0,
+      inDanielCourtCount: 0,
+      inApprovalCount: 0,
+      deliveredCount: 0,
+      closedCount: 0,
+      conformeCount: 0,
+      disconformeCount: 0,
+      rejectedCount: 0,
+      endToEndDeliveryHours: [],
+      endToEndClosureHours: [],
+      approvalHours: [],
+      danielReceptionHours: [],
+      danielProcurementHours: [],
+      danielInternalDeliveryHours: [],
+      danielTotalCompletedHours: [],
+      danielActiveAgingHours: [],
+      requesterValidationHours: []
+    }
+  };
+
+  const stateCounts = {};
+  Object.values(TUS_COMPRAS_STATES).forEach(st => {
+    stateCounts[st] = { total: 0, OPEX: 0, CAPEX: 0, monto: 0 };
+  });
+
+  const areaOpexMap = new Map();
+  const danielBacklog = [];
+  const currentMonth = new Date(nowMs - 5 * 3600000).toISOString().slice(0, 7);
+
+  for (const order of filtered) {
+    const tipo = String(order.tipo || 'OPEX').toUpperCase() === 'CAPEX' ? 'CAPEX' : 'OPEX';
+    const b = buckets[tipo];
+    const state = resolveEffectiveOrderState(order);
+    const monto = Number(order.monto) || 0;
+    const history = Array.isArray(order.history) ? order.history : [];
+
+    b.count += 1;
+    b.montoTotal = Math.round((b.montoTotal + monto) * 100) / 100;
+
+    if (!stateCounts[state]) {
+      stateCounts[state] = { total: 0, OPEX: 0, CAPEX: 0, monto: 0 };
+    }
+    stateCounts[state].total += 1;
+    stateCounts[state][tipo] += 1;
+    stateCounts[state].monto = Math.round((stateCounts[state].monto + monto) * 100) / 100;
+
+    if (tipo === 'OPEX' && state !== TUS_COMPRAS_STATES.RECHAZADA) {
+      const areaName = String(order.area || 'Docente').trim() || 'Docente';
+      const orderMonth = String(order.fecha || '').slice(0, 7);
+      const prev = areaOpexMap.get(areaName) || { area: areaName, currentMonthMonto: 0, periodMonto: 0, count: 0 };
+      prev.periodMonto = Math.round((prev.periodMonto + monto) * 100) / 100;
+      if (!orderMonth || orderMonth === currentMonth) {
+        prev.currentMonthMonto = Math.round((prev.currentMonthMonto + monto) * 100) / 100;
+      }
+      prev.count += 1;
+      areaOpexMap.set(areaName, prev);
+    }
+
+    const findEventMs = evName => {
+      const found = history.find(h => String(h.evento || '').toUpperCase() === evName);
+      return found ? parseTusComprasTimestamp(found.fechaHora) : null;
+    };
+
+    const tCreated = parseTusComprasTimestamp(order.fecha, order.hora || '09:00:00') || findEventMs('CREATE');
+    const tApproved = parseTusComprasTimestamp(order.fechaAprobacion) || findEventMs('APPROVE_CAPEX');
+    const tRejected = findEventMs('REJECT_CAPEX') || (state === TUS_COMPRAS_STATES.RECHAZADA ? parseTusComprasTimestamp(order.fechaAprobacion || order.ultimaActualizacion) : null);
+    const tInProcess2a = findEventMs('RECEIVE_OPEX') || tApproved;
+    const tReceivedAdm3 = parseTusComprasTimestamp(order.fechaRecepcionAdm) || findEventMs('RECEIVE_ITEMS_ADM');
+    const tDelivered4 = parseTusComprasTimestamp(order.fechaEntrega) || findEventMs('DELIVER_TO_REQUESTER');
+    const tClosed5 =
+      parseTusComprasTimestamp(order.evaluacion) ||
+      findEventMs('CONFIRM_CONFORME') ||
+      findEventMs('CONFIRM_DISCONFORME') ||
+      ([TUS_COMPRAS_STATES.CONFORME, TUS_COMPRAS_STATES.DISCONFORME].includes(state)
+        ? parseTusComprasTimestamp(order.ultimaActualizacion)
+        : null);
+
+    const requiresApproval = Boolean(order.requiereAprobacion) || tipo === 'CAPEX' || monto > TUS_COMPRAS_OPEX_LIMIT;
+
+    // Momento desde el cual el ticket está disponible en cancha de Daniel Lara para gestionar la compra:
+    // - Si no requirió aprobación: desde tCreated (1 Solicitud enviada)
+    // - Si requirió aprobación (2b): desde que fue aprobado (tApproved -> 2a)
+    const tReadyForDaniel = requiresApproval ? tApproved : tCreated;
+
+    if (tCreated !== null && (tApproved !== null || tRejected !== null)) {
+      const endApp = tApproved ?? tRejected;
+      if (endApp >= tCreated) {
+        b.approvalHours.push((endApp - tCreated) / 3600000);
+      }
+    }
+
+    if (!requiresApproval && tCreated !== null && tInProcess2a !== null && tInProcess2a >= tCreated) {
+      b.danielReceptionHours.push((tInProcess2a - tCreated) / 3600000);
+    }
+
+    const startProc = tInProcess2a ?? tReadyForDaniel;
+    if (startProc !== null && tReceivedAdm3 !== null && tReceivedAdm3 >= startProc) {
+      b.danielProcurementHours.push((tReceivedAdm3 - startProc) / 3600000);
+    }
+
+    if (tReceivedAdm3 !== null && tDelivered4 !== null && tDelivered4 >= tReceivedAdm3) {
+      b.danielInternalDeliveryHours.push((tDelivered4 - tReceivedAdm3) / 3600000);
+    }
+
+    if (tReadyForDaniel !== null && tDelivered4 !== null && tDelivered4 >= tReadyForDaniel) {
+      b.danielTotalCompletedHours.push((tDelivered4 - tReadyForDaniel) / 3600000);
+    }
+
+    if (tCreated !== null && tDelivered4 !== null && tDelivered4 >= tCreated) {
+      b.endToEndDeliveryHours.push((tDelivered4 - tCreated) / 3600000);
+    }
+
+    if (tCreated !== null && tClosed5 !== null && tClosed5 >= tCreated) {
+      b.endToEndClosureHours.push((tClosed5 - tCreated) / 3600000);
+    }
+
+    if (tDelivered4 !== null && tClosed5 !== null && tClosed5 >= tDelivered4) {
+      b.requesterValidationHours.push((tClosed5 - tDelivered4) / 3600000);
+    }
+
+    const isDanielStage = [
+      TUS_COMPRAS_STATES.ENVIADA,
+      TUS_COMPRAS_STATES.EN_PROCESO,
+      TUS_COMPRAS_STATES.APROBADA,
+      TUS_COMPRAS_STATES.RECIBIDOS_ADM
+    ].includes(state);
+
+    if (state === TUS_COMPRAS_STATES.EN_APROBACION) {
+      b.inApprovalCount += 1;
+      b.openCount += 1;
+    } else if (isDanielStage) {
+      b.inDanielCourtCount += 1;
+      b.openCount += 1;
+      const refStart = tReadyForDaniel ?? tCreated;
+      const elapsedHours = refStart !== null ? Math.max(0, (nowMs - refStart) / 3600000) : 0;
+      b.danielActiveAgingHours.push(elapsedHours);
+      danielBacklog.push({
+        order,
+        tipo,
+        state,
+        elapsedHours
+      });
+    } else if (state === TUS_COMPRAS_STATES.ENTREGADA) {
+      b.deliveredCount += 1;
+      b.openCount += 1;
+    } else if (state === TUS_COMPRAS_STATES.CONFORME) {
+      b.deliveredCount += 1;
+      b.closedCount += 1;
+      b.conformeCount += 1;
+    } else if (state === TUS_COMPRAS_STATES.DISCONFORME) {
+      b.deliveredCount += 1;
+      b.closedCount += 1;
+      b.disconformeCount += 1;
+    } else if (state === TUS_COMPRAS_STATES.RECHAZADA) {
+      b.rejectedCount += 1;
+    }
+  }
+
+  danielBacklog.sort((a, b) => b.elapsedHours - a.elapsedHours);
+
+  const summarizeBucket = b => ({
+    ...b,
+    avgEndToEndDeliveryHours: avg(b.endToEndDeliveryHours),
+    avgEndToEndClosureHours: avg(b.endToEndClosureHours),
+    avgApprovalHours: avg(b.approvalHours),
+    avgDanielReceptionHours: avg(b.danielReceptionHours),
+    avgDanielProcurementHours: avg(b.danielProcurementHours),
+    avgDanielInternalDeliveryHours: avg(b.danielInternalDeliveryHours),
+    avgDanielTotalCompletedHours: avg(b.danielTotalCompletedHours),
+    avgDanielActiveAgingHours: avg(b.danielActiveAgingHours),
+    avgRequesterValidationHours: avg(b.requesterValidationHours),
+    conformeRatePct: b.closedCount > 0 ? Math.round((b.conformeCount / b.closedCount) * 100) : null
+  });
+
+  const opexSummary = summarizeBucket(buckets.OPEX);
+  const capexSummary = summarizeBucket(buckets.CAPEX);
+
+  const totalClosed = opexSummary.closedCount + capexSummary.closedCount;
+  const totalConforme = opexSummary.conformeCount + capexSummary.conformeCount;
+  const totalDisconforme = opexSummary.disconformeCount + capexSummary.disconformeCount;
+
+  return {
+    totalOrders: filtered.length,
+    totalMonto: Math.round((opexSummary.montoTotal + capexSummary.montoTotal) * 100) / 100,
+    opex: opexSummary,
+    capex: capexSummary,
+    stateCounts,
+    areaBudgets: [...areaOpexMap.values()].sort((a, b) => b.currentMonthMonto - a.currentMonthMonto),
+    danielBacklog,
+    quality: {
+      totalClosed,
+      totalConforme,
+      totalDisconforme,
+      conformeRatePct: totalClosed > 0 ? Math.round((totalConforme / totalClosed) * 100) : null
+    }
+  };
+}
+
 async function apiRequest(action, params = {}, method = 'GET', token = null, signal = null) {
   const isPost = method === 'POST';
   const query = isPost ? '' : `?${new URLSearchParams({ action, ...params })}`;

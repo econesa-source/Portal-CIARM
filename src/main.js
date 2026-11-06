@@ -23,9 +23,10 @@ const routes = {
   '#seguimiento-servicio': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
   '#config-servicio': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
   '#admin-solicitudes': () => import(`./components/adminSolicitudesWidget.js?v=${APP_VERSION}`),
-  '#tus-compras': () => import(`./components/tusComprasWidget.js?v=${APP_VERSION}-tc5`),
-  '#tus-compras-nuevo': () => import(`./components/tusComprasWidget.js?v=${APP_VERSION}-tc5`),
-  '#admin-tus-compras': () => import(`./components/tusComprasWidget.js?v=${APP_VERSION}-tc5`),
+  '#tus-compras': () => import(`./components/tusComprasWidget.js?v=${APP_VERSION}-tc6`),
+  '#tus-compras-nuevo': () => import(`./components/tusComprasWidget.js?v=${APP_VERSION}-tc6`),
+  '#admin-tus-compras': () => import(`./components/tusComprasWidget.js?v=${APP_VERSION}-tc6`),
+  '#vision-gerencial-compras': () => import(`./components/tusComprasWidget.js?v=${APP_VERSION}-tc6`),
   '#mis-obligaciones': () => import(`./components/misObligacionesWidget.js?v=${APP_VERSION}`),
   '#normativa': () => import(`./components/normativaWidget.js?v=${APP_VERSION}`),
   '#ib': () => import(`./components/ibWidget.js?v=${APP_VERSION}`)

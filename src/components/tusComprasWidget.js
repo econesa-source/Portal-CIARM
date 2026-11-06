@@ -176,7 +176,7 @@ export async function render(container, userSession) {
   const isAdministracion = Boolean(access.isAdministracion || (access.isDocenteDirector !== true && (access.canAdmin || access.canApprove)));
 
   if (route === '#tus-compras-nuevo') {
-    if (!canCreate && !isAdministracion) {
+    if (!canCreate) {
       container.innerHTML = '<p role="alert">Tu perfil no tiene habilitado el registro de pedidos de compra.</p>';
       return;
     }

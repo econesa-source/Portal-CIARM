@@ -240,10 +240,13 @@ function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): arr
 
     $isDocenteDirector = $profile['isDocenteDirector'];
     $isAdministracion = $profile['isAdministracion'];
+    $isDanielLara = ($email === strtolower(CIARM_TUS_COMPRAS_ADMIN_EMAIL))
+        || (ciarm_tus_compras_normalize_token($nombre) === 'daniel lara');
 
-    // El solicitante con AG="docente" y AJ="director" SOLO ve Crear Pedido y Mis Compras.
-    // El perfil con AG="administración" y AJ="administración" accede a Gestión y Aprobaciones.
-    $canCreate = $isDocenteDirector;
+    // Pueden crear pedidos de compra:
+    // 1) Usuarios con AG="docente" y AJ="director"
+    // 2) Usuarios con AG="administración" y AJ="administración", salvo Daniel Lara.
+    $canCreate = $isDocenteDirector || ($isAdministracion && !$isDanielLara);
     $canAdmin = $isAdministracion && !$isDocenteDirector;
     $canApprove = $isAdministracion && !$isDocenteDirector;
     $visible = $isDocenteDirector || $isAdministracion;

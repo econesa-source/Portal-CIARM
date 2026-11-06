@@ -260,7 +260,7 @@ try {
             $nowFull,
             (string)$access['correo'],
             (string)$access['nombre'],
-            'Solicitante (Director Docente)',
+            !empty($access['isAdministracion']) ? 'Solicitante (Administración)' : 'Solicitante (Director Docente)',
             'CREATE',
             $eval['requiresApproval'] ? CIARM_TUS_COMPRAS_STATE_ENVIADA : '—',
             $initialState,

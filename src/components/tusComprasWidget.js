@@ -657,7 +657,6 @@ async function renderListView(container, ctx, kind, controller) {
       <div>
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <h3 style="margin:0;color:#1e3a8a;">Detalle y Trazabilidad · ${escapeHtml(order.id)}</h3>
-          <button type="button" id="tc-detail-close" class="ticket-action-pill" style="background:var(--primary-color, #26487F);border:1px solid var(--primary-color, #26487F);color:#ffffff;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer;">Cerrar</button>
         </div>
         ${renderStepProgress(order.estado)}
         <table style="width:100%;border-collapse:collapse;font-size:13.5px;margin:12px 0;">
@@ -696,7 +695,6 @@ async function renderListView(container, ctx, kind, controller) {
       </div>
     `;
 
-    modalEl.querySelector('#tc-detail-close')?.addEventListener('click', () => modalEl.close());
     modalEl.querySelector('#tc-detail-close-bottom')?.addEventListener('click', () => modalEl.close());
     if (typeof modalEl.showModal === 'function') modalEl.showModal();
     else modalEl.setAttribute('open', 'open');

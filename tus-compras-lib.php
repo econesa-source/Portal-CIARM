@@ -194,11 +194,18 @@ function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): arr
     }
 
     $matchedRow = null;
+    $dm03AdminEmails = [];
     foreach (array_slice($rows, 1) as $row) {
         $rowEmail = strtolower(trim((string)($row[$idxCorreo] ?? '')));
-        if ($rowEmail === $email) {
+        $rowStatus = strtolower(trim((string)($row[$idxStatus] ?? '')));
+        if ($rowStatus === 'activo' && $rowEmail !== '' && filter_var($rowEmail, FILTER_VALIDATE_EMAIL)) {
+            $rowProf = ciarm_tus_compras_matches_dm03_profile($row);
+            if ($rowProf['isAdministracion']) {
+                $dm03AdminEmails[$rowEmail] = true;
+            }
+        }
+        if ($matchedRow === null && $rowEmail === $email) {
             $matchedRow = $row;
-            break;
         }
     }
 
@@ -239,6 +246,11 @@ function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): arr
     $canApprove = $isAdministracion && !$isDocenteDirector;
     $visible = $isDocenteDirector || $isAdministracion;
 
+    $approverList = array_values(array_unique(array_merge(
+        CIARM_TUS_COMPRAS_APPROVER_EMAILS,
+        array_keys($dm03AdminEmails)
+    )));
+
     return [
         'visible' => $visible,
         'canCreate' => $canCreate,
@@ -254,7 +266,7 @@ function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): arr
         'colAJ' => $profile['colAJ'],
         'opexLimit' => CIARM_TUS_COMPRAS_OPEX_LIMIT,
         'adminEmail' => CIARM_TUS_COMPRAS_ADMIN_EMAIL,
-        'approverEmails' => CIARM_TUS_COMPRAS_APPROVER_EMAILS,
+        'approverEmails' => $approverList,
     ];
 }
 
@@ -843,7 +855,7 @@ function ciarm_tus_compras_allowed_actions(array $order, array $access, string $
     return $actions;
 }
 
-function ciarm_tus_compras_build_notification_plan(string $event, array $order, string $comment = ''): array {
+function ciarm_tus_compras_build_notification_plan(string $event, array $order, string $comment = '', array $extraAdminEmails = []): array {
     $id = (string)($order['id'] ?? '');
     $estado = (string)($order['estado'] ?? '');
     $tipo = (string)($order['tipo'] ?? 'OPEX');
@@ -876,6 +888,7 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
     };
 
     $requiresApproval = !empty($order['requiereAprobacion']);
+    $allApprovers = array_values(array_unique(array_merge(CIARM_TUS_COMPRAS_APPROVER_EMAILS, $extraAdminEmails)));
 
     switch ($event) {
         case 'CREATE':
@@ -900,7 +913,7 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
                 '#admin-tus-compras'
             );
             if ($requiresApproval) {
-                foreach (CIARM_TUS_COMPRAS_APPROVER_EMAILS as $approver) {
+                foreach ($allApprovers as $approver) {
                     $enqueue(
                         'aprobador',
                         $approver,
@@ -908,6 +921,18 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
                         'Nuevo pedido en estado 2b) En aprobación',
                         "El pedido {$id} de {$solicitante} ({$area}) por {$montoFmt} ({$tipo}, acumulado mensual del área: {$acumFmt}) pasó automáticamente a «{$estado}» y requiere aprobación.",
                         'Aprobar o rechazar en Tus Compras',
+                        '#admin-tus-compras'
+                    );
+                }
+            } else {
+                foreach ($extraAdminEmails as $admExtra) {
+                    $enqueue(
+                        'admin',
+                        $admExtra,
+                        "[Portal CIARM · Tus Compras] Nuevo pedido {$id} — {$solicitante} ({$area})",
+                        'Nuevo pedido de compra registrado',
+                        "Se ha registrado el pedido {$id} ({$tipo}) de {$solicitante} ({$area}) por {$montoFmt} (Acumulado mensual del área: {$acumFmt}) en estado «{$estado}».",
+                        'Gestionar pedidos de compra',
                         '#admin-tus-compras'
                     );
                 }
@@ -954,7 +979,7 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
                 'Ver mis compras',
                 '#tus-compras'
             );
-            foreach (CIARM_TUS_COMPRAS_APPROVER_EMAILS as $approver) {
+            foreach ($allApprovers as $approver) {
                 $enqueue(
                     'aprobador',
                     $approver,
@@ -1073,6 +1098,20 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
             break;
     }
 
+    if ($event !== 'CREATE' && $event !== 'APPROVE_CAPEX') {
+        foreach ($extraAdminEmails as $admExtra) {
+            $enqueue(
+                'admin',
+                $admExtra,
+                "[Portal CIARM · Tus Compras] Cambio de estado en pedido {$id} ({$estado})",
+                'Actualización de estado en pedido de compra',
+                "El pedido {$id} de {$solicitante} ({$area}) por {$montoFmt} cambió al estado «{$estado}».",
+                'Ver panel de compras',
+                '#admin-tus-compras'
+            );
+        }
+    }
+
     return $messages;
 }
 
@@ -1113,8 +1152,8 @@ function ciarm_tus_compras_render_email(array $msg, array $order): string {
         . '</div><div style="background:#f8fafc;padding:12px 20px;font-size:12px;color:#64748b;border-top:1px solid #e2e8f0;">Notificación automática del Módulo Tus Compras CIARM (' . $esc($order['id'] ?? '') . ').</div></div>';
 }
 
-function ciarm_tus_compras_dispatch_notifications(string $event, array $order, string $comment = '', ?callable $mailer = null): array {
-    $messages = ciarm_tus_compras_build_notification_plan($event, $order, $comment);
+function ciarm_tus_compras_dispatch_notifications(string $event, array $order, string $comment = '', ?callable $mailer = null, array $extraAdminEmails = []): array {
+    $messages = ciarm_tus_compras_build_notification_plan($event, $order, $comment, $extraAdminEmails);
     $deliveries = [];
     $sendFn = $mailer ?? static function (string $to, string $subject, string $html): array {
         $mx = ciarm_ticket_smtp_mx_send($to, $subject, $html, 'smtp.google.com', 25);
@@ -1161,10 +1200,12 @@ function ciarm_tus_compras_dispatch_notifications(string $event, array $order, s
     $sentCount = count(array_filter($deliveries, static fn($d) => ($d['status'] ?? '') === 'ENVIADO'));
     $errCount = count(array_filter($deliveries, static fn($d) => ($d['status'] ?? '') === 'ERROR'));
     $overall = count($deliveries) === 0 ? 'OMITIDO' : ($errCount === 0 ? 'ENVIADO' : ($sentCount > 0 ? 'PARCIAL' : 'ERROR'));
+    $rcptSummary = implode(', ', array_map(static fn($d) => ($d['to'] ?? '') . ':' . ($d['status'] ?? ''), $deliveries));
 
     return [
         'event' => $event,
-        'status' => $overall,
+        'status' => $rcptSummary !== '' ? ($overall . ' (' . $rcptSummary . ')') : $overall,
+        'overallStatus' => $overall,
         'deliveries' => $deliveries,
     ];
 }

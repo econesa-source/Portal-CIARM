@@ -23,9 +23,9 @@ const routes = {
   '#seguimiento-servicio': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
   '#config-servicio': () => import(`./components/ticketsServiceWidget.js?v=${APP_VERSION}`),
   '#admin-solicitudes': () => import(`./components/adminSolicitudesWidget.js?v=${APP_VERSION}`),
-  '#tus-compras': () => import(`./components/tusComprasWidget.js?v=${APP_VERSION}-tc2`),
-  '#tus-compras-nuevo': () => import(`./components/tusComprasWidget.js?v=${APP_VERSION}-tc2`),
-  '#admin-tus-compras': () => import(`./components/tusComprasWidget.js?v=${APP_VERSION}-tc2`),
+  '#tus-compras': () => import(`./components/tusComprasWidget.js?v=${APP_VERSION}-tc3`),
+  '#tus-compras-nuevo': () => import(`./components/tusComprasWidget.js?v=${APP_VERSION}-tc3`),
+  '#admin-tus-compras': () => import(`./components/tusComprasWidget.js?v=${APP_VERSION}-tc3`),
   '#mis-obligaciones': () => import(`./components/misObligacionesWidget.js?v=${APP_VERSION}`),
   '#normativa': () => import(`./components/normativaWidget.js?v=${APP_VERSION}`),
   '#ib': () => import(`./components/ibWidget.js?v=${APP_VERSION}`)

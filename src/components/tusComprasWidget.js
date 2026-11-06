@@ -600,8 +600,8 @@ async function renderListView(container, ctx, kind, controller) {
         <div id="tc-modal-error" role="alert" style="color:#991b1b;font-size:13px;margin-bottom:8px;" hidden></div>
 
         <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
-          <button type="button" id="tc-modal-cancel" style="padding:8px 14px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;">Cancelar</button>
-          <button type="submit" id="tc-modal-submit" style="padding:8px 16px;border-radius:6px;border:none;background:#1e3a8a;color:#fff;font-weight:600;cursor:pointer;">Confirmar y Notificar</button>
+          <button type="button" id="tc-modal-cancel" class="ticket-action-pill" style="background:var(--primary-color, #26487F);border:1px solid var(--primary-color, #26487F);color:#ffffff;font-weight:600;padding:8px 14px;border-radius:6px;cursor:pointer;">Cerrar</button>
+          <button type="submit" id="tc-modal-submit" class="ticket-action-pill" style="background:var(--primary-color, #26487F);border:1px solid var(--primary-color, #26487F);color:#ffffff;font-weight:600;padding:8px 16px;border-radius:6px;cursor:pointer;">Confirmar y Notificar</button>
         </div>
       </form>
     `;
@@ -657,7 +657,7 @@ async function renderListView(container, ctx, kind, controller) {
       <div>
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <h3 style="margin:0;color:#1e3a8a;">Detalle y Trazabilidad · ${escapeHtml(order.id)}</h3>
-          <button type="button" id="tc-detail-close" style="padding:4px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;">Cerrar</button>
+          <button type="button" id="tc-detail-close" class="ticket-action-pill" style="background:var(--primary-color, #26487F);border:1px solid var(--primary-color, #26487F);color:#ffffff;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer;">Cerrar</button>
         </div>
         ${renderStepProgress(order.estado)}
         <table style="width:100%;border-collapse:collapse;font-size:13.5px;margin:12px 0;">
@@ -690,10 +690,14 @@ async function renderListView(container, ctx, kind, controller) {
               </div>`
             : '<p style="font-size:13px;color:#64748b;">Sin eventos registrados en bitácora.</p>'
         }
+        <div style="display:flex;justify-content:flex-end;margin-top:14px;">
+          <button type="button" id="tc-detail-close-bottom" class="ticket-action-pill" style="background:var(--primary-color, #26487F);border:1px solid var(--primary-color, #26487F);color:#ffffff;font-weight:600;padding:7px 16px;border-radius:6px;cursor:pointer;">Cerrar</button>
+        </div>
       </div>
     `;
 
     modalEl.querySelector('#tc-detail-close')?.addEventListener('click', () => modalEl.close());
+    modalEl.querySelector('#tc-detail-close-bottom')?.addEventListener('click', () => modalEl.close());
     if (typeof modalEl.showModal === 'function') modalEl.showModal();
     else modalEl.setAttribute('open', 'open');
   }

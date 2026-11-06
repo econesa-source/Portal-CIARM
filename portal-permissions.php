@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/portal-permissions-lib.php';
 require_once __DIR__ . '/compras-lib.php';
+require_once __DIR__ . '/tus-compras-lib.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
     ciarm_json_response(405, ['ok' => false, 'code' => 'METHOD']);
@@ -18,6 +19,11 @@ try {
     $comprasConfig = ciarm_compras_config();
     $result['comprasEnabled'] = ciarm_compras_config_valid($comprasConfig);
     $result['comprasWritesEnabled'] = ciarm_compras_writes_enabled($comprasConfig);
+    try {
+        $result['tusCompras'] = ciarm_tus_compras_access($user);
+    } catch (Throwable $ignoredTusCompras) {
+        $result['tusCompras'] = ['visible' => false, 'canCreate' => false, 'canAdmin' => false, 'canApprove' => false];
+    }
     ciarm_json_response(200, ['ok' => true, 'data' => $result]);
 } catch (Throwable $error) {
     error_log('Portal DM05 permissions unavailable: ' . $error->getMessage());

@@ -353,6 +353,18 @@ export function render(container, userSession) {
           </div>
         </div>
 
+        <div class="exact-card" data-card="tus-compras">
+          <div class="tus-compras-card-header" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <span class="exact-card-category">SERVICIOS ADMINISTRATIVOS · COMPRAS</span>
+          </div>
+          <h3 class="exact-card-title">Tus compras</h3>
+          <p class="exact-card-desc">Registra pedidos de compra Opex y Capex, da seguimiento a tus entregas y valida su recepción.</p>
+          <div class="exact-card-btn-group">
+            <a href="#tus-compras-nuevo" class="exact-btn dark">+ Crear Pedido</a>
+            <a href="#tus-compras" class="exact-btn gold">📋 Mis Compras</a>
+          </div>
+        </div>
+
         <div class="exact-card" data-card="biblioteca">
           <span class="exact-card-category">BIBLIOTECA CIARM</span>
           <h3 class="exact-card-title">Libros y Papers</h3>

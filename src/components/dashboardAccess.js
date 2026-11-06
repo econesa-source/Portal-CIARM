@@ -21,6 +21,25 @@ export function applyDashboardAccess(container, response) {
   const cards = [...container.querySelectorAll('.dashboard-grid-exact > .exact-card')];
   cards.forEach(element => {
     const card = element.dataset.card;
+    if (card === 'tus-compras') {
+      const tc = response?.tusCompras;
+      const visible = tc?.visible === true || permissions.has('TUS_COMPRAS_TARJETA');
+      if (!visible) { element.remove(); return; }
+      if (tc && tc.canCreate === false) {
+        element.querySelector('a[href="#tus-compras-nuevo"]')?.remove();
+      }
+      if ((tc?.canAdmin === true || tc?.canApprove === true) && !element.querySelector('a[href="#admin-tus-compras"]')) {
+        const hdr = element.querySelector('.tus-compras-card-header');
+        if (hdr) {
+          const admLink = document.createElement('a');
+          admLink.href = '#admin-tus-compras';
+          admLink.className = 'exact-btn dark';
+          admLink.textContent = tc?.canApprove && !tc?.canAdmin ? 'Aprobar Capex' : 'Administrar';
+          hdr.append(admLink);
+        }
+      }
+      return;
+    }
     if (!canSeeCard(permissions, card)) { element.remove(); return; }
     if (card === 'solicitudes') {
       if (!canSeeAction(permissions, card, 'crear')) {
@@ -73,6 +92,15 @@ export function allowedRoute(hash, response) {
   // y el servidor autoriza INT_GESTION desde DM05. No duplicar esta decisión.
   if (hash === '#admin-solicitudes' || hash === '#vision-gerencial') {
     return true;
+  }
+  if (hash === '#tus-compras' || hash === '#tus-compras-nuevo' || hash === '#admin-tus-compras') {
+    const tc = response?.tusCompras;
+    if (tc?.visible === true || permissions.has('TUS_COMPRAS_TARJETA')) {
+      if (hash === '#tus-compras-nuevo') return tc ? tc.canCreate === true : true;
+      if (hash === '#admin-tus-compras') return tc ? (tc.canAdmin === true || tc.canApprove === true) : true;
+      return true;
+    }
+    return false;
   }
   if (hash === '#ib') {
     return canSeeAction(permissions, 'ib', 'acceder');

@@ -1,0 +1,1195 @@
+<?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/tickets-portal-lib.php';
+
+/**
+ * Módulo "Tus compras" - Sistema simplificado de pedidos de compra (Opex / Capex)
+ * - Preproducción (portal2.ciarm.edu.mx): 1b2DOU0iY7yw-93NEHDIZKhfZNTBirZiPMMbXvOaXMso
+ * - Producción (portal.ciarm.edu.mx):     1q6mwmL-9JiNGk3TJZoJ1sJZiaR3AOO4OLEGiJuKQraQ
+ * - Límite Opex mensual acumulado por área solicitante: $10,000.00 MXN
+ * - Administrador de Compras: Daniel Lara (d.lara@ciarm.edu.mx)
+ * - Aprobador Capex / > $10,000 MXN: Ezequiel Conesa (e.conesa@ciarm.edu.mx)
+ * - Solicitantes autorizados en DM03: Columna AG = "docente" y Columna AJ = "director"
+ */
+
+const CIARM_TUS_COMPRAS_STAGING_SHEET_ID = '1b2DOU0iY7yw-93NEHDIZKhfZNTBirZiPMMbXvOaXMso';
+const CIARM_TUS_COMPRAS_PROD_SHEET_ID = '1q6mwmL-9JiNGk3TJZoJ1sJZiaR3AOO4OLEGiJuKQraQ';
+const CIARM_TUS_COMPRAS_OPEX_LIMIT = 10000.0;
+const CIARM_TUS_COMPRAS_ADMIN_EMAIL = 'd.lara@ciarm.edu.mx';
+const CIARM_TUS_COMPRAS_APPROVER_EMAILS = ['e.conesa@ciarm.edu.mx'];
+const CIARM_TUS_COMPRAS_SUPPORT_EMAILS = ['r.valencia@ciarm.edu.mx'];
+
+const CIARM_TUS_COMPRAS_STATE_ENVIADA = '1) Solicitud enviada';
+const CIARM_TUS_COMPRAS_STATE_EN_PROCESO = '2a) Solicitud recibida / En proceso';
+const CIARM_TUS_COMPRAS_STATE_EN_APROBACION = '2b) En aprobación';
+const CIARM_TUS_COMPRAS_STATE_APROBADA = '2c) Aprobada / En curso';
+const CIARM_TUS_COMPRAS_STATE_RECHAZADA = '2d) Rechazada';
+const CIARM_TUS_COMPRAS_STATE_RECIBIDOS_ADM = '3) Artículos Recibidos en Adm.';
+const CIARM_TUS_COMPRAS_STATE_ENTREGADA = '4) Compra Entregada al Solicitante';
+const CIARM_TUS_COMPRAS_STATE_CONFORME = '5) Recepción Conforme';
+const CIARM_TUS_COMPRAS_STATE_DISCONFORME = '5) Recepción Disconforme';
+
+const CIARM_TUS_COMPRAS_STATES = [
+    CIARM_TUS_COMPRAS_STATE_ENVIADA,
+    CIARM_TUS_COMPRAS_STATE_EN_PROCESO,
+    CIARM_TUS_COMPRAS_STATE_EN_APROBACION,
+    CIARM_TUS_COMPRAS_STATE_APROBADA,
+    CIARM_TUS_COMPRAS_STATE_RECHAZADA,
+    CIARM_TUS_COMPRAS_STATE_RECIBIDOS_ADM,
+    CIARM_TUS_COMPRAS_STATE_ENTREGADA,
+    CIARM_TUS_COMPRAS_STATE_CONFORME,
+    CIARM_TUS_COMPRAS_STATE_DISCONFORME,
+];
+
+const CIARM_TUS_COMPRAS_PEDIDOS_HEADERS = [
+    'ID PEDIDO',
+    'FECHA SOLICITUD',
+    'HORA SOLICITUD',
+    'SOLICITANTE',
+    'CORREO SOLICITANTE',
+    'ÁREA SOLICITANTE',
+    'TIPO COMPRA',
+    'MONTO ESTIMADO',
+    'ACUMULADO MES ÁREA',
+    'REQUIERE APROBACIÓN',
+    'ARTÍCULOS / DESCRIPCIÓN',
+    'JUSTIFICACIÓN / PROVEEDOR',
+    'ESTADO',
+    'RESPONSABLE ADM',
+    'APROBADOR',
+    'FECHA APROBACIÓN',
+    'COMENTARIO APROBACIÓN',
+    'FECHA RECEPCIÓN ADM',
+    'FECHA ENTREGA',
+    'EVALUACIÓN SOLICITANTE',
+    'COMENTARIO RECEPCIÓN',
+    'ARCHIVOS ADJUNTOS',
+    'ÚLTIMA ACTUALIZACIÓN',
+    'VERSIÓN',
+];
+
+const CIARM_TUS_COMPRAS_BITACORA_HEADERS = [
+    'ID EVENTO',
+    'ID PEDIDO',
+    'FECHA HORA',
+    'ACTOR CORREO',
+    'ACTOR NOMBRE',
+    'ROL',
+    'EVENTO',
+    'ESTADO ANTERIOR',
+    'ESTADO NUEVO',
+    'MONTO',
+    'ACUMULADO ÁREA',
+    'COMENTARIO',
+    'NOTIFICACIÓN',
+];
+
+const CIARM_TUS_COMPRAS_CONFIG_HEADERS = [
+    'CLAVE',
+    'VALOR',
+    'DESCRIPCIÓN',
+    'ACTUALIZADO POR',
+    'FECHA ACTUALIZACIÓN',
+];
+
+function ciarm_tus_compras_active_sheet_id(?string $host = null): string {
+    $isProd = ciarm_tickets_is_production_host($host);
+    $envSheet = getenv($isProd ? 'CIARM_TUS_COMPRAS_PROD_SHEET_ID' : 'CIARM_TUS_COMPRAS_STAGING_SHEET_ID');
+    if (is_string($envSheet) && trim($envSheet) !== '') {
+        return trim($envSheet);
+    }
+    $raw = @file_get_contents(ciarm_private_path('tus-compras-env.json'));
+    if ($raw !== false) {
+        $stored = json_decode($raw, true);
+        $envKey = $isProd ? 'production' : 'staging';
+        if (is_array($stored) && !empty($stored[$envKey]['sheetId'])) {
+            return trim((string)$stored[$envKey]['sheetId']);
+        }
+    }
+    return $isProd ? CIARM_TUS_COMPRAS_PROD_SHEET_ID : CIARM_TUS_COMPRAS_STAGING_SHEET_ID;
+}
+
+function ciarm_tus_compras_normalize_token(string $value): string {
+    $clean = trim($value);
+    if ($clean === '') return '';
+    $map = [
+        'Á' => 'a', 'É' => 'e', 'Í' => 'i', 'Ó' => 'o', 'Ú' => 'u', 'Ü' => 'u', 'Ñ' => 'n',
+        'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n',
+    ];
+    $clean = strtr($clean, $map);
+    $clean = strtolower($clean);
+    return preg_replace('/\s+/', ' ', $clean) ?? $clean;
+}
+
+/**
+ * Verifica si una fila de DM03 ('Catálogo de colaboradores'!A4:AZ1010)
+ * pertenece al área "docente" en la columna AG (índice 32) y tiene nivel
+ * "director" en la columna AJ (índice 35).
+ */
+function ciarm_tus_compras_matches_dm03_profile(array $row): array {
+    $rawAG = trim((string)($row[32] ?? ''));
+    $rawAJ = trim((string)($row[35] ?? ''));
+    $normAG = ciarm_tus_compras_normalize_token($rawAG);
+    $normAJ = ciarm_tus_compras_normalize_token($rawAJ);
+
+    $isDocente = $normAG === 'docente' || preg_match('/\bdocente(s)?\b/i', $normAG) === 1;
+    $isDirector = $normAJ === 'director' || $normAJ === 'directora' || preg_match('/\bdirector(a|es)?\b/i', $normAJ) === 1;
+
+    return [
+        'colAG' => $rawAG,
+        'colAJ' => $rawAJ,
+        'isDocente' => $isDocente,
+        'isDirector' => $isDirector,
+        'isDocenteDirector' => ($isDocente && $isDirector),
+    ];
+}
+
+/**
+ * Evalúa el perfil del usuario en DM03 a partir de las filas ya leídas de
+ * 'Catálogo de colaboradores'!A4:AZ1010.
+ */
+function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): array {
+    $email = strtolower(trim($email));
+    $default = [
+        'visible' => false,
+        'canCreate' => false,
+        'canAdmin' => false,
+        'canApprove' => false,
+        'isDocenteDirector' => false,
+        'correo' => $email,
+        'nombre' => '',
+        'area' => '',
+        'puesto' => '',
+        'colAG' => '',
+        'colAJ' => '',
+        'opexLimit' => CIARM_TUS_COMPRAS_OPEX_LIMIT,
+        'adminEmail' => CIARM_TUS_COMPRAS_ADMIN_EMAIL,
+        'approverEmails' => CIARM_TUS_COMPRAS_APPROVER_EMAILS,
+    ];
+    if ($email === '' || count($rows) < 2) {
+        return $default;
+    }
+
+    $headers = array_map(static fn($v) => trim((string)$v), $rows[0]);
+    $idxCorreo = array_search('Correo Ciarm', $headers, true);
+    $idxStatus = array_search('Status', $headers, true);
+    $idxNombre = array_search('Nombre', $headers, true);
+    $idxApellido = array_search('Apellido', $headers, true);
+    $idxArea = array_search('Área', $headers, true);
+    $idxSeccion = array_search('Sección / Departamento', $headers, true);
+    $idxPuesto = array_search('Puesto', $headers, true);
+
+    if ($idxCorreo === false || $idxStatus === false) {
+        return $default;
+    }
+
+    $matchedRow = null;
+    foreach (array_slice($rows, 1) as $row) {
+        $rowEmail = strtolower(trim((string)($row[$idxCorreo] ?? '')));
+        if ($rowEmail === $email) {
+            $matchedRow = $row;
+            break;
+        }
+    }
+
+    if (!is_array($matchedRow)) {
+        return $default;
+    }
+
+    $status = strtolower(trim((string)($matchedRow[$idxStatus] ?? '')));
+    if ($status !== 'activo') {
+        return $default;
+    }
+
+    $nombre = trim(
+        ($idxNombre !== false ? trim((string)($matchedRow[$idxNombre] ?? '')) : '') . ' ' .
+        ($idxApellido !== false ? trim((string)($matchedRow[$idxApellido] ?? '')) : '')
+    );
+    $area = $idxArea !== false ? trim((string)($matchedRow[$idxArea] ?? '')) : '';
+    if ($area === '' && $idxSeccion !== false) {
+        $area = trim((string)($matchedRow[$idxSeccion] ?? ''));
+    }
+    $puesto = $idxPuesto !== false ? trim((string)($matchedRow[$idxPuesto] ?? '')) : '';
+
+    $profile = ciarm_tus_compras_matches_dm03_profile($matchedRow);
+    if ($area === '' && $profile['colAG'] !== '') {
+        $area = $profile['colAG'];
+    }
+    if ($area === '') {
+        $area = 'General';
+    }
+
+    $isAdmin = ($email === CIARM_TUS_COMPRAS_ADMIN_EMAIL)
+        || in_array($email, CIARM_TUS_COMPRAS_SUPPORT_EMAILS, true);
+    $isApprover = in_array($email, CIARM_TUS_COMPRAS_APPROVER_EMAILS, true)
+        || in_array($email, CIARM_TUS_COMPRAS_SUPPORT_EMAILS, true);
+    $isDocenteDirector = $profile['isDocenteDirector'];
+
+    $canCreate = $isDocenteDirector || $isApprover || $isAdmin;
+    $visible = $isDocenteDirector || $isAdmin || $isApprover;
+
+    return [
+        'visible' => $visible,
+        'canCreate' => $canCreate,
+        'canAdmin' => $isAdmin,
+        'canApprove' => $isApprover,
+        'isDocenteDirector' => $isDocenteDirector,
+        'correo' => $email,
+        'nombre' => $nombre !== '' ? $nombre : $email,
+        'area' => $area,
+        'puesto' => $puesto,
+        'colAG' => $profile['colAG'],
+        'colAJ' => $profile['colAJ'],
+        'opexLimit' => CIARM_TUS_COMPRAS_OPEX_LIMIT,
+        'adminEmail' => CIARM_TUS_COMPRAS_ADMIN_EMAIL,
+        'approverEmails' => CIARM_TUS_COMPRAS_APPROVER_EMAILS,
+    ];
+}
+
+function ciarm_tus_compras_access(array $sessionUser, ?array $dm03RowsOverride = null): array {
+    $email = strtolower(trim((string)($sessionUser['correo'] ?? ($sessionUser['email'] ?? ''))));
+    if ($email === '') {
+        return ciarm_tus_compras_evaluate_access_rows([], '');
+    }
+    if (is_array($dm03RowsOverride)) {
+        return ciarm_tus_compras_evaluate_access_rows($dm03RowsOverride, $email);
+    }
+
+    $cached = $_SESSION['ciarm_tus_compras_access'] ?? null;
+    if (session_status() === PHP_SESSION_ACTIVE && is_array($cached)
+        && ($cached['email'] ?? '') === $email
+        && (int)($cached['expires'] ?? 0) > time()
+        && is_array($cached['access'] ?? null)) {
+        return $cached['access'];
+    }
+
+    $raw = @file_get_contents(ciarm_private_path('service-account.json'));
+    if ($raw === false) {
+        throw new RuntimeException('service_account_unavailable');
+    }
+    $account = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+    if (!is_array($account)) {
+        throw new RuntimeException('service_account_invalid');
+    }
+    $token = ciarm_google_access_token($account);
+    $url = 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode(CIARM_DM03_SPREADSHEET_ID)
+        . '/values/' . rawurlencode(CIARM_DM03_RANGE)
+        . '?majorDimension=ROWS&valueRenderOption=FORMATTED_VALUE';
+    $response = ciarm_http_json($url, [
+        'headers' => ['Accept: application/json', 'Authorization: Bearer ' . $token],
+    ]);
+    if ($response['status'] !== 200 || !is_array($response['body']['values'] ?? null)) {
+        throw new RuntimeException('dm03_read_failed');
+    }
+    $access = ciarm_tus_compras_evaluate_access_rows($response['body']['values'], $email);
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $_SESSION['ciarm_tus_compras_access'] = [
+            'email' => $email,
+            'expires' => time() + 45,
+            'access' => $access,
+        ];
+    }
+    return $access;
+}
+
+/**
+ * Obtiene token de Google Sheets con permisos de lectura y escritura
+ * sobre los libros compartidos con portal-ciarm-dm03@portal-ciarm.iam.gserviceaccount.com.
+ */
+function ciarm_tus_compras_sheets_token(): string {
+    $raw = @file_get_contents(ciarm_private_path('service-account.json'));
+    if ($raw === false) {
+        throw new RuntimeException('CONFIGURATION');
+    }
+    $account = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+    if (!is_array($account)) {
+        throw new RuntimeException('CONFIGURATION');
+    }
+    return ciarm_google_access_token($account, 'https://www.googleapis.com/auth/spreadsheets');
+}
+
+/**
+ * Asegura que el libro de Google Sheets (Preprod o Prod) tenga creadas las pestañas
+ * PEDIDOS, BITACORA PEDIDOS y CONFIG COMPRAS con sus encabezados oficiales.
+ */
+function ciarm_tus_compras_ensure_schema(?string $spreadsheetId = null, ?string $token = null): void {
+    $sheetId = $spreadsheetId ?? ciarm_tus_compras_active_sheet_id();
+    $accessToken = $token ?? ciarm_tus_compras_sheets_token();
+
+    $metaUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId)
+        . '?fields=sheets.properties.title';
+    $metaRes = ciarm_http_json($metaUrl, [
+        'headers' => ['Accept: application/json', 'Authorization: Bearer ' . $accessToken],
+    ]);
+    if ($metaRes['status'] !== 200 || !is_array($metaRes['body']['sheets'] ?? null)) {
+        throw new RuntimeException('UPSTREAM_SHEETS_ACCESS');
+    }
+
+    $existingTitles = [];
+    foreach ($metaRes['body']['sheets'] as $s) {
+        $title = (string)($s['properties']['title'] ?? '');
+        if ($title !== '') {
+            $existingTitles[$title] = true;
+        }
+    }
+
+    $requiredSheets = [
+        'PEDIDOS' => CIARM_TUS_COMPRAS_PEDIDOS_HEADERS,
+        'BITACORA PEDIDOS' => CIARM_TUS_COMPRAS_BITACORA_HEADERS,
+        'CONFIG COMPRAS' => CIARM_TUS_COMPRAS_CONFIG_HEADERS,
+    ];
+
+    $addRequests = [];
+    foreach ($requiredSheets as $title => $_headers) {
+        if (!isset($existingTitles[$title])) {
+            $addRequests[] = ['addSheet' => ['properties' => ['title' => $title]]];
+        }
+    }
+
+    if (count($addRequests) > 0) {
+        $batchUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId) . ':batchUpdate';
+        $batchRes = ciarm_http_json($batchUrl, [
+            'post' => true,
+            'headers' => [
+                'Accept: application/json',
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $accessToken,
+            ],
+            'body' => json_encode(['requests' => $addRequests], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ]);
+        if ($batchRes['status'] < 200 || $batchRes['status'] >= 300) {
+            throw new RuntimeException('UPSTREAM_SHEETS_INIT');
+        }
+    }
+
+    // Verificar encabezados en las 3 pestañas
+    $ranges = ["'PEDIDOS'!A1:X1", "'BITACORA PEDIDOS'!A1:M1", "'CONFIG COMPRAS'!A1:E5"];
+    $query = implode('&', array_map(static fn($r) => 'ranges=' . rawurlencode($r), $ranges));
+    $getRes = ciarm_http_json(
+        'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId) . '/values:batchGet?' . $query,
+        ['headers' => ['Accept: application/json', 'Authorization: Bearer ' . $accessToken]]
+    );
+    if ($getRes['status'] !== 200) {
+        throw new RuntimeException('UPSTREAM_SHEETS_READ');
+    }
+
+    $valueRanges = $getRes['body']['valueRanges'] ?? [];
+    $updates = [];
+
+    $pedidosRow1 = $valueRanges[0]['values'][0] ?? [];
+    if ($pedidosRow1 === [] || trim((string)($pedidosRow1[0] ?? '')) !== 'ID PEDIDO') {
+        $updates[] = [
+            'range' => "'PEDIDOS'!A1:X1",
+            'values' => [CIARM_TUS_COMPRAS_PEDIDOS_HEADERS],
+        ];
+    }
+
+    $bitacoraRow1 = $valueRanges[1]['values'][0] ?? [];
+    if ($bitacoraRow1 === [] || trim((string)($bitacoraRow1[0] ?? '')) !== 'ID EVENTO') {
+        $updates[] = [
+            'range' => "'BITACORA PEDIDOS'!A1:M1",
+            'values' => [CIARM_TUS_COMPRAS_BITACORA_HEADERS],
+        ];
+    }
+
+    $configRows = $valueRanges[2]['values'] ?? [];
+    if ($configRows === [] || trim((string)($configRows[0][0] ?? '')) !== 'CLAVE') {
+        $now = gmdate('Y-m-d H:i:s', time() - 5 * 3600);
+        $updates[] = [
+            'range' => "'CONFIG COMPRAS'!A1:E4",
+            'values' => [
+                CIARM_TUS_COMPRAS_CONFIG_HEADERS,
+                ['TOPE_OPEX_MENSUAL_AREA', '10000', 'Tope mensual acumulado Opex por área solicitante (MXN)', 'sistema', $now],
+                ['ADMIN_COMPRAS_EMAIL', CIARM_TUS_COMPRAS_ADMIN_EMAIL, 'Encargado de Administración (Compras)', 'sistema', $now],
+                ['APROBADOR_CAPEX_EMAIL', implode(',', CIARM_TUS_COMPRAS_APPROVER_EMAILS), 'Aprobador de Capex y excesos > $10,000 MXN', 'sistema', $now],
+            ],
+        ];
+    }
+
+    if (count($updates) > 0) {
+        $updateUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId) . '/values:batchUpdate';
+        $upRes = ciarm_http_json($updateUrl, [
+            'post' => true,
+            'headers' => [
+                'Accept: application/json',
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $accessToken,
+            ],
+            'body' => json_encode([
+                'valueInputOption' => 'RAW',
+                'data' => $updates,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ]);
+        if ($upRes['status'] < 200 || $upRes['status'] >= 300) {
+            throw new RuntimeException('UPSTREAM_SHEETS_HEADERS');
+        }
+    }
+}
+
+/**
+ * Lee todas las filas de PEDIDOS y BITACORA PEDIDOS de la base de datos activa.
+ */
+function ciarm_tus_compras_fetch_all(?string $spreadsheetId = null): array {
+    $sheetId = $spreadsheetId ?? ciarm_tus_compras_active_sheet_id();
+    $token = ciarm_tus_compras_sheets_token();
+    ciarm_tus_compras_ensure_schema($sheetId, $token);
+
+    $ranges = ["'PEDIDOS'!A1:X2000", "'BITACORA PEDIDOS'!A1:M5000"];
+    $query = implode('&', array_map(static fn($r) => 'ranges=' . rawurlencode($r), $ranges));
+    $url = 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId)
+        . '/values:batchGet?' . $query . '&valueRenderOption=FORMATTED_VALUE';
+    $res = ciarm_http_json($url, [
+        'headers' => ['Accept: application/json', 'Authorization: Bearer ' . $token],
+    ]);
+    if ($res['status'] !== 200 || !is_array($res['body']['valueRanges'] ?? null)) {
+        throw new RuntimeException('UPSTREAM_SHEETS_READ');
+    }
+
+    $pedidosValues = $res['body']['valueRanges'][0]['values'] ?? [];
+    $bitacoraValues = $res['body']['valueRanges'][1]['values'] ?? [];
+
+    return [
+        'sheetId' => $sheetId,
+        'token' => $token,
+        'pedidosRows' => $pedidosValues,
+        'bitacoraRows' => $bitacoraValues,
+    ];
+}
+
+function ciarm_tus_compras_parse_pedidos(array $rows): array {
+    if (count($rows) < 2) return [];
+    $headers = array_map(static fn($h) => trim((string)$h), $rows[0]);
+    $col = array_flip($headers);
+    $get = static function (array $row, string $name) use ($col): string {
+        $idx = $col[$name] ?? null;
+        if ($idx === null) return '';
+        $val = trim((string)($row[$idx] ?? ''));
+        return preg_replace('/^\x{200B}(?=[=+@\x27-])/u', '', $val) ?? $val;
+    };
+
+    $list = [];
+    for ($i = 1; $i < count($rows); $i++) {
+        $row = $rows[$i];
+        $id = $get($row, 'ID PEDIDO');
+        if ($id === '' || !preg_match('/^CMP-\d{4}-\d+$/', $id)) {
+            continue;
+        }
+        $montoRaw = str_replace([',', '$', ' '], '', $get($row, 'MONTO ESTIMADO'));
+        $acumRaw = str_replace([',', '$', ' '], '', $get($row, 'ACUMULADO MES ÁREA'));
+        $list[] = [
+            'rowNumber' => $i + 1,
+            'id' => $id,
+            'fecha' => $get($row, 'FECHA SOLICITUD'),
+            'hora' => $get($row, 'HORA SOLICITUD'),
+            'solicitante' => $get($row, 'SOLICITANTE'),
+            'correo' => strtolower($get($row, 'CORREO SOLICITANTE')),
+            'area' => $get($row, 'ÁREA SOLICITANTE'),
+            'tipo' => strtoupper($get($row, 'TIPO COMPRA')) === 'CAPEX' ? 'CAPEX' : 'OPEX',
+            'monto' => round((float)$montoRaw, 2),
+            'acumuladoMesArea' => round((float)$acumRaw, 2),
+            'requiereAprobacion' => strtoupper($get($row, 'REQUIERE APROBACIÓN')) === 'SÍ',
+            'descripcion' => $get($row, 'ARTÍCULOS / DESCRIPCIÓN'),
+            'justificacion' => $get($row, 'JUSTIFICACIÓN / PROVEEDOR'),
+            'estado' => $get($row, 'ESTADO'),
+            'responsableAdm' => $get($row, 'RESPONSABLE ADM') ?: 'Daniel Lara',
+            'aprobador' => $get($row, 'APROBADOR'),
+            'fechaAprobacion' => $get($row, 'FECHA APROBACIÓN'),
+            'comentarioAprobacion' => $get($row, 'COMENTARIO APROBACIÓN'),
+            'fechaRecepcionAdm' => $get($row, 'FECHA RECEPCIÓN ADM'),
+            'fechaEntrega' => $get($row, 'FECHA ENTREGA'),
+            'evaluacion' => $get($row, 'EVALUACIÓN SOLICITANTE'),
+            'comentarioRecepcion' => $get($row, 'COMENTARIO RECEPCIÓN'),
+            'adjuntos' => $get($row, 'ARCHIVOS ADJUNTOS'),
+            'ultimaActualizacion' => $get($row, 'ÚLTIMA ACTUALIZACIÓN'),
+            'version' => $get($row, 'VERSIÓN') ?: 'v1',
+        ];
+    }
+    return $list;
+}
+
+function ciarm_tus_compras_parse_bitacora(array $rows, ?string $filterPedidoId = null): array {
+    if (count($rows) < 2) return [];
+    $headers = array_map(static fn($h) => trim((string)$h), $rows[0]);
+    $col = array_flip($headers);
+    $get = static function (array $row, string $name) use ($col): string {
+        $idx = $col[$name] ?? null;
+        if ($idx === null) return '';
+        return trim((string)($row[$idx] ?? ''));
+    };
+
+    $items = [];
+    for ($i = 1; $i < count($rows); $i++) {
+        $row = $rows[$i];
+        $pedidoId = $get($row, 'ID PEDIDO');
+        if ($pedidoId === '') continue;
+        if ($filterPedidoId !== null && $pedidoId !== $filterPedidoId) continue;
+        $items[] = [
+            'idEvento' => $get($row, 'ID EVENTO'),
+            'idPedido' => $pedidoId,
+            'fechaHora' => $get($row, 'FECHA HORA'),
+            'actorCorreo' => $get($row, 'ACTOR CORREO'),
+            'actorNombre' => $get($row, 'ACTOR NOMBRE'),
+            'rol' => $get($row, 'ROL'),
+            'evento' => $get($row, 'EVENTO'),
+            'estadoAnterior' => $get($row, 'ESTADO ANTERIOR'),
+            'estadoNuevo' => $get($row, 'ESTADO NUEVO'),
+            'monto' => (float)str_replace([',', '$', ' '], '', $get($row, 'MONTO')),
+            'acumuladoArea' => (float)str_replace([',', '$', ' '], '', $get($row, 'ACUMULADO ÁREA')),
+            'comentario' => $get($row, 'COMENTARIO'),
+            'notificacion' => $get($row, 'NOTIFICACIÓN'),
+        ];
+    }
+    return $items;
+}
+
+/**
+ * Calcula el acumulado mensual Opex de un área solicitante en el mes dado (YYYY-MM).
+ * Excluye pedidos rechazados (2d) Rechazada) y excluye opcionalmente un ID de pedido
+ * cuando se está recalculando un pedido existente.
+ */
+function ciarm_tus_compras_area_monthly_opex(array $pedidos, string $area, string $yearMonth, ?string $excludeId = null): float {
+    $normArea = ciarm_tus_compras_normalize_token($area);
+    if ($normArea === '') return 0.0;
+    $sum = 0.0;
+    foreach ($pedidos as $p) {
+        if ($excludeId !== null && ($p['id'] ?? '') === $excludeId) continue;
+        if (strtoupper((string)($p['tipo'] ?? '')) !== 'OPEX') continue;
+        if (($p['estado'] ?? '') === CIARM_TUS_COMPRAS_STATE_RECHAZADA) continue;
+        $pArea = ciarm_tus_compras_normalize_token((string)($p['area'] ?? ''));
+        if ($pArea !== $normArea) continue;
+        $pMonth = substr((string)($p['fecha'] ?? ''), 0, 7);
+        if ($pMonth !== $yearMonth) continue;
+        $sum += (float)($p['monto'] ?? 0);
+    }
+    return round($sum, 2);
+}
+
+/**
+ * Determina si un pedido requiere aprobación de Ezequiel Conesa:
+ * - Si es CAPEX -> siempre requiere aprobación.
+ * - Si es OPEX y (acumulado mensual del área + monto del pedido) > $10,000.00 MXN -> requiere aprobación.
+ */
+function ciarm_tus_compras_requires_approval(string $tipo, float $monto, float $currentAreaMonthlyOpex, float $limit = CIARM_TUS_COMPRAS_OPEX_LIMIT): array {
+    $tipoNorm = strtoupper(trim($tipo)) === 'CAPEX' ? 'CAPEX' : 'OPEX';
+    $projectedAreaTotal = $tipoNorm === 'OPEX'
+        ? round($currentAreaMonthlyOpex + $monto, 2)
+        : round($currentAreaMonthlyOpex, 2);
+    $exceedsOpexLimit = ($tipoNorm === 'OPEX' && $projectedAreaTotal > $limit);
+    $requires = ($tipoNorm === 'CAPEX') || $exceedsOpexLimit;
+    return [
+        'tipo' => $tipoNorm,
+        'monto' => round($monto, 2),
+        'currentAreaMonthlyOpex' => round($currentAreaMonthlyOpex, 2),
+        'projectedAreaMonthlyOpex' => $projectedAreaTotal,
+        'opexLimit' => $limit,
+        'exceedsOpexLimit' => $exceedsOpexLimit,
+        'requiresApproval' => $requires,
+    ];
+}
+
+/**
+ * Máquina de estados estricta para "Tus compras".
+ * Garantiza que:
+ * - Solo 2a) Solicitud recibida / En proceso y 2c) Aprobada / En curso pueden avanzar a 3) Artículos Recibidos en Adm.
+ * - Compras Capex o que superan $10,000 MXN mensuales por área no pueden pasar a 2a) sin aprobación.
+ * - Solo Ezequiel Conesa (canApprove) puede aprobar (2c) o rechazar (2d) desde 2b).
+ * - Solo Daniel Lara (canAdmin) gestiona 2a), 3) y 4).
+ * - Solo el Solicitante dueño del pedido evalúa 5) Recepción Conforme / Disconforme desde 4).
+ */
+function ciarm_tus_compras_validate_transition(array $order, string $event, array $access, string $comment = ''): array {
+    $currentState = (string)($order['estado'] ?? '');
+    $actorEmail = strtolower(trim((string)($access['correo'] ?? '')));
+    $isOwner = ($actorEmail !== '' && strtolower(trim((string)($order['correo'] ?? ''))) === $actorEmail);
+    $canAdmin = !empty($access['canAdmin']);
+    $canApprove = !empty($access['canApprove']);
+    $requiresApproval = !empty($order['requiereAprobacion'])
+        || strtoupper((string)($order['tipo'] ?? '')) === 'CAPEX'
+        || ((float)($order['acumuladoMesArea'] ?? 0) > CIARM_TUS_COMPRAS_OPEX_LIMIT);
+
+    switch ($event) {
+        case 'RECEIVE_OPEX':
+            if (!$canAdmin) {
+                throw new RuntimeException('FORBIDDEN_ROLE');
+            }
+            if ($currentState !== CIARM_TUS_COMPRAS_STATE_ENVIADA) {
+                throw new RuntimeException('INVALID_TRANSITION');
+            }
+            if ($requiresApproval) {
+                throw new RuntimeException('REQUIRES_CAPEX_APPROVAL');
+            }
+            return [
+                'newState' => CIARM_TUS_COMPRAS_STATE_EN_PROCESO,
+                'roleLabel' => 'Administrador de Compras',
+            ];
+
+        case 'SEND_APPROVAL':
+            if (!$canAdmin && !$canApprove) {
+                throw new RuntimeException('FORBIDDEN_ROLE');
+            }
+            if (!in_array($currentState, [CIARM_TUS_COMPRAS_STATE_ENVIADA, CIARM_TUS_COMPRAS_STATE_EN_PROCESO], true)) {
+                throw new RuntimeException('INVALID_TRANSITION');
+            }
+            return [
+                'newState' => CIARM_TUS_COMPRAS_STATE_EN_APROBACION,
+                'roleLabel' => $canAdmin ? 'Administrador de Compras' : 'Aprobador Ejecutivo',
+            ];
+
+        case 'APPROVE_CAPEX':
+            if (!$canApprove) {
+                throw new RuntimeException('FORBIDDEN_ROLE');
+            }
+            if ($currentState !== CIARM_TUS_COMPRAS_STATE_EN_APROBACION) {
+                throw new RuntimeException('INVALID_TRANSITION');
+            }
+            return [
+                'newState' => CIARM_TUS_COMPRAS_STATE_APROBADA,
+                'roleLabel' => 'Aprobador Ejecutivo',
+            ];
+
+        case 'REJECT_CAPEX':
+            if (!$canApprove) {
+                throw new RuntimeException('FORBIDDEN_ROLE');
+            }
+            if ($currentState !== CIARM_TUS_COMPRAS_STATE_EN_APROBACION) {
+                throw new RuntimeException('INVALID_TRANSITION');
+            }
+            if (strlen(trim($comment)) < 5) {
+                throw new RuntimeException('COMMENT_REQUIRED');
+            }
+            return [
+                'newState' => CIARM_TUS_COMPRAS_STATE_RECHAZADA,
+                'roleLabel' => 'Aprobador Ejecutivo',
+            ];
+
+        case 'RECEIVE_ITEMS_ADM':
+            if (!$canAdmin) {
+                throw new RuntimeException('FORBIDDEN_ROLE');
+            }
+            // Regla estricta: SOLO 2a) y 2c) pueden avanzar al estado 3)
+            if (!in_array($currentState, [CIARM_TUS_COMPRAS_STATE_EN_PROCESO, CIARM_TUS_COMPRAS_STATE_APROBADA], true)) {
+                throw new RuntimeException('INVALID_TRANSITION_STATE_3');
+            }
+            return [
+                'newState' => CIARM_TUS_COMPRAS_STATE_RECIBIDOS_ADM,
+                'roleLabel' => 'Administrador de Compras',
+            ];
+
+        case 'DELIVER_TO_REQUESTER':
+            if (!$canAdmin) {
+                throw new RuntimeException('FORBIDDEN_ROLE');
+            }
+            if (!in_array($currentState, [CIARM_TUS_COMPRAS_STATE_RECIBIDOS_ADM, CIARM_TUS_COMPRAS_STATE_DISCONFORME], true)) {
+                throw new RuntimeException('INVALID_TRANSITION');
+            }
+            return [
+                'newState' => CIARM_TUS_COMPRAS_STATE_ENTREGADA,
+                'roleLabel' => 'Administrador de Compras',
+            ];
+
+        case 'CONFIRM_CONFORME':
+            if (!$isOwner) {
+                throw new RuntimeException('FORBIDDEN_OWNER');
+            }
+            if ($currentState !== CIARM_TUS_COMPRAS_STATE_ENTREGADA) {
+                throw new RuntimeException('INVALID_TRANSITION');
+            }
+            return [
+                'newState' => CIARM_TUS_COMPRAS_STATE_CONFORME,
+                'roleLabel' => 'Solicitante',
+            ];
+
+        case 'CONFIRM_DISCONFORME':
+            if (!$isOwner) {
+                throw new RuntimeException('FORBIDDEN_OWNER');
+            }
+            if ($currentState !== CIARM_TUS_COMPRAS_STATE_ENTREGADA) {
+                throw new RuntimeException('INVALID_TRANSITION');
+            }
+            if (strlen(trim($comment)) < 5) {
+                throw new RuntimeException('COMMENT_REQUIRED');
+            }
+            return [
+                'newState' => CIARM_TUS_COMPRAS_STATE_DISCONFORME,
+                'roleLabel' => 'Solicitante',
+            ];
+
+        default:
+            throw new RuntimeException('INVALID_EVENT');
+    }
+}
+
+/**
+ * Devuelve las acciones permitidas para un pedido según su estado actual y los permisos del actor.
+ */
+function ciarm_tus_compras_allowed_actions(array $order, array $access): array {
+    $state = (string)($order['estado'] ?? '');
+    $actorEmail = strtolower(trim((string)($access['correo'] ?? '')));
+    $isOwner = ($actorEmail !== '' && strtolower(trim((string)($order['correo'] ?? ''))) === $actorEmail);
+    $canAdmin = !empty($access['canAdmin']);
+    $canApprove = !empty($access['canApprove']);
+    $requiresApproval = !empty($order['requiereAprobacion'])
+        || strtoupper((string)($order['tipo'] ?? '')) === 'CAPEX'
+        || ((float)($order['acumuladoMesArea'] ?? 0) > CIARM_TUS_COMPRAS_OPEX_LIMIT);
+
+    $actions = [];
+    if ($state === CIARM_TUS_COMPRAS_STATE_ENVIADA) {
+        if ($canAdmin && !$requiresApproval) {
+            $actions[] = 'RECEIVE_OPEX';
+        }
+        if ($canAdmin || $canApprove) {
+            $actions[] = 'SEND_APPROVAL';
+        }
+    } elseif ($state === CIARM_TUS_COMPRAS_STATE_EN_PROCESO) {
+        if ($canAdmin) {
+            $actions[] = 'RECEIVE_ITEMS_ADM';
+            $actions[] = 'SEND_APPROVAL';
+        }
+    } elseif ($state === CIARM_TUS_COMPRAS_STATE_EN_APROBACION) {
+        if ($canApprove) {
+            $actions[] = 'APPROVE_CAPEX';
+            $actions[] = 'REJECT_CAPEX';
+        }
+    } elseif ($state === CIARM_TUS_COMPRAS_STATE_APROBADA) {
+        if ($canAdmin) {
+            $actions[] = 'RECEIVE_ITEMS_ADM';
+        }
+    } elseif ($state === CIARM_TUS_COMPRAS_STATE_RECIBIDOS_ADM) {
+        if ($canAdmin) {
+            $actions[] = 'DELIVER_TO_REQUESTER';
+        }
+    } elseif ($state === CIARM_TUS_COMPRAS_STATE_ENTREGADA) {
+        if ($isOwner) {
+            $actions[] = 'CONFIRM_CONFORME';
+            $actions[] = 'CONFIRM_DISCONFORME';
+        }
+    } elseif ($state === CIARM_TUS_COMPRAS_STATE_DISCONFORME) {
+        if ($canAdmin) {
+            $actions[] = 'DELIVER_TO_REQUESTER';
+        }
+    }
+    return $actions;
+}
+
+/**
+ * Construye el plan de notificaciones por correo para cada cambio de estado.
+ * Regla: Por cada cambio de estado se envía correo a Daniel Lara (Administrador)
+ * y al Solicitante, y en estados de aprobación (2b, 2c, 2d o creación Capex/>10k)
+ * también a Ezequiel Conesa.
+ */
+function ciarm_tus_compras_build_notification_plan(string $event, array $order, string $comment = ''): array {
+    $id = (string)($order['id'] ?? '');
+    $estado = (string)($order['estado'] ?? '');
+    $tipo = (string)($order['tipo'] ?? 'OPEX');
+    $solicitante = (string)($order['solicitante'] ?? '');
+    $correoSolicitante = strtolower(trim((string)($order['correo'] ?? '')));
+    $area = (string)($order['area'] ?? '');
+    $montoFmt = '$' . number_format((float)($order['monto'] ?? 0), 2, '.', ',') . ' MXN';
+    $acumFmt = '$' . number_format((float)($order['acumuladoMesArea'] ?? 0), 2, '.', ',') . ' MXN';
+    $baseUrl = function_exists('ciarm_tickets_active_base_url')
+        ? rtrim(ciarm_tickets_active_base_url(), '/')
+        : 'https://portal.ciarm.edu.mx';
+
+    $messages = [];
+    $seen = [];
+    $enqueue = static function (string $role, string $to, string $subject, string $heading, string $intro, string $ctaLabel, string $ctaHash) use (&$messages, &$seen, $baseUrl, $comment): void {
+        $norm = strtolower(trim($to));
+        if ($norm === '' || !filter_var($norm, FILTER_VALIDATE_EMAIL)) return;
+        if (isset($seen[$norm])) return;
+        $seen[$norm] = true;
+        $messages[] = [
+            'role' => $role,
+            'to' => $norm,
+            'subject' => $subject,
+            'heading' => $heading,
+            'intro' => $intro,
+            'ctaLabel' => $ctaLabel,
+            'ctaUrl' => $baseUrl . '/' . $ctaHash,
+            'comment' => $comment,
+        ];
+    };
+
+    $requiresApproval = !empty($order['requiereAprobacion']);
+
+    switch ($event) {
+        case 'CREATE':
+            $enqueue(
+                'solicitante',
+                $correoSolicitante,
+                "[Portal CIARM · Tus Compras] Solicitud enviada {$id} ({$tipo})",
+                'Hemos registrado tu pedido de compra',
+                "Tu pedido de compra {$id} ({$tipo}) por {$montoFmt} ha sido registrado en estado «{$estado}» y enviado a Administración (Daniel Lara).",
+                'Ver mis compras',
+                '#tus-compras'
+            );
+            $enqueue(
+                'admin',
+                CIARM_TUS_COMPRAS_ADMIN_EMAIL,
+                "[Portal CIARM · Tus Compras] Nuevo pedido {$id} — {$solicitante} ({$area})",
+                'Nuevo pedido de compra registrado',
+                "Se ha registrado el pedido {$id} ({$tipo}) de {$solicitante} ({$area}) por {$montoFmt} (Acumulado mensual del área: {$acumFmt})." . ($requiresApproval ? ' Requiere aprobación ejecutiva antes de iniciar compra.' : ' Disponible para recepción directa Opex.'),
+                'Gestionar pedidos de compra',
+                '#admin-tus-compras'
+            );
+            if ($requiresApproval) {
+                foreach (CIARM_TUS_COMPRAS_APPROVER_EMAILS as $approver) {
+                    $enqueue(
+                        'aprobador',
+                        $approver,
+                        "[Portal CIARM · Tus Compras] Pedido {$id} requiere aprobación ({$tipo} · {$montoFmt})",
+                        'Nuevo pedido sujeto a aprobación ejecutiva',
+                        "El pedido {$id} de {$solicitante} ({$area}) por {$montoFmt} ({$tipo}, acumulado mensual del área: {$acumFmt}) requiere tu autorización.",
+                        'Revisar en Tus Compras',
+                        '#admin-tus-compras'
+                    );
+                }
+            }
+            break;
+
+        case 'RECEIVE_OPEX':
+            $enqueue(
+                'solicitante',
+                $correoSolicitante,
+                "[Portal CIARM · Tus Compras] Pedido en proceso {$id} (2a)",
+                'Tu pedido de compra está en proceso',
+                "Administración (Daniel Lara) recibió tu pedido Opex {$id} y cambió su estado a «{$estado}».",
+                'Dar seguimiento a mi compra',
+                '#tus-compras'
+            );
+            $enqueue(
+                'admin',
+                CIARM_TUS_COMPRAS_ADMIN_EMAIL,
+                "[Portal CIARM · Tus Compras] Confirmación: Pedido {$id} en proceso (2a)",
+                'Pedido Opex puesto en proceso',
+                "Has marcado el pedido {$id} de {$solicitante} ({$area}) como «{$estado}».",
+                'Ver panel de compras',
+                '#admin-tus-compras'
+            );
+            break;
+
+        case 'SEND_APPROVAL':
+            foreach (CIARM_TUS_COMPRAS_APPROVER_EMAILS as $approver) {
+                $enqueue(
+                    'aprobador',
+                    $approver,
+                    "[Portal CIARM · Tus Compras] Por aprobar: Pedido {$id} ({$tipo} · {$montoFmt})",
+                    'Pedido de compra pendiente de tu aprobación (2b)',
+                    "El pedido {$id} de {$solicitante} ({$area}) por {$montoFmt} ({$tipo}, acumulado mensual del área: {$acumFmt}) se encuentra en estado «{$estado}». Ingresa al portal para Aprobar (2c) o Rechazar (2d).",
+                    'Aprobar o rechazar pedido',
+                    '#admin-tus-compras'
+                );
+            }
+            $enqueue(
+                'solicitante',
+                $correoSolicitante,
+                "[Portal CIARM · Tus Compras] Pedido {$id} en aprobación ejecutiva (2b)",
+                'Tu pedido se encuentra en aprobación',
+                "Tu pedido {$id} ({$tipo} por {$montoFmt}) pasó al estado «{$estado}» para autorización de Dirección.",
+                'Ver estado de mi compra',
+                '#tus-compras'
+            );
+            $enqueue(
+                'admin',
+                CIARM_TUS_COMPRAS_ADMIN_EMAIL,
+                "[Portal CIARM · Tus Compras] Pedido {$id} enviado a aprobación (2b)",
+                'Pedido turnado a aprobación ejecutiva',
+                "El pedido {$id} de {$solicitante} ({$area}) se encuentra en estado «{$estado}» en espera de decisión de Ezequiel Conesa.",
+                'Ver panel de compras',
+                '#admin-tus-compras'
+            );
+            break;
+
+        case 'APPROVE_CAPEX':
+            $enqueue(
+                'admin',
+                CIARM_TUS_COMPRAS_ADMIN_EMAIL,
+                "[Portal CIARM · Tus Compras] Pedido APROBADO {$id} (2c) — Proceder a compra",
+                'Pedido aprobado para adquisición (2c)',
+                "Ezequiel Conesa aprobó el pedido {$id} ({$tipo} por {$montoFmt}) de {$solicitante} ({$area}). Ya puedes continuar con la compra y registrar cuando los artículos sean recibidos en Administración (Estado 3).",
+                'Continuar compra en panel',
+                '#admin-tus-compras'
+            );
+            $enqueue(
+                'solicitante',
+                $correoSolicitante,
+                "[Portal CIARM · Tus Compras] Pedido aprobado {$id} (2c — En curso)",
+                'Tu pedido de compra ha sido aprobado',
+                "Tu pedido {$id} ({$tipo} por {$montoFmt}) fue aprobado y pasó al estado «{$estado}». Administración procederá con la adquisición.",
+                'Ver seguimiento',
+                '#tus-compras'
+            );
+            foreach (CIARM_TUS_COMPRAS_APPROVER_EMAILS as $approver) {
+                $enqueue(
+                    'aprobador',
+                    $approver,
+                    "[Portal CIARM · Tus Compras] Confirmación de aprobación {$id} (2c)",
+                    'Aprobación registrada correctamente',
+                    "Se registró tu aprobación para el pedido {$id} de {$solicitante} ({$area}), quedando en estado «{$estado}».",
+                    'Ver panel de compras',
+                    '#admin-tus-compras'
+                );
+            }
+            break;
+
+        case 'REJECT_CAPEX':
+            $enqueue(
+                'solicitante',
+                $correoSolicitante,
+                "[Portal CIARM · Tus Compras] Pedido rechazado {$id} (2d)",
+                'Tu pedido de compra no fue autorizado',
+                "El pedido {$id} ({$tipo} por {$montoFmt}) cambió al estado «{$estado}».",
+                'Ver motivo en el portal',
+                '#tus-compras'
+            );
+            $enqueue(
+                'admin',
+                CIARM_TUS_COMPRAS_ADMIN_EMAIL,
+                "[Portal CIARM · Tus Compras] Pedido rechazado {$id} (2d)",
+                'Pedido rechazado en etapa de aprobación',
+                "El pedido {$id} de {$solicitante} ({$area}) fue marcado como «{$estado}» por Dirección.",
+                'Ver panel de compras',
+                '#admin-tus-compras'
+            );
+            foreach (CIARM_TUS_COMPRAS_APPROVER_EMAILS as $approver) {
+                $enqueue(
+                    'aprobador',
+                    $approver,
+                    "[Portal CIARM · Tus Compras] Confirmación de rechazo {$id} (2d)",
+                    'Rechazo registrado en bitácora',
+                    "Se registró el rechazo del pedido {$id} de {$solicitante} ({$area}).",
+                    'Ver panel de compras',
+                    '#admin-tus-compras'
+                );
+            }
+            break;
+
+        case 'RECEIVE_ITEMS_ADM':
+            $enqueue(
+                'solicitante',
+                $correoSolicitante,
+                "[Portal CIARM · Tus Compras] Artículos recibidos en Administración {$id} (Estado 3)",
+                'Tus artículos ya llegaron a Administración',
+                "Daniel Lara registró que los artículos de tu pedido {$id} ya fueron recibidos en Administración («{$estado}») y están listos para su entrega.",
+                'Ver mi compra',
+                '#tus-compras'
+            );
+            $enqueue(
+                'admin',
+                CIARM_TUS_COMPRAS_ADMIN_EMAIL,
+                "[Portal CIARM · Tus Compras] Recepción en Adm. registrada {$id} (Estado 3)",
+                'Artículos recibidos en Administración',
+                "Se registró el ingreso en Administración del pedido {$id} de {$solicitante} ({$area}). El siguiente paso es registrar la entrega al solicitante (Estado 4).",
+                'Gestionar entrega',
+                '#admin-tus-compras'
+            );
+            break;
+
+        case 'DELIVER_TO_REQUESTER':
+            $enqueue(
+                'solicitante',
+                $correoSolicitante,
+                "[Portal CIARM · Tus Compras] Compra entregada {$id} — Confirma tu recepción (Estado 4)",
+                'Tu compra ha sido entregada — Pendiente de tu evaluación',
+                "Daniel Lara registró la entrega de tu pedido {$id} («{$estado}»). Por favor ingresa a «Tus compras» para confirmar Recepción Conforme o Disconforme (Estado 5).",
+                'Evaluar Recepción (Conforme / Disconforme)',
+                '#tus-compras'
+            );
+            $enqueue(
+                'admin',
+                CIARM_TUS_COMPRAS_ADMIN_EMAIL,
+                "[Portal CIARM · Tus Compras] Entrega registrada {$id} (Estado 4)",
+                'Compra entregada al solicitante',
+                "Registraste la entrega del pedido {$id} a {$solicitante} ({$area}). Queda pendiente la evaluación de recepción por parte del solicitante.",
+                'Ver panel de compras',
+                '#admin-tus-compras'
+            );
+            break;
+
+        case 'CONFIRM_CONFORME':
+            $enqueue(
+                'admin',
+                CIARM_TUS_COMPRAS_ADMIN_EMAIL,
+                "[Portal CIARM · Tus Compras] Recepción CONFORME {$id} (Estado 5)",
+                'El solicitante confirmó Recepción Conforme',
+                "El solicitante {$solicitante} ({$area}) evaluó la entrega del pedido {$id} como «{$estado}», concluyendo satisfactoriamente el pedido.",
+                'Ver historial de compras',
+                '#admin-tus-compras'
+            );
+            $enqueue(
+                'solicitante',
+                $correoSolicitante,
+                "[Portal CIARM · Tus Compras] Pedido concluido con conformidad {$id} (Estado 5)",
+                'Recepción Conforme registrada',
+                "Se ha registrado tu evaluación de «{$estado}» para el pedido {$id}. ¡Gracias!",
+                'Ver mis compras',
+                '#tus-compras'
+            );
+            break;
+
+        case 'CONFIRM_DISCONFORME':
+            $enqueue(
+                'admin',
+                CIARM_TUS_COMPRAS_ADMIN_EMAIL,
+                "[Portal CIARM · Tus Compras] ALERTA: Recepción DISCONFORME en pedido {$id} (Estado 5)",
+                'El solicitante reportó Recepción Disconforme',
+                "El solicitante {$solicitante} ({$area}) reportó «{$estado}» en el pedido {$id}. Revisa las observaciones registradas para dar seguimiento.",
+                'Atender incidencia en compras',
+                '#admin-tus-compras'
+            );
+            $enqueue(
+                'solicitante',
+                $correoSolicitante,
+                "[Portal CIARM · Tus Compras] Recepción Disconforme registrada {$id} (Estado 5)",
+                'Se registró tu reporte de disconformidad',
+                "Hemos registrado tu evaluación de «{$estado}» en el pedido {$id} y notificado a Administración (Daniel Lara) con tus observaciones.",
+                'Ver mi pedido',
+                '#tus-compras'
+            );
+            break;
+    }
+
+    return $messages;
+}
+
+function ciarm_tus_compras_render_email(array $msg, array $order): string {
+    $esc = static fn(mixed $s): string => htmlspecialchars((string)($s ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $montoFmt = '$' . number_format((float)($order['monto'] ?? 0), 2, '.', ',') . ' MXN';
+    $acumFmt = '$' . number_format((float)($order['acumuladoMesArea'] ?? 0), 2, '.', ',') . ' MXN';
+    $rows = [
+        ['Folio del Pedido', $order['id'] ?? ''],
+        ['Estado Actual', $order['estado'] ?? ''],
+        ['Tipo de Compra', ($order['tipo'] ?? 'OPEX') . (!empty($order['requiereAprobacion']) ? ' (Sujeto a aprobación)' : ' (Gestión directa Opex)')],
+        ['Monto Estimado', $montoFmt],
+        ['Acumulado Mensual Área', $acumFmt . ' (Tope Opex: $10,000.00 MXN)'],
+        ['Solicitante', ($order['solicitante'] ?? '') . (!empty($order['area']) ? ' (' . $order['area'] . ')' : '')],
+        ['Encargado Administración', $order['responsableAdm'] ?? 'Daniel Lara'],
+        ['Artículos / Descripción', $order['descripcion'] ?? ''],
+    ];
+    if (!empty($order['justificacion'])) {
+        $rows[] = ['Justificación / Referencia', $order['justificacion']];
+    }
+    if (!empty($order['aprobador'])) {
+        $rows[] = ['Aprobador Ejecutivo', $order['aprobador']];
+    }
+    if (!empty($msg['comment'])) {
+        $rows[] = ['Observaciones / Comentario', $msg['comment']];
+    }
+    $htmlRows = '';
+    foreach ($rows as $r) {
+        $htmlRows .= '<tr><td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#334155;width:38%;">'
+            . $esc($r[0]) . '</td><td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#0f172a;">'
+            . $esc($r[1]) . '</td></tr>';
+    }
+    return '<div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;background:#ffffff;">'
+        . '<div style="background:#1e3a8a;color:#ffffff;padding:16px 20px;"><span style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#cbd5e1;">Portal CIARM · Tus Compras</span><h2 style="margin:6px 0 0;font-size:18px;">' . $esc($msg['heading']) . '</h2></div>'
+        . '<div style="padding:20px;"><p style="margin:0 0 16px;color:#1e293b;line-height:1.5;">' . $esc($msg['intro']) . '</p>'
+        . '<table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;">' . $htmlRows . '</table>'
+        . '<div style="margin-top:20px;"><a href="' . $esc($msg['ctaUrl']) . '" style="display:inline-block;background:#26487F;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:600;font-size:14px;">' . $esc($msg['ctaLabel']) . '</a></div>'
+        . '</div><div style="background:#f8fafc;padding:12px 20px;font-size:12px;color:#64748b;border-top:1px solid #e2e8f0;">Notificación automática del Módulo Tus Compras CIARM (' . $esc($order['id'] ?? '') . ').</div></div>';
+}
+
+function ciarm_tus_compras_dispatch_notifications(string $event, array $order, string $comment = '', ?callable $mailer = null): array {
+    $messages = ciarm_tus_compras_build_notification_plan($event, $order, $comment);
+    $deliveries = [];
+    $sendFn = $mailer ?? static function (string $to, string $subject, string $html): array {
+        $mx = ciarm_ticket_smtp_mx_send($to, $subject, $html, 'smtp.google.com', 25);
+        if (($mx['ok'] ?? false) === true) {
+            return ['ok' => true, 'via' => 'smtp-google-mx'];
+        }
+        $encodedSubject = '=?UTF-8?B?' . base64_encode($subject) . '?=';
+        $fromName = '=?UTF-8?B?' . base64_encode('Portal CIARM — Tus Compras') . '?=';
+        $headers = implode("\r\n", [
+            'MIME-Version: 1.0',
+            'Content-Type: text/html; charset=UTF-8',
+            'Content-Transfer-Encoding: base64',
+            "From: {$fromName} <no-reply@ciarm.edu.mx>",
+            'Reply-To: no-reply@ciarm.edu.mx',
+            'X-Mailer: Portal-CIARM-TusCompras/1.0',
+        ]);
+        $mailOk = @mail($to, $encodedSubject, chunk_split(base64_encode($html)), $headers, '-fno-reply@ciarm.edu.mx');
+        return ['ok' => $mailOk, 'via' => 'php-mail', 'mxError' => $mx['error'] ?? ''];
+    };
+
+    foreach ($messages as $msg) {
+        $html = ciarm_tus_compras_render_email($msg, $order);
+        try {
+            $res = $sendFn($msg['to'], $msg['subject'], $html);
+            $ok = is_array($res) ? (bool)($res['ok'] ?? false) : (bool)$res;
+            $deliveries[] = [
+                'role' => $msg['role'],
+                'to' => $msg['to'],
+                'subject' => $msg['subject'],
+                'status' => $ok ? 'ENVIADO' : 'ERROR',
+                'via' => is_array($res) ? ($res['via'] ?? 'php') : 'php',
+            ];
+        } catch (Throwable $e) {
+            $deliveries[] = [
+                'role' => $msg['role'],
+                'to' => $msg['to'],
+                'subject' => $msg['subject'],
+                'status' => 'ERROR',
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    $sentCount = count(array_filter($deliveries, static fn($d) => ($d['status'] ?? '') === 'ENVIADO'));
+    $errCount = count(array_filter($deliveries, static fn($d) => ($d['status'] ?? '') === 'ERROR'));
+    $overall = count($deliveries) === 0 ? 'OMITIDO' : ($errCount === 0 ? 'ENVIADO' : ($sentCount > 0 ? 'PARCIAL' : 'ERROR'));
+
+    return [
+        'event' => $event,
+        'status' => $overall,
+        'deliveries' => $deliveries,
+    ];
+}
+
+function ciarm_tus_compras_sanitize_cell(string $val): string {
+    $trimmed = trim($val);
+    if ($trimmed !== '' && preg_match('/^[=+@\x27-]/', $trimmed) === 1) {
+        return "\u{200B}" . $trimmed;
+    }
+    return $trimmed;
+}
+
+function ciarm_tus_compras_order_to_row(array $order): array {
+    return [
+        (string)($order['id'] ?? ''),
+        (string)($order['fecha'] ?? ''),
+        (string)($order['hora'] ?? ''),
+        ciarm_tus_compras_sanitize_cell((string)($order['solicitante'] ?? '')),
+        strtolower(trim((string)($order['correo'] ?? ''))),
+        ciarm_tus_compras_sanitize_cell((string)($order['area'] ?? '')),
+        strtoupper((string)($order['tipo'] ?? 'OPEX')) === 'CAPEX' ? 'CAPEX' : 'OPEX',
+        number_format((float)($order['monto'] ?? 0), 2, '.', ''),
+        number_format((float)($order['acumuladoMesArea'] ?? 0), 2, '.', ''),
+        !empty($order['requiereAprobacion']) ? 'SÍ' : 'NO',
+        ciarm_tus_compras_sanitize_cell((string)($order['descripcion'] ?? '')),
+        ciarm_tus_compras_sanitize_cell((string)($order['justificacion'] ?? '')),
+        (string)($order['estado'] ?? CIARM_TUS_COMPRAS_STATE_ENVIADA),
+        ciarm_tus_compras_sanitize_cell((string)($order['responsableAdm'] ?? 'Daniel Lara')),
+        ciarm_tus_compras_sanitize_cell((string)($order['aprobador'] ?? '')),
+        (string)($order['fechaAprobacion'] ?? ''),
+        ciarm_tus_compras_sanitize_cell((string)($order['comentarioAprobacion'] ?? '')),
+        (string)($order['fechaRecepcionAdm'] ?? ''),
+        (string)($order['fechaEntrega'] ?? ''),
+        (string)($order['evaluacion'] ?? ''),
+        ciarm_tus_compras_sanitize_cell((string)($order['comentarioRecepcion'] ?? '')),
+        ciarm_tus_compras_sanitize_cell((string)($order['adjuntos'] ?? '')),
+        (string)($order['ultimaActualizacion'] ?? ''),
+        (string)($order['version'] ?? 'v1'),
+    ];
+}
+
+function ciarm_tus_compras_next_folio(array $pedidos, string $year): string {
+    $max = 0;
+    $prefix = 'CMP-' . $year . '-';
+    foreach ($pedidos as $p) {
+        $id = (string)($p['id'] ?? '');
+        if (str_starts_with($id, $prefix)) {
+            $num = (int)substr($id, strlen($prefix));
+            if ($num > $max) $max = $num;
+        }
+    }
+    return sprintf('CMP-%s-%05d', $year, $max + 1);
+}

@@ -23,4 +23,5 @@ jobs:
       - run: php -l tickets-portal-lib.php && php -l auth-lib.php
       - run: php -l tickets-lib.php && php -l tickets-direct-read.php && php -l tickets-api.php
       - run: php -l portal-permissions-lib.php && php -l portal-permissions.php && php -l voiceflow.php && php -l ib-chat.php
+      - run: php -l tus-compras-lib.php && php -l tus-compras-api.php && php tests/tus-compras.php
       - run: node apps-script/build.mjs && git diff --exit-code apps-script/tickets-backend.gs

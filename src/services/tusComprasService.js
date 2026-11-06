@@ -1,0 +1,161 @@
+/**
+ * Servicio Frontend para el Módulo "Tus compras" (Pedidos de compra Opex / Capex)
+ * Tope mensual Opex por área solicitante: $10,000.00 MXN
+ */
+
+export const TUS_COMPRAS_OPEX_LIMIT = 10000;
+
+export const TUS_COMPRAS_STATES = Object.freeze({
+  ENVIADA: '1) Solicitud enviada',
+  EN_PROCESO: '2a) Solicitud recibida / En proceso',
+  EN_APROBACION: '2b) En aprobación',
+  APROBADA: '2c) Aprobada / En curso',
+  RECHAZADA: '2d) Rechazada',
+  RECIBIDOS_ADM: '3) Artículos Recibidos en Adm.',
+  ENTREGADA: '4) Compra Entregada al Solicitante',
+  CONFORME: '5) Recepción Conforme',
+  DISCONFORME: '5) Recepción Disconforme'
+});
+
+export function canSeeTusCompras(response) {
+  if (!response) return false;
+  if (response?.tusCompras?.visible === true) return true;
+  if (Array.isArray(response?.codes) && response.codes.includes('TUS_COMPRAS_TARJETA')) return true;
+  return false;
+}
+
+export function evaluateOrderApprovalRequirement(tipo, monto, currentAreaMonthlyOpex = 0, limit = TUS_COMPRAS_OPEX_LIMIT) {
+  const cleanTipo = String(tipo || 'OPEX').toUpperCase() === 'CAPEX' ? 'CAPEX' : 'OPEX';
+  const numMonto = Math.max(0, Number(monto) || 0);
+  const currentOpex = Math.max(0, Number(currentAreaMonthlyOpex) || 0);
+  const projectedAreaOpex = cleanTipo === 'OPEX'
+    ? Math.round((currentOpex + numMonto) * 100) / 100
+    : Math.round(currentOpex * 100) / 100;
+  const exceedsOpexLimit = cleanTipo === 'OPEX' && projectedAreaOpex > limit;
+  const requiresApproval = cleanTipo === 'CAPEX' || exceedsOpexLimit;
+  return {
+    tipo: cleanTipo,
+    monto: numMonto,
+    currentAreaMonthlyOpex: currentOpex,
+    projectedAreaMonthlyOpex: projectedAreaOpex,
+    opexLimit: limit,
+    exceedsOpexLimit,
+    requiresApproval
+  };
+}
+
+export function computeAllowedActions(order, access) {
+  if (!order || !access) return [];
+  const state = String(order.estado || '');
+  const actorEmail = String(access.correo || '').trim().toLowerCase();
+  const isOwner = Boolean(actorEmail) && String(order.correo || '').trim().toLowerCase() === actorEmail;
+  const canAdmin = Boolean(access.canAdmin);
+  const canApprove = Boolean(access.canApprove);
+  const requiresApproval = Boolean(order.requiereAprobacion)
+    || String(order.tipo || '').toUpperCase() === 'CAPEX'
+    || Number(order.acumuladoMesArea || 0) > TUS_COMPRAS_OPEX_LIMIT;
+
+  const actions = [];
+  if (state === TUS_COMPRAS_STATES.ENVIADA) {
+    if (canAdmin && !requiresApproval) actions.push('RECEIVE_OPEX');
+    if (canAdmin || canApprove) actions.push('SEND_APPROVAL');
+  } else if (state === TUS_COMPRAS_STATES.EN_PROCESO) {
+    if (canAdmin) {
+      actions.push('RECEIVE_ITEMS_ADM');
+      actions.push('SEND_APPROVAL');
+    }
+  } else if (state === TUS_COMPRAS_STATES.EN_APROBACION) {
+    if (canApprove) {
+      actions.push('APPROVE_CAPEX');
+      actions.push('REJECT_CAPEX');
+    }
+  } else if (state === TUS_COMPRAS_STATES.APROBADA) {
+    if (canAdmin) actions.push('RECEIVE_ITEMS_ADM');
+  } else if (state === TUS_COMPRAS_STATES.RECIBIDOS_ADM) {
+    if (canAdmin) actions.push('DELIVER_TO_REQUESTER');
+  } else if (state === TUS_COMPRAS_STATES.ENTREGADA) {
+    if (isOwner) {
+      actions.push('CONFIRM_CONFORME');
+      actions.push('CONFIRM_DISCONFORME');
+    }
+  } else if (state === TUS_COMPRAS_STATES.DISCONFORME) {
+    if (canAdmin) actions.push('DELIVER_TO_REQUESTER');
+  }
+  return actions;
+}
+
+async function apiRequest(action, params = {}, method = 'GET', token = null, signal = null) {
+  const isPost = method === 'POST';
+  const query = isPost ? '' : `?${new URLSearchParams({ action, ...params })}`;
+  const response = await fetch(`/tus-compras-api.php${query}`, {
+    method,
+    credentials: 'same-origin',
+    cache: 'no-store',
+    signal,
+    ...(isPost
+      ? {
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ action, ...params, csrfToken: token })
+        }
+      : { headers: { Accept: 'application/json' } })
+  });
+
+  let body;
+  try {
+    body = await response.json();
+  } catch {
+    throw Object.assign(new Error('Respuesta inválida del servidor.'), { code: 'UPSTREAM' });
+  }
+  if (!response.ok || body?.ok !== true || body?.data === undefined) {
+    throw Object.assign(new Error(body?.message || 'No se pudo completar la operación en Tus compras.'), {
+      code: body?.code || 'UPSTREAM',
+      status: response.status
+    });
+  }
+  return body.data;
+}
+
+export function getTusComprasContext(signal) {
+  return apiRequest('context', {}, 'GET', null, signal);
+}
+
+export function listTusCompras(kind = 'mine', signal) {
+  return apiRequest('list', { kind }, 'GET', null, signal);
+}
+
+export function getTusCompraDetail(id, signal) {
+  return apiRequest('detail', { id }, 'GET', null, signal);
+}
+
+export function createTusCompra(payload, csrfToken, signal) {
+  return apiRequest('create', payload, 'POST', csrfToken, signal);
+}
+
+export function transitionTusCompra(payload, csrfToken, signal) {
+  return apiRequest('transition', payload, 'POST', csrfToken, signal);
+}
+
+export async function uploadTusCompraAttachment(file, csrfToken, signal) {
+  const formData = new FormData();
+  formData.append('action', 'uploadAttachment');
+  formData.append('csrfToken', csrfToken);
+  formData.append('file', file);
+  const response = await fetch('/tus-compras-api.php', {
+    method: 'POST',
+    credentials: 'same-origin',
+    body: formData,
+    signal
+  });
+  let body;
+  try {
+    body = await response.json();
+  } catch {
+    throw Object.assign(new Error('Respuesta inválida al subir adjunto.'), { code: 'UPSTREAM' });
+  }
+  if (!response.ok || body?.ok !== true || !body?.data?.url) {
+    throw Object.assign(new Error('No se pudo subir el archivo adjunto.'), {
+      code: body?.code || 'UPSTREAM'
+    });
+  }
+  return body.data;
+}

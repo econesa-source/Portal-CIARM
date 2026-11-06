@@ -415,20 +415,13 @@ async function renderListView(container, ctx, kind, controller) {
     <section class="ticket-admin">
       ${renderTopNavigation(activeRoute, access)}
 
-      <header class="ticket-admin-header" style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
-        <div>
-          <h1>${kind === 'all' ? 'Gestión y Aprobaciones · Tus compras' : 'Mis Compras y Validación de Recepción'}</h1>
-          <p>${
-            kind === 'all'
-              ? 'Administra el ciclo de pedidos Opex (≤ $10,000 MXN/mes por área) y Capex (> $10,000 MXN/mes). Al aprobar un ticket en 2b) En aprobación, pasa al estado 2a) Solicitud recibida / En proceso.'
-              : 'Consulta el estado informativo de tus tickets de compra. Cuando tu compra sea entregada podrás cerrar el ticket clasificándolo como Recepción Conforme o Recepción Disconforme.'
-          }</p>
-        </div>
-        ${
-          kind === 'all' && access?.canGerencial
-            ? `<a href="#vision-gerencial-compras" class="exact-btn dark" style="background:var(--primary-color, #26487F);color:#ffffff;padding:9px 16px;border-radius:8px;font-weight:700;text-decoration:none;white-space:nowrap;">📊 Vista Gerencial</a>`
-            : ''
-        }
+      <header class="ticket-admin-header" style="margin-bottom:14px;">
+        <h1>${kind === 'all' ? 'Gestión y Aprobaciones · Tus compras' : 'Mis Compras y Validación de Recepción'}</h1>
+        <p>${
+          kind === 'all'
+            ? 'Administra el ciclo de pedidos Opex (≤ $10,000 MXN/mes por área) y Capex (> $10,000 MXN/mes). Al aprobar un ticket en 2b) En aprobación, pasa al estado 2a) Solicitud recibida / En proceso.'
+            : 'Consulta el estado informativo de tus tickets de compra. Cuando tu compra sea entregada podrás cerrar el ticket clasificándolo como Recepción Conforme o Recepción Disconforme.'
+        }</p>
       </header>
 
       ${
@@ -783,7 +776,6 @@ async function renderExecutiveDashboardView(container, ctx, controller) {
           <p style="margin:4px 0 0;color:#475569;">Evolución gráfica de tickets de compra, tiempos de entrega y cierre (OPEX vs CAPEX) y desempeño operativo de gestión de compra (Daniel Lara).</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <a href="#admin-tus-compras" class="solicitud-secondary-link" style="padding:8px 14px;border-radius:6px;text-decoration:none;">← Gestión y Aprobaciones</a>
           <button type="button" id="tc-exec-refresh" style="background:var(--primary-color, #26487F);border:1px solid var(--primary-color, #26487F);color:#ffffff;font-weight:600;padding:8px 14px;border-radius:6px;cursor:pointer;">Actualizar indicadores</button>
         </div>
       </header>

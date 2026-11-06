@@ -84,7 +84,7 @@ try {
                 if ($kind === 'mine' && strtolower(trim((string)$p['correo'])) !== $actorEmail) {
                     continue;
                 }
-                $p['allowedActions'] = ciarm_tus_compras_allowed_actions($p, $access);
+                $p['allowedActions'] = ciarm_tus_compras_allowed_actions($p, $access, $kind);
                 $p['history'] = $byPedido[$p['id']] ?? [];
                 $items[] = $p;
             }
@@ -126,7 +126,8 @@ try {
             if (strtolower(trim((string)$found['correo'])) !== $actorEmail && empty($access['canAdmin']) && empty($access['canApprove'])) {
                 ciarm_json_response(403, ['ok' => false, 'code' => 'FORBIDDEN']);
             }
-            $found['allowedActions'] = ciarm_tus_compras_allowed_actions($found, $access);
+            $detailKind = (!empty($access['canAdmin']) || !empty($access['canApprove'])) ? 'all' : 'mine';
+            $found['allowedActions'] = ciarm_tus_compras_allowed_actions($found, $access, $detailKind);
             $found['history'] = ciarm_tus_compras_parse_bitacora($store['bitacoraRows'], $id);
 
             ciarm_json_response(200, ['ok' => true, 'data' => $found]);
@@ -204,6 +205,7 @@ try {
         $area = (string)$access['area'];
         $currentAreaOpex = ciarm_tus_compras_area_monthly_opex($pedidos, $area, $yearMonth);
         $eval = ciarm_tus_compras_requires_approval($tipo, $monto, $currentAreaOpex);
+        $initialState = (string)($eval['initialState'] ?? ($eval['requiresApproval'] ? CIARM_TUS_COMPRAS_STATE_EN_APROBACION : CIARM_TUS_COMPRAS_STATE_ENVIADA));
 
         $newOrder = [
             'id' => $folio,
@@ -218,9 +220,9 @@ try {
             'requiereAprobacion' => $eval['requiresApproval'],
             'descripcion' => $descripcion,
             'justificacion' => $justificacion,
-            'estado' => CIARM_TUS_COMPRAS_STATE_ENVIADA,
+            'estado' => $initialState,
             'responsableAdm' => 'Daniel Lara',
-            'aprobador' => $eval['requiresApproval'] ? 'Ezequiel Conesa (Pendiente)' : 'No requiere (Opex ≤ $10,000)',
+            'aprobador' => $eval['requiresApproval'] ? 'En aprobación (Administración)' : 'No requiere (Opex ≤ $10,000)',
             'fechaAprobacion' => '',
             'comentarioAprobacion' => '',
             'fechaRecepcionAdm' => '',
@@ -258,12 +260,14 @@ try {
             (string)$access['nombre'],
             'Solicitante (Director Docente)',
             'CREATE',
-            '—',
-            CIARM_TUS_COMPRAS_STATE_ENVIADA,
+            $eval['requiresApproval'] ? CIARM_TUS_COMPRAS_STATE_ENVIADA : '—',
+            $initialState,
             number_format($monto, 2, '.', ''),
             number_format((float)$eval['projectedAreaMonthlyOpex'], 2, '.', ''),
             $eval['requiresApproval']
-                ? ($tipo === 'CAPEX' ? 'Pedido Capex registrado (requiere aprobación de Ezequiel Conesa).' : 'Pedido Opex supera tope mensual de $10,000 MXN del área (requiere aprobación de Ezequiel Conesa).')
+                ? ($tipo === 'CAPEX'
+                    ? 'Pedido Capex enviado y pasado automáticamente a 2b) En aprobación.'
+                    : 'Pedido Opex supera tope mensual permitido ($10,000 MXN del área); pasa automáticamente a 2b) En aprobación.')
                 : 'Pedido Opex dentro de presupuesto mensual del área (≤ $10,000 MXN).',
             (string)($notif['status'] ?? 'ENVIADO'),
         ];
@@ -280,7 +284,7 @@ try {
             'body' => json_encode(['values' => [$logRow]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         ]);
 
-        $newOrder['allowedActions'] = ciarm_tus_compras_allowed_actions($newOrder, $access);
+        $newOrder['allowedActions'] = ciarm_tus_compras_allowed_actions($newOrder, $access, 'mine');
         $newOrder['notification'] = $notif;
 
         ciarm_json_response(200, ['ok' => true, 'data' => ['order' => $newOrder]]);
@@ -357,16 +361,6 @@ try {
         $rowRange = "'PEDIDOS'!A{$rowNum}:X{$rowNum}";
         $rowValues = ciarm_tus_compras_order_to_row($target);
 
-        $updateUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($store['sheetId'])
-            . '/values/' . rawurlencode($rowRange) . '?valueInputOption=RAW';
-        $upRes = ciarm_http_json($updateUrl, [
-            'post' => false,
-            'headers' => [
-                'Accept: application/json',
-                'Content-Type: application/json',
-                'Authorization: Bearer ' . $store['token'],
-            ],
-        ]);
         // Usamos values:batchUpdate (POST) para no depender de PUT en curl
         $batchUpdateUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($store['sheetId']) . '/values:batchUpdate';
         $upRes = ciarm_http_json($batchUpdateUrl, [
@@ -420,7 +414,8 @@ try {
             'body' => json_encode(['values' => [$logRow]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         ]);
 
-        $target['allowedActions'] = ciarm_tus_compras_allowed_actions($target, $access);
+        $transitionViewKind = (!empty($access['canAdmin']) || !empty($access['canApprove'])) ? 'all' : 'mine';
+        $target['allowedActions'] = ciarm_tus_compras_allowed_actions($target, $access, $transitionViewKind);
         $target['notification'] = $notif;
         $target['history'] = ciarm_tus_compras_parse_bitacora($store['bitacoraRows'], $id);
         $target['history'][] = [

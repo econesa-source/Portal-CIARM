@@ -23,18 +23,11 @@ const ACTION_META = Object.freeze({
     description: 'Confirma que el pedido Opex ha sido recibido en Administración y pasa a proceso de compra.',
     requireComment: false
   },
-  SEND_APPROVAL: {
-    label: 'Enviar a Aprobación (2b)',
-    badgeClass: 'gold',
-    confirmTitle: 'Turnar a 2b) En aprobación (Ezequiel Conesa)',
-    description: 'Envía este pedido a autorización de Ezequiel Conesa (Capex o supera tope de $10,000 MXN/mes del área).',
-    requireComment: false
-  },
   APPROVE_CAPEX: {
-    label: 'Aprobar Compra (2c)',
+    label: 'Aprobar y pasar a 2a)',
     badgeClass: 'dark',
-    confirmTitle: 'Autorizar pedido → 2c) Aprobada / En curso',
-    description: 'Autoriza este pedido para que Daniel Lara proceda con la compra.',
+    confirmTitle: 'Aprobar pedido → 2a) Solicitud recibida / En proceso',
+    description: 'Autoriza este pedido en aprobación para que pase al estado 2a) Solicitud recibida / En proceso.',
     requireComment: false
   },
   REJECT_CAPEX: {
@@ -55,21 +48,21 @@ const ACTION_META = Object.freeze({
     label: 'Entregar Compra al Solicitante (4)',
     badgeClass: 'gold',
     confirmTitle: 'Pasar a 4) Compra Entregada al Solicitante',
-    description: 'Registra la entrega al solicitante y habilita su evaluación de Recepción Conforme / Disconforme.',
+    description: 'Registra la entrega al solicitante y habilita su cierre como Recepción Conforme o Recepción Disconforme.',
     requireComment: false
   },
   CONFIRM_CONFORME: {
-    label: 'Recepción Conforme (5)',
-    badgeClass: 'dark',
-    confirmTitle: 'Confirmar 5) Recepción Conforme',
-    description: 'Confirma que recibiste los artículos solicitados a entera satisfacción.',
+    label: 'Recepción Conforme',
+    badgeClass: 'conforme',
+    confirmTitle: 'Cerrar ticket: 5) Recepción Conforme',
+    description: 'Confirma que recibiste los artículos solicitados a entera satisfacción para cerrar el ticket.',
     requireComment: false
   },
   CONFIRM_DISCONFORME: {
-    label: 'Recepción Disconforme (5)',
+    label: 'Recepción Disconforme',
     badgeClass: 'danger',
-    confirmTitle: 'Reportar 5) Recepción Disconforme',
-    description: 'Describe el motivo de disconformidad (artículo incompleto, dañado o distinto) para notificar a Daniel Lara.',
+    confirmTitle: 'Cerrar ticket: 5) Recepción Disconforme',
+    description: 'Describe el motivo de disconformidad (artículo incompleto, dañado o distinto) para cerrar el ticket y notificar a Administración.',
     requireComment: true
   }
 });
@@ -178,11 +171,10 @@ export async function render(container, userSession) {
 
   const access = ctx.access || {};
   const canCreate = Boolean(access.canCreate);
-  const canAdmin = Boolean(access.canAdmin);
-  const canApprove = Boolean(access.canApprove);
+  const isAdministracion = Boolean(access.isAdministracion || (access.isDocenteDirector !== true && (access.canAdmin || access.canApprove)));
 
   if (route === '#tus-compras-nuevo') {
-    if (!canCreate) {
+    if (!canCreate && !isAdministracion) {
       container.innerHTML = '<p role="alert">Tu perfil no tiene habilitado el registro de pedidos de compra.</p>';
       return;
     }
@@ -190,20 +182,21 @@ export async function render(container, userSession) {
     return;
   }
 
-  const isAdminView = route === '#admin-tus-compras' && (canAdmin || canApprove);
+  const isAdminView = route === '#admin-tus-compras' && isAdministracion;
   await renderListView(container, ctx, isAdminView ? 'all' : 'mine', controller);
 }
 
 function renderTopNavigation(activeRoute, access) {
   const canCreate = Boolean(access?.canCreate);
-  const canManage = Boolean(access?.canAdmin || access?.canApprove);
+  // El menú de Gestión y Aprobaciones solo corresponde a usuarios con perfil "administración" en área (AG) y nivel (AJ)
+  const showAdminMenu = Boolean(access?.isAdministracion === true);
   return `
     <div class="solicitud-topbar" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
       <a href="#inicio" class="card-top-nav-link">← Volver al Inicio</a>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        ${canCreate ? `<a href="#tus-compras-nuevo" class="solicitud-secondary-link" style="${activeRoute === '#tus-compras-nuevo' ? 'background:#1e3a8a;color:#fff;' : ''}">+ Nuevo Pedido de Compra</a>` : ''}
-        <a href="#tus-compras" class="solicitud-secondary-link" style="${activeRoute === '#tus-compras' ? 'background:#1e3a8a;color:#fff;' : ''}">Mis Compras y Recepción</a>
-        ${canManage ? `<a href="#admin-tus-compras" class="solicitud-secondary-link" style="${activeRoute === '#admin-tus-compras' ? 'background:#1e3a8a;color:#fff;' : ''}">${access?.canApprove && !access?.canAdmin ? 'Bandeja de Aprobación Capex' : 'Gestión y Aprobaciones (Adm.)'}</a>` : ''}
+        ${canCreate ? `<a href="#tus-compras-nuevo" class="solicitud-secondary-link" style="${activeRoute === '#tus-compras-nuevo' ? 'background:#26487F;color:#fff;border-color:#26487F;' : ''}">+ Crear Pedido</a>` : ''}
+        <a href="#tus-compras" class="solicitud-secondary-link" style="${activeRoute === '#tus-compras' ? 'background:#26487F;color:#fff;border-color:#26487F;' : ''}">Mis Compras</a>
+        ${showAdminMenu ? `<a href="#admin-tus-compras" class="solicitud-secondary-link" style="${activeRoute === '#admin-tus-compras' ? 'background:#26487F;color:#fff;border-color:#26487F;' : ''}">Gestión y Aprobaciones</a>` : ''}
       </div>
     </div>
   `;
@@ -307,12 +300,12 @@ function renderCreateView(container, ctx, controller) {
       preview.style.color = '#92400e';
       const reason = evalRes.tipo === 'CAPEX'
         ? 'por ser compra tipo CAPEX'
-        : `porque el acumulado mensual Opex del área (${formatCurrency(evalRes.projectedAreaMonthlyOpex)}) supera los ${formatCurrency(opexLimit)}`;
-      preview.textContent = `Ruta: 1) Solicitud enviada → 2b) En aprobación (${reason}; requiere autorización de Ezequiel Conesa antes de comprar).`;
+        : `porque el acumulado mensual Opex del área (${formatCurrency(evalRes.projectedAreaMonthlyOpex)}) supera el límite permitido de ${formatCurrency(opexLimit)}`;
+      preview.textContent = `Ruta automática: Al enviar el ticket pasará automáticamente al estado «2b) En aprobación» (${reason}). Cuando el autorizador (Administración) apruebe el ticket, pasará al estado «2a) Solicitud recibida / En proceso».`;
     } else {
       preview.style.background = '#dcfce7';
       preview.style.color = '#166534';
-      preview.textContent = `Ruta directa Opex: 1) Solicitud enviada → 2a) Solicitud recibida / En proceso con Daniel Lara (Acumulado mensual proyectado del área: ${formatCurrency(evalRes.projectedAreaMonthlyOpex)} ≤ ${formatCurrency(opexLimit)}).`;
+      preview.textContent = `Ruta Opex dentro de presupuesto: Se registrará en «1) Solicitud enviada» para pasar a «2a) Solicitud recibida / En proceso» (Acumulado mensual proyectado del área: ${formatCurrency(evalRes.projectedAreaMonthlyOpex)} ≤ ${formatCurrency(opexLimit)}).`;
     }
   }
 
@@ -336,7 +329,7 @@ function renderCreateView(container, ctx, controller) {
         const uploaded = await uploadTusCompraAttachment(file, ctx.csrfToken, controller.signal);
         adjuntoUrl = uploaded.url || '';
       }
-      statusBox.textContent = 'Guardando pedido y notificando a Daniel Lara…';
+      statusBox.textContent = 'Guardando pedido y notificando a Administración…';
       const result = await createTusCompra(
         {
           tipo: selectTipo.value,
@@ -350,7 +343,7 @@ function renderCreateView(container, ctx, controller) {
       );
       if (controller.signal.aborted) return;
       statusBox.className = 'solicitud-status is-visible is-success';
-      statusBox.textContent = `Pedido ${result.order.id} registrado en estado «1) Solicitud enviada». Redirigiendo a Mis Compras…`;
+      statusBox.textContent = `Pedido ${result.order.id} registrado en estado «${result.order.estado}». Redirigiendo a Mis Compras…`;
       setTimeout(() => {
         if (!controller.signal.aborted) window.location.hash = '#tus-compras';
       }, 1800);
@@ -401,28 +394,34 @@ async function renderListView(container, ctx, kind, controller) {
           <h1>${kind === 'all' ? 'Gestión y Aprobaciones · Tus compras' : 'Mis Compras y Validación de Recepción'}</h1>
           <p>${
             kind === 'all'
-              ? 'Administra el ciclo de pedidos Opex (≤ $10,000 MXN/mes por área) y Capex (> $10,000 MXN/mes con aprobación de Ezequiel Conesa). Solo los estados 2a) y 2c) pueden avanzar al estado 3).'
-              : 'Consulta el avance de tus pedidos de compra y confirma la Recepción Conforme o Disconforme cuando tus artículos sean entregados.'
+              ? 'Administra el ciclo de pedidos Opex (≤ $10,000 MXN/mes por área) y Capex (> $10,000 MXN/mes). Al aprobar un ticket en 2b) En aprobación, pasa al estado 2a) Solicitud recibida / En proceso.'
+              : 'Consulta el estado informativo de tus tickets de compra. Cuando tu compra sea entregada podrás cerrar el ticket clasificándolo como Recepción Conforme o Recepción Disconforme.'
           }</p>
         </div>
       </header>
 
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;" id="tc-state-filters">
-        <button type="button" class="ticket-action-pill" data-filter="ALL" style="font-weight:700;">Todos (${items.length})</button>
-        ${Object.values(TUS_COMPRAS_STATES)
-          .map(
-            st => `
-          <button type="button" class="ticket-action-pill" data-filter="${escapeHtml(st)}">
-            ${escapeHtml(st)} (${countsByState[st] || 0})
-          </button>
-        `
-          )
-          .join('')}
-      </div>
+      ${
+        kind === 'all'
+          ? `
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;" id="tc-state-filters">
+          <button type="button" class="ticket-action-pill" data-filter="ALL" style="font-weight:700;">Todos (${items.length})</button>
+          ${Object.values(TUS_COMPRAS_STATES)
+            .map(
+              st => `
+            <button type="button" class="ticket-action-pill" data-filter="${escapeHtml(st)}">
+              ${escapeHtml(st)} (${countsByState[st] || 0})
+            </button>
+          `
+            )
+            .join('')}
+        </div>
 
-      <div style="margin-bottom:14px;">
-        <input type="search" id="tc-search-input" placeholder="Buscar por folio CMP-2026-..., solicitante, área o artículo…" style="width:100%;max-width:480px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:6px;" />
-      </div>
+        <div style="margin-bottom:14px;">
+          <input type="search" id="tc-search-input" placeholder="Buscar por folio CMP-2026-..., solicitante, área o artículo…" style="width:100%;max-width:480px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:6px;" />
+        </div>
+      `
+          : ''
+      }
 
       <div id="tc-notice" role="status" style="margin-bottom:12px;font-weight:600;color:#166534;" hidden></div>
       <div id="tc-orders-list" style="display:flex;flex-direction:column;gap:14px;"></div>
@@ -439,14 +438,79 @@ async function renderListView(container, ctx, kind, controller) {
   function renderCards() {
     const q = searchQuery.trim().toLowerCase();
     const filtered = items.filter(order => {
-      if (stateFilter !== 'ALL' && order.estado !== stateFilter) return false;
+      if (kind === 'all' && stateFilter !== 'ALL' && order.estado !== stateFilter) return false;
       if (!q) return true;
       const haystack = `${order.id} ${order.solicitante} ${order.area} ${order.tipo} ${order.descripcion} ${order.estado}`.toLowerCase();
       return haystack.includes(q);
     });
 
     if (!filtered.length) {
-      listEl.innerHTML = `<div style="padding:24px;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;color:#64748b;">No hay pedidos de compra en esta vista.</div>`;
+      listEl.innerHTML = `<div style="padding:24px;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;color:#64748b;">No tienes pedidos de compra registrados.</div>`;
+      return;
+    }
+
+    if (kind === 'mine') {
+      // Vista del solicitante: solo listado informativo con botón azul "Ver detalle" y botones de cierre de recepción cuando esté en estado 4)
+      listEl.innerHTML = `
+        <div class="ticket-table-wrap">
+          <table class="ticket-table">
+            <thead>
+              <tr>
+                <th>Folio</th>
+                <th>Fecha</th>
+                <th>Tipo / Monto</th>
+                <th>Artículos Solicitados</th>
+                <th>Estado Actual</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filtered
+                .map(order => {
+                  const canCloseReception = order.estado === TUS_COMPRAS_STATES.ENTREGADA;
+                  return `
+                    <tr data-order-id="${escapeHtml(order.id)}">
+                      <td><strong>${escapeHtml(order.id)}</strong></td>
+                      <td>${escapeHtml(order.fecha || '—')}</td>
+                      <td>
+                        <span style="padding:2px 7px;border-radius:4px;font-size:11.5px;font-weight:700;${
+                          order.tipo === 'CAPEX' ? 'background:#fae8ff;color:#86198f;' : 'background:#f1f5f9;color:#0f172a;'
+                        }">${escapeHtml(order.tipo)}</span>
+                        <div style="font-weight:700;margin-top:3px;">${formatCurrency(order.monto)}</div>
+                      </td>
+                      <td>${escapeHtml(order.descripcion)}</td>
+                      <td>
+                        <span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;${stateBadgeStyle(order.estado)}">
+                          ${escapeHtml(order.estado)}
+                        </span>
+                      </td>
+                      <td>
+                        <div class="ticket-action-buttons" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                          <button type="button" class="ticket-action-pill" data-detail="${escapeHtml(order.id)}" style="background:var(--primary-color, #26487F);border-color:var(--primary-color, #26487F);color:#ffffff;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer;">
+                            Ver detalle
+                          </button>
+                          ${
+                            canCloseReception
+                              ? `
+                            <button type="button" class="ticket-action-pill" data-order="${escapeHtml(order.id)}" data-event="CONFIRM_CONFORME" style="background:#059669;border-color:#059669;color:#ffffff;font-weight:600;padding:7px 12px;border-radius:6px;cursor:pointer;">
+                              Recepción Conforme
+                            </button>
+                            <button type="button" class="ticket-action-pill" data-order="${escapeHtml(order.id)}" data-event="CONFIRM_DISCONFORME" style="background:#dc2626;border-color:#dc2626;color:#ffffff;font-weight:600;padding:7px 12px;border-radius:6px;cursor:pointer;">
+                              Recepción Disconforme
+                            </button>
+                          `
+                              : ''
+                          }
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                })
+                .join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
       return;
     }
 
@@ -492,6 +556,8 @@ async function renderListView(container, ctx, kind, controller) {
                     const btnStyle =
                       meta.badgeClass === 'danger'
                         ? 'background:#dc2626;color:#fff;border:none;'
+                        : meta.badgeClass === 'conforme'
+                        ? 'background:#059669;color:#fff;border:none;'
                         : meta.badgeClass === 'gold'
                         ? 'background:#C1B27E;color:#0f172a;border:none;font-weight:700;'
                         : 'background:#26487F;color:#fff;border:none;';
@@ -499,8 +565,8 @@ async function renderListView(container, ctx, kind, controller) {
                   })
                   .join('')}
               </div>
-              <button type="button" class="ticket-action-pill" data-detail="${escapeHtml(order.id)}" style="padding:6px 12px;border-radius:6px;background:#f8fafc;border:1px solid #cbd5e1;cursor:pointer;">
-                Ver trazabilidad (${Array.isArray(order.history) ? order.history.length : 0})
+              <button type="button" class="ticket-action-pill" data-detail="${escapeHtml(order.id)}" style="background:var(--primary-color, #26487F);border-color:var(--primary-color, #26487F);color:#ffffff;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer;">
+                Ver detalle
               </button>
             </div>
           </article>

@@ -8,9 +8,9 @@ require_once __DIR__ . '/tickets-portal-lib.php';
  * - Preproducción (portal2.ciarm.edu.mx): 1b2DOU0iY7yw-93NEHDIZKhfZNTBirZiPMMbXvOaXMso
  * - Producción (portal.ciarm.edu.mx):     1q6mwmL-9JiNGk3TJZoJ1sJZiaR3AOO4OLEGiJuKQraQ
  * - Límite Opex mensual acumulado por área solicitante: $10,000.00 MXN
- * - Administrador de Compras: Daniel Lara (d.lara@ciarm.edu.mx)
- * - Aprobador Capex / > $10,000 MXN: Ezequiel Conesa (e.conesa@ciarm.edu.mx)
- * - Solicitantes autorizados en DM03: Columna AG = "docente" y Columna AJ = "director"
+ * - Perfiles gobernados por DM03 ('Catálogo de colaboradores'!A4:AZ1010):
+ *   * Solicitante: Columna AG (Área) = "docente" y Columna AJ (Nivel) = "director"
+ *   * Administración / Autorizador: Columna AG (Área) = "administración" y Columna AJ (Nivel) = "administración"
  */
 
 const CIARM_TUS_COMPRAS_STAGING_SHEET_ID = '1b2DOU0iY7yw-93NEHDIZKhfZNTBirZiPMMbXvOaXMso';
@@ -18,7 +18,6 @@ const CIARM_TUS_COMPRAS_PROD_SHEET_ID = '1q6mwmL-9JiNGk3TJZoJ1sJZiaR3AOO4OLEGiJu
 const CIARM_TUS_COMPRAS_OPEX_LIMIT = 10000.0;
 const CIARM_TUS_COMPRAS_ADMIN_EMAIL = 'd.lara@ciarm.edu.mx';
 const CIARM_TUS_COMPRAS_APPROVER_EMAILS = ['e.conesa@ciarm.edu.mx'];
-const CIARM_TUS_COMPRAS_SUPPORT_EMAILS = ['r.valencia@ciarm.edu.mx'];
 
 const CIARM_TUS_COMPRAS_STATE_ENVIADA = '1) Solicitud enviada';
 const CIARM_TUS_COMPRAS_STATE_EN_PROCESO = '2a) Solicitud recibida / En proceso';
@@ -123,9 +122,10 @@ function ciarm_tus_compras_normalize_token(string $value): string {
 }
 
 /**
- * Verifica si una fila de DM03 ('Catálogo de colaboradores'!A4:AZ1010)
- * pertenece al área "docente" en la columna AG (índice 32) y tiene nivel
- * "director" en la columna AJ (índice 35).
+ * Verifica el perfil de la fila en DM03 ('Catálogo de colaboradores'!A4:AZ1010)
+ * leyendo la columna AG (índice 32: área) y la columna AJ (índice 35: nivel):
+ * - Solicitante (isDocenteDirector): AG = "docente" y AJ = "director"
+ * - Administración / Autorizador (isAdministracion): AG = "administración" y AJ = "administración"
  */
 function ciarm_tus_compras_matches_dm03_profile(array $row): array {
     $rawAG = trim((string)($row[32] ?? ''));
@@ -136,18 +136,26 @@ function ciarm_tus_compras_matches_dm03_profile(array $row): array {
     $isDocente = $normAG === 'docente' || preg_match('/\bdocente(s)?\b/i', $normAG) === 1;
     $isDirector = $normAJ === 'director' || $normAJ === 'directora' || preg_match('/\bdirector(a|es)?\b/i', $normAJ) === 1;
 
+    $isAreaAdm = $normAG === 'administracion' || preg_match('/\badministraci[oó]?n\b/i', $normAG) === 1;
+    $isNivelAdm = $normAJ === 'administracion' || preg_match('/\badministraci[oó]?n\b/i', $normAJ) === 1;
+
     return [
         'colAG' => $rawAG,
         'colAJ' => $rawAJ,
         'isDocente' => $isDocente,
         'isDirector' => $isDirector,
         'isDocenteDirector' => ($isDocente && $isDirector),
+        'isAdministracion' => ($isAreaAdm && $isNivelAdm),
     ];
 }
 
 /**
- * Evalúa el perfil del usuario en DM03 a partir de las filas ya leídas de
- * 'Catálogo de colaboradores'!A4:AZ1010.
+ * Evalúa el perfil del usuario en DM03 a partir de las filas de
+ * 'Catálogo de colaboradores'!A4:AZ1010:
+ * - Si cumple con área "docente" (AG) y nivel "director" (AJ):
+ *   sólo ve los botones Crear Pedido y Mis Compras (canCreate = true, canAdmin = false, canApprove = false).
+ * - Si cumple con área "administración" (AG) y nivel "administración" (AJ):
+ *   tiene acceso a Gestión y Aprobaciones (canAdmin = true, canApprove = true).
  */
 function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): array {
     $email = strtolower(trim($email));
@@ -157,6 +165,7 @@ function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): arr
         'canAdmin' => false,
         'canApprove' => false,
         'isDocenteDirector' => false,
+        'isAdministracion' => false,
         'correo' => $email,
         'nombre' => '',
         'area' => '',
@@ -217,24 +226,26 @@ function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): arr
         $area = $profile['colAG'];
     }
     if ($area === '') {
-        $area = 'General';
+        $area = 'Docente';
     }
 
-    $isAdmin = ($email === CIARM_TUS_COMPRAS_ADMIN_EMAIL)
-        || in_array($email, CIARM_TUS_COMPRAS_SUPPORT_EMAILS, true);
-    $isApprover = in_array($email, CIARM_TUS_COMPRAS_APPROVER_EMAILS, true)
-        || in_array($email, CIARM_TUS_COMPRAS_SUPPORT_EMAILS, true);
     $isDocenteDirector = $profile['isDocenteDirector'];
+    $isAdministracion = $profile['isAdministracion'];
 
-    $canCreate = $isDocenteDirector || $isApprover || $isAdmin;
-    $visible = $isDocenteDirector || $isAdmin || $isApprover;
+    // El solicitante con AG="docente" y AJ="director" SOLO ve Crear Pedido y Mis Compras.
+    // El perfil con AG="administración" y AJ="administración" accede a Gestión y Aprobaciones.
+    $canCreate = $isDocenteDirector;
+    $canAdmin = $isAdministracion && !$isDocenteDirector;
+    $canApprove = $isAdministracion && !$isDocenteDirector;
+    $visible = $isDocenteDirector || $isAdministracion;
 
     return [
         'visible' => $visible,
         'canCreate' => $canCreate,
-        'canAdmin' => $isAdmin,
-        'canApprove' => $isApprover,
+        'canAdmin' => $canAdmin,
+        'canApprove' => $canApprove,
         'isDocenteDirector' => $isDocenteDirector,
+        'isAdministracion' => $isAdministracion,
         'correo' => $email,
         'nombre' => $nombre !== '' ? $nombre : $email,
         'area' => $area,
@@ -286,17 +297,13 @@ function ciarm_tus_compras_access(array $sessionUser, ?array $dm03RowsOverride =
     if (session_status() === PHP_SESSION_ACTIVE) {
         $_SESSION['ciarm_tus_compras_access'] = [
             'email' => $email,
-            'expires' => time() + 45,
+            'expires' => time() + 20,
             'access' => $access,
         ];
     }
     return $access;
 }
 
-/**
- * Obtiene token de Google Sheets con permisos de lectura y escritura
- * sobre los libros compartidos con portal-ciarm-dm03@portal-ciarm.iam.gserviceaccount.com.
- */
 function ciarm_tus_compras_sheets_token(): string {
     $raw = @file_get_contents(ciarm_private_path('service-account.json'));
     if ($raw === false) {
@@ -309,10 +316,6 @@ function ciarm_tus_compras_sheets_token(): string {
     return ciarm_google_access_token($account, 'https://www.googleapis.com/auth/spreadsheets');
 }
 
-/**
- * Asegura que el libro de Google Sheets (Preprod o Prod) tenga creadas las pestañas
- * PEDIDOS, BITACORA PEDIDOS y CONFIG COMPRAS con sus encabezados oficiales.
- */
 function ciarm_tus_compras_ensure_schema(?string $spreadsheetId = null, ?string $token = null): void {
     $sheetId = $spreadsheetId ?? ciarm_tus_compras_active_sheet_id();
     $accessToken = $token ?? ciarm_tus_compras_sheets_token();
@@ -363,7 +366,6 @@ function ciarm_tus_compras_ensure_schema(?string $spreadsheetId = null, ?string 
         }
     }
 
-    // Verificar encabezados en las 3 pestañas
     $ranges = ["'PEDIDOS'!A1:X1", "'BITACORA PEDIDOS'!A1:M1", "'CONFIG COMPRAS'!A1:E5"];
     $query = implode('&', array_map(static fn($r) => 'ranges=' . rawurlencode($r), $ranges));
     $getRes = ciarm_http_json(
@@ -427,9 +429,6 @@ function ciarm_tus_compras_ensure_schema(?string $spreadsheetId = null, ?string 
     }
 }
 
-/**
- * Lee todas las filas de PEDIDOS y BITACORA PEDIDOS de la base de datos activa.
- */
 function ciarm_tus_compras_fetch_all(?string $spreadsheetId = null): array {
     $sheetId = $spreadsheetId ?? ciarm_tus_compras_active_sheet_id();
     $token = ciarm_tus_compras_sheets_token();
@@ -543,11 +542,6 @@ function ciarm_tus_compras_parse_bitacora(array $rows, ?string $filterPedidoId =
     return $items;
 }
 
-/**
- * Calcula el acumulado mensual Opex de un área solicitante en el mes dado (YYYY-MM).
- * Excluye pedidos rechazados (2d) Rechazada) y excluye opcionalmente un ID de pedido
- * cuando se está recalculando un pedido existente.
- */
 function ciarm_tus_compras_area_monthly_opex(array $pedidos, string $area, string $yearMonth, ?string $excludeId = null): float {
     $normArea = ciarm_tus_compras_normalize_token($area);
     if ($normArea === '') return 0.0;
@@ -566,9 +560,9 @@ function ciarm_tus_compras_area_monthly_opex(array $pedidos, string $area, strin
 }
 
 /**
- * Determina si un pedido requiere aprobación de Ezequiel Conesa:
- * - Si es CAPEX -> siempre requiere aprobación.
- * - Si es OPEX y (acumulado mensual del área + monto del pedido) > $10,000.00 MXN -> requiere aprobación.
+ * Determina si un pedido supera los límites permitidos o es Capex:
+ * - Si requiere aprobación, el estado inicial al enviarse pasa AUTOMÁTICAMENTE a '2b) En aprobación'.
+ * - Si es Opex dentro del límite (<= $10,000 MXN acumulados en el mes para el área), nace en '1) Solicitud enviada'.
  */
 function ciarm_tus_compras_requires_approval(string $tipo, float $monto, float $currentAreaMonthlyOpex, float $limit = CIARM_TUS_COMPRAS_OPEX_LIMIT): array {
     $tipoNorm = strtoupper(trim($tipo)) === 'CAPEX' ? 'CAPEX' : 'OPEX';
@@ -585,17 +579,20 @@ function ciarm_tus_compras_requires_approval(string $tipo, float $monto, float $
         'opexLimit' => $limit,
         'exceedsOpexLimit' => $exceedsOpexLimit,
         'requiresApproval' => $requires,
+        'initialState' => $requires ? CIARM_TUS_COMPRAS_STATE_EN_APROBACION : CIARM_TUS_COMPRAS_STATE_ENVIADA,
     ];
 }
 
 /**
- * Máquina de estados estricta para "Tus compras".
- * Garantiza que:
- * - Solo 2a) Solicitud recibida / En proceso y 2c) Aprobada / En curso pueden avanzar a 3) Artículos Recibidos en Adm.
- * - Compras Capex o que superan $10,000 MXN mensuales por área no pueden pasar a 2a) sin aprobación.
- * - Solo Ezequiel Conesa (canApprove) puede aprobar (2c) o rechazar (2d) desde 2b).
- * - Solo Daniel Lara (canAdmin) gestiona 2a), 3) y 4).
- * - Solo el Solicitante dueño del pedido evalúa 5) Recepción Conforme / Disconforme desde 4).
+ * Máquina de estados de "Tus compras":
+ * - Los pedidos que superan el límite o son Capex pasan automáticamente a '2b) En aprobación' al crearse.
+ * - Cuando el autorizador (perfil "administración" en AG y AJ) aprueba un ticket en '2b) En aprobación',
+ *   pasa al estado '2a) Solicitud recibida / En proceso' (registrando la aprobación en bitácora).
+ * - Si el autorizador lo rechaza desde '2b) En aprobación', pasa a '2d) Rechazada'.
+ * - Los pedidos Opex dentro del límite nacen en '1) Solicitud enviada' y Administración los pasa a '2a) Solicitud recibida / En proceso'.
+ * - Solo '2a) Solicitud recibida / En proceso' (y '2c) Aprobada / En curso' por compatibilidad) pueden avanzar a '3) Artículos Recibidos en Adm.'.
+ * - De '3)' pasa a '4) Compra Entregada al Solicitante'.
+ * - En '4)', únicamente el Solicitante cierra el ticket como '5) Recepción Conforme' o '5) Recepción Disconforme'.
  */
 function ciarm_tus_compras_validate_transition(array $order, string $event, array $access, string $comment = ''): array {
     $currentState = (string)($order['estado'] ?? '');
@@ -620,35 +617,25 @@ function ciarm_tus_compras_validate_transition(array $order, string $event, arra
             }
             return [
                 'newState' => CIARM_TUS_COMPRAS_STATE_EN_PROCESO,
-                'roleLabel' => 'Administrador de Compras',
-            ];
-
-        case 'SEND_APPROVAL':
-            if (!$canAdmin && !$canApprove) {
-                throw new RuntimeException('FORBIDDEN_ROLE');
-            }
-            if (!in_array($currentState, [CIARM_TUS_COMPRAS_STATE_ENVIADA, CIARM_TUS_COMPRAS_STATE_EN_PROCESO], true)) {
-                throw new RuntimeException('INVALID_TRANSITION');
-            }
-            return [
-                'newState' => CIARM_TUS_COMPRAS_STATE_EN_APROBACION,
-                'roleLabel' => $canAdmin ? 'Administrador de Compras' : 'Aprobador Ejecutivo',
+                'roleLabel' => 'Administración',
             ];
 
         case 'APPROVE_CAPEX':
-            if (!$canApprove) {
+            if (!$canApprove && !$canAdmin) {
                 throw new RuntimeException('FORBIDDEN_ROLE');
             }
             if ($currentState !== CIARM_TUS_COMPRAS_STATE_EN_APROBACION) {
                 throw new RuntimeException('INVALID_TRANSITION');
             }
+            // Cuando el autorizador (perfil "administración") aprueba el ticket en 2b),
+            // este tipo de ticket ahí recién pasa a estado 2a) Solicitud recibida / En proceso.
             return [
-                'newState' => CIARM_TUS_COMPRAS_STATE_APROBADA,
-                'roleLabel' => 'Aprobador Ejecutivo',
+                'newState' => CIARM_TUS_COMPRAS_STATE_EN_PROCESO,
+                'roleLabel' => 'Autorizador (Administración)',
             ];
 
         case 'REJECT_CAPEX':
-            if (!$canApprove) {
+            if (!$canApprove && !$canAdmin) {
                 throw new RuntimeException('FORBIDDEN_ROLE');
             }
             if ($currentState !== CIARM_TUS_COMPRAS_STATE_EN_APROBACION) {
@@ -659,20 +646,19 @@ function ciarm_tus_compras_validate_transition(array $order, string $event, arra
             }
             return [
                 'newState' => CIARM_TUS_COMPRAS_STATE_RECHAZADA,
-                'roleLabel' => 'Aprobador Ejecutivo',
+                'roleLabel' => 'Autorizador (Administración)',
             ];
 
         case 'RECEIVE_ITEMS_ADM':
             if (!$canAdmin) {
                 throw new RuntimeException('FORBIDDEN_ROLE');
             }
-            // Regla estricta: SOLO 2a) y 2c) pueden avanzar al estado 3)
             if (!in_array($currentState, [CIARM_TUS_COMPRAS_STATE_EN_PROCESO, CIARM_TUS_COMPRAS_STATE_APROBADA], true)) {
                 throw new RuntimeException('INVALID_TRANSITION_STATE_3');
             }
             return [
                 'newState' => CIARM_TUS_COMPRAS_STATE_RECIBIDOS_ADM,
-                'roleLabel' => 'Administrador de Compras',
+                'roleLabel' => 'Administración',
             ];
 
         case 'DELIVER_TO_REQUESTER':
@@ -684,7 +670,7 @@ function ciarm_tus_compras_validate_transition(array $order, string $event, arra
             }
             return [
                 'newState' => CIARM_TUS_COMPRAS_STATE_ENTREGADA,
-                'roleLabel' => 'Administrador de Compras',
+                'roleLabel' => 'Administración',
             ];
 
         case 'CONFIRM_CONFORME':
@@ -720,14 +706,26 @@ function ciarm_tus_compras_validate_transition(array $order, string $event, arra
 }
 
 /**
- * Devuelve las acciones permitidas para un pedido según su estado actual y los permisos del actor.
+ * Devuelve las acciones permitidas según la vista ('mine' para Solicitante, 'all' para Administración).
+ * - En la vista 'mine' (Mis Compras): el solicitante NO ve ningún botón de acción salvo cuando
+ *   el ticket está en '4) Compra Entregada al Solicitante', donde ve CONFIRM_CONFORME y CONFIRM_DISCONFORME.
+ * - En la vista 'all' (Gestión y Aprobaciones): el usuario con perfil "administración" ve las acciones
+ *   administrativas/autorizadoras correspondientes a cada etapa.
  */
-function ciarm_tus_compras_allowed_actions(array $order, array $access): array {
+function ciarm_tus_compras_allowed_actions(array $order, array $access, string $viewKind = 'all'): array {
     $state = (string)($order['estado'] ?? '');
     $actorEmail = strtolower(trim((string)($access['correo'] ?? '')));
     $isOwner = ($actorEmail !== '' && strtolower(trim((string)($order['correo'] ?? ''))) === $actorEmail);
     $canAdmin = !empty($access['canAdmin']);
     $canApprove = !empty($access['canApprove']);
+
+    if ($viewKind === 'mine') {
+        if ($state === CIARM_TUS_COMPRAS_STATE_ENTREGADA && $isOwner) {
+            return ['CONFIRM_CONFORME', 'CONFIRM_DISCONFORME'];
+        }
+        return [];
+    }
+
     $requiresApproval = !empty($order['requiereAprobacion'])
         || strtoupper((string)($order['tipo'] ?? '')) === 'CAPEX'
         || ((float)($order['acumuladoMesArea'] ?? 0) > CIARM_TUS_COMPRAS_OPEX_LIMIT);
@@ -737,20 +735,12 @@ function ciarm_tus_compras_allowed_actions(array $order, array $access): array {
         if ($canAdmin && !$requiresApproval) {
             $actions[] = 'RECEIVE_OPEX';
         }
-        if ($canAdmin || $canApprove) {
-            $actions[] = 'SEND_APPROVAL';
-        }
-    } elseif ($state === CIARM_TUS_COMPRAS_STATE_EN_PROCESO) {
-        if ($canAdmin) {
-            $actions[] = 'RECEIVE_ITEMS_ADM';
-            $actions[] = 'SEND_APPROVAL';
-        }
     } elseif ($state === CIARM_TUS_COMPRAS_STATE_EN_APROBACION) {
-        if ($canApprove) {
+        if ($canApprove || $canAdmin) {
             $actions[] = 'APPROVE_CAPEX';
             $actions[] = 'REJECT_CAPEX';
         }
-    } elseif ($state === CIARM_TUS_COMPRAS_STATE_APROBADA) {
+    } elseif ($state === CIARM_TUS_COMPRAS_STATE_EN_PROCESO || $state === CIARM_TUS_COMPRAS_STATE_APROBADA) {
         if ($canAdmin) {
             $actions[] = 'RECEIVE_ITEMS_ADM';
         }
@@ -771,12 +761,6 @@ function ciarm_tus_compras_allowed_actions(array $order, array $access): array {
     return $actions;
 }
 
-/**
- * Construye el plan de notificaciones por correo para cada cambio de estado.
- * Regla: Por cada cambio de estado se envía correo a Daniel Lara (Administrador)
- * y al Solicitante, y en estados de aprobación (2b, 2c, 2d o creación Capex/>10k)
- * también a Ezequiel Conesa.
- */
 function ciarm_tus_compras_build_notification_plan(string $event, array $order, string $comment = ''): array {
     $id = (string)($order['id'] ?? '');
     $estado = (string)($order['estado'] ?? '');
@@ -816,9 +800,11 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
             $enqueue(
                 'solicitante',
                 $correoSolicitante,
-                "[Portal CIARM · Tus Compras] Solicitud enviada {$id} ({$tipo})",
+                "[Portal CIARM · Tus Compras] Solicitud registrada {$id} ({$estado})",
                 'Hemos registrado tu pedido de compra',
-                "Tu pedido de compra {$id} ({$tipo}) por {$montoFmt} ha sido registrado en estado «{$estado}» y enviado a Administración (Daniel Lara).",
+                $requiresApproval
+                    ? "Tu pedido de compra {$id} ({$tipo}) por {$montoFmt} ha sido enviado y pasó automáticamente al estado «{$estado}» por superar el límite mensual permitido (o ser Capex)."
+                    : "Tu pedido de compra {$id} ({$tipo}) por {$montoFmt} ha sido registrado en estado «{$estado}» y enviado a Administración (Daniel Lara).",
                 'Ver mis compras',
                 '#tus-compras'
             );
@@ -827,7 +813,7 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
                 CIARM_TUS_COMPRAS_ADMIN_EMAIL,
                 "[Portal CIARM · Tus Compras] Nuevo pedido {$id} — {$solicitante} ({$area})",
                 'Nuevo pedido de compra registrado',
-                "Se ha registrado el pedido {$id} ({$tipo}) de {$solicitante} ({$area}) por {$montoFmt} (Acumulado mensual del área: {$acumFmt})." . ($requiresApproval ? ' Requiere aprobación ejecutiva antes de iniciar compra.' : ' Disponible para recepción directa Opex.'),
+                "Se ha registrado el pedido {$id} ({$tipo}) de {$solicitante} ({$area}) por {$montoFmt} (Acumulado mensual del área: {$acumFmt}) en estado «{$estado}».",
                 'Gestionar pedidos de compra',
                 '#admin-tus-compras'
             );
@@ -836,10 +822,10 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
                     $enqueue(
                         'aprobador',
                         $approver,
-                        "[Portal CIARM · Tus Compras] Pedido {$id} requiere aprobación ({$tipo} · {$montoFmt})",
-                        'Nuevo pedido sujeto a aprobación ejecutiva',
-                        "El pedido {$id} de {$solicitante} ({$area}) por {$montoFmt} ({$tipo}, acumulado mensual del área: {$acumFmt}) requiere tu autorización.",
-                        'Revisar en Tus Compras',
+                        "[Portal CIARM · Tus Compras] Pedido {$id} en aprobación ({$tipo} · {$montoFmt})",
+                        'Nuevo pedido en estado 2b) En aprobación',
+                        "El pedido {$id} de {$solicitante} ({$area}) por {$montoFmt} ({$tipo}, acumulado mensual del área: {$acumFmt}) pasó automáticamente a «{$estado}» y requiere aprobación.",
+                        'Aprobar o rechazar en Tus Compras',
                         '#admin-tus-compras'
                     );
                 }
@@ -853,7 +839,7 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
                 "[Portal CIARM · Tus Compras] Pedido en proceso {$id} (2a)",
                 'Tu pedido de compra está en proceso',
                 "Administración (Daniel Lara) recibió tu pedido Opex {$id} y cambió su estado a «{$estado}».",
-                'Dar seguimiento a mi compra',
+                'Ver mis compras',
                 '#tus-compras'
             );
             $enqueue(
@@ -861,39 +847,7 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
                 CIARM_TUS_COMPRAS_ADMIN_EMAIL,
                 "[Portal CIARM · Tus Compras] Confirmación: Pedido {$id} en proceso (2a)",
                 'Pedido Opex puesto en proceso',
-                "Has marcado el pedido {$id} de {$solicitante} ({$area}) como «{$estado}».",
-                'Ver panel de compras',
-                '#admin-tus-compras'
-            );
-            break;
-
-        case 'SEND_APPROVAL':
-            foreach (CIARM_TUS_COMPRAS_APPROVER_EMAILS as $approver) {
-                $enqueue(
-                    'aprobador',
-                    $approver,
-                    "[Portal CIARM · Tus Compras] Por aprobar: Pedido {$id} ({$tipo} · {$montoFmt})",
-                    'Pedido de compra pendiente de tu aprobación (2b)',
-                    "El pedido {$id} de {$solicitante} ({$area}) por {$montoFmt} ({$tipo}, acumulado mensual del área: {$acumFmt}) se encuentra en estado «{$estado}». Ingresa al portal para Aprobar (2c) o Rechazar (2d).",
-                    'Aprobar o rechazar pedido',
-                    '#admin-tus-compras'
-                );
-            }
-            $enqueue(
-                'solicitante',
-                $correoSolicitante,
-                "[Portal CIARM · Tus Compras] Pedido {$id} en aprobación ejecutiva (2b)",
-                'Tu pedido se encuentra en aprobación',
-                "Tu pedido {$id} ({$tipo} por {$montoFmt}) pasó al estado «{$estado}» para autorización de Dirección.",
-                'Ver estado de mi compra',
-                '#tus-compras'
-            );
-            $enqueue(
-                'admin',
-                CIARM_TUS_COMPRAS_ADMIN_EMAIL,
-                "[Portal CIARM · Tus Compras] Pedido {$id} enviado a aprobación (2b)",
-                'Pedido turnado a aprobación ejecutiva',
-                "El pedido {$id} de {$solicitante} ({$area}) se encuentra en estado «{$estado}» en espera de decisión de Ezequiel Conesa.",
+                "El pedido {$id} de {$solicitante} ({$area}) pasó al estado «{$estado}».",
                 'Ver panel de compras',
                 '#admin-tus-compras'
             );
@@ -903,28 +857,28 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
             $enqueue(
                 'admin',
                 CIARM_TUS_COMPRAS_ADMIN_EMAIL,
-                "[Portal CIARM · Tus Compras] Pedido APROBADO {$id} (2c) — Proceder a compra",
-                'Pedido aprobado para adquisición (2c)',
-                "Ezequiel Conesa aprobó el pedido {$id} ({$tipo} por {$montoFmt}) de {$solicitante} ({$area}). Ya puedes continuar con la compra y registrar cuando los artículos sean recibidos en Administración (Estado 3).",
+                "[Portal CIARM · Tus Compras] Pedido APROBADO {$id} — Pasa a 2a) Solicitud recibida / En proceso",
+                'Pedido aprobado y puesto en estado 2a)',
+                "El pedido {$id} ({$tipo} por {$montoFmt}) de {$solicitante} ({$area}) fue aprobado y pasó al estado «{$estado}». Ya puedes continuar con la compra y avanzar a Estado 3 cuando lleguen los artículos.",
                 'Continuar compra en panel',
                 '#admin-tus-compras'
             );
             $enqueue(
                 'solicitante',
                 $correoSolicitante,
-                "[Portal CIARM · Tus Compras] Pedido aprobado {$id} (2c — En curso)",
-                'Tu pedido de compra ha sido aprobado',
-                "Tu pedido {$id} ({$tipo} por {$montoFmt}) fue aprobado y pasó al estado «{$estado}». Administración procederá con la adquisición.",
-                'Ver seguimiento',
+                "[Portal CIARM · Tus Compras] Pedido aprobado {$id} — En proceso (2a)",
+                'Tu pedido de compra ha sido aprobado y está en proceso',
+                "Tu pedido {$id} ({$tipo} por {$montoFmt}) fue aprobado y pasó al estado «{$estado}».",
+                'Ver mis compras',
                 '#tus-compras'
             );
             foreach (CIARM_TUS_COMPRAS_APPROVER_EMAILS as $approver) {
                 $enqueue(
                     'aprobador',
                     $approver,
-                    "[Portal CIARM · Tus Compras] Confirmación de aprobación {$id} (2c)",
+                    "[Portal CIARM · Tus Compras] Confirmación de aprobación {$id}",
                     'Aprobación registrada correctamente',
-                    "Se registró tu aprobación para el pedido {$id} de {$solicitante} ({$area}), quedando en estado «{$estado}».",
+                    "Se aprobó el pedido {$id} de {$solicitante} ({$area}), pasando a estado «{$estado}».",
                     'Ver panel de compras',
                     '#admin-tus-compras'
                 );
@@ -938,7 +892,7 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
                 "[Portal CIARM · Tus Compras] Pedido rechazado {$id} (2d)",
                 'Tu pedido de compra no fue autorizado',
                 "El pedido {$id} ({$tipo} por {$montoFmt}) cambió al estado «{$estado}».",
-                'Ver motivo en el portal',
+                'Ver detalle en el portal',
                 '#tus-compras'
             );
             $enqueue(
@@ -946,21 +900,10 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
                 CIARM_TUS_COMPRAS_ADMIN_EMAIL,
                 "[Portal CIARM · Tus Compras] Pedido rechazado {$id} (2d)",
                 'Pedido rechazado en etapa de aprobación',
-                "El pedido {$id} de {$solicitante} ({$area}) fue marcado como «{$estado}» por Dirección.",
+                "El pedido {$id} de {$solicitante} ({$area}) fue marcado como «{$estado}».",
                 'Ver panel de compras',
                 '#admin-tus-compras'
             );
-            foreach (CIARM_TUS_COMPRAS_APPROVER_EMAILS as $approver) {
-                $enqueue(
-                    'aprobador',
-                    $approver,
-                    "[Portal CIARM · Tus Compras] Confirmación de rechazo {$id} (2d)",
-                    'Rechazo registrado en bitácora',
-                    "Se registró el rechazo del pedido {$id} de {$solicitante} ({$area}).",
-                    'Ver panel de compras',
-                    '#admin-tus-compras'
-                );
-            }
             break;
 
         case 'RECEIVE_ITEMS_ADM':
@@ -969,8 +912,8 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
                 $correoSolicitante,
                 "[Portal CIARM · Tus Compras] Artículos recibidos en Administración {$id} (Estado 3)",
                 'Tus artículos ya llegaron a Administración',
-                "Daniel Lara registró que los artículos de tu pedido {$id} ya fueron recibidos en Administración («{$estado}») y están listos para su entrega.",
-                'Ver mi compra',
+                "Administración registró que los artículos de tu pedido {$id} fueron recibidos («{$estado}») y están listos para su entrega.",
+                'Ver mis compras',
                 '#tus-compras'
             );
             $enqueue(
@@ -978,7 +921,7 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
                 CIARM_TUS_COMPRAS_ADMIN_EMAIL,
                 "[Portal CIARM · Tus Compras] Recepción en Adm. registrada {$id} (Estado 3)",
                 'Artículos recibidos en Administración',
-                "Se registró el ingreso en Administración del pedido {$id} de {$solicitante} ({$area}). El siguiente paso es registrar la entrega al solicitante (Estado 4).",
+                "Se registró el ingreso en Administración del pedido {$id} de {$solicitante} ({$area}).",
                 'Gestionar entrega',
                 '#admin-tus-compras'
             );
@@ -988,10 +931,10 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
             $enqueue(
                 'solicitante',
                 $correoSolicitante,
-                "[Portal CIARM · Tus Compras] Compra entregada {$id} — Confirma tu recepción (Estado 4)",
+                "[Portal CIARM · Tus Compras] Compra entregada {$id} — Evalúa tu recepción (Estado 4)",
                 'Tu compra ha sido entregada — Pendiente de tu evaluación',
-                "Daniel Lara registró la entrega de tu pedido {$id} («{$estado}»). Por favor ingresa a «Tus compras» para confirmar Recepción Conforme o Disconforme (Estado 5).",
-                'Evaluar Recepción (Conforme / Disconforme)',
+                "Administración registró la entrega de tu pedido {$id} («{$estado}»). Ingresa a «Tus compras» para cerrar el pedido como Recepción Conforme o Recepción Disconforme.",
+                'Evaluar Recepción',
                 '#tus-compras'
             );
             $enqueue(
@@ -999,7 +942,7 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
                 CIARM_TUS_COMPRAS_ADMIN_EMAIL,
                 "[Portal CIARM · Tus Compras] Entrega registrada {$id} (Estado 4)",
                 'Compra entregada al solicitante',
-                "Registraste la entrega del pedido {$id} a {$solicitante} ({$area}). Queda pendiente la evaluación de recepción por parte del solicitante.",
+                "Registraste la entrega del pedido {$id} a {$solicitante} ({$area}). Queda pendiente la evaluación del solicitante.",
                 'Ver panel de compras',
                 '#admin-tus-compras'
             );
@@ -1011,16 +954,16 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
                 CIARM_TUS_COMPRAS_ADMIN_EMAIL,
                 "[Portal CIARM · Tus Compras] Recepción CONFORME {$id} (Estado 5)",
                 'El solicitante confirmó Recepción Conforme',
-                "El solicitante {$solicitante} ({$area}) evaluó la entrega del pedido {$id} como «{$estado}», concluyendo satisfactoriamente el pedido.",
-                'Ver historial de compras',
+                "El solicitante {$solicitante} ({$area}) cerró el pedido {$id} como «{$estado}».",
+                'Ver panel de compras',
                 '#admin-tus-compras'
             );
             $enqueue(
                 'solicitante',
                 $correoSolicitante,
-                "[Portal CIARM · Tus Compras] Pedido concluido con conformidad {$id} (Estado 5)",
+                "[Portal CIARM · Tus Compras] Pedido cerrado con conformidad {$id} (Estado 5)",
                 'Recepción Conforme registrada',
-                "Se ha registrado tu evaluación de «{$estado}» para el pedido {$id}. ¡Gracias!",
+                "Se ha registrado tu cierre de «{$estado}» para el pedido {$id}.",
                 'Ver mis compras',
                 '#tus-compras'
             );
@@ -1032,8 +975,8 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
                 CIARM_TUS_COMPRAS_ADMIN_EMAIL,
                 "[Portal CIARM · Tus Compras] ALERTA: Recepción DISCONFORME en pedido {$id} (Estado 5)",
                 'El solicitante reportó Recepción Disconforme',
-                "El solicitante {$solicitante} ({$area}) reportó «{$estado}» en el pedido {$id}. Revisa las observaciones registradas para dar seguimiento.",
-                'Atender incidencia en compras',
+                "El solicitante {$solicitante} ({$area}) cerró el pedido {$id} como «{$estado}». Revisa las observaciones registradas.",
+                'Atender en panel de compras',
                 '#admin-tus-compras'
             );
             $enqueue(
@@ -1041,8 +984,8 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
                 $correoSolicitante,
                 "[Portal CIARM · Tus Compras] Recepción Disconforme registrada {$id} (Estado 5)",
                 'Se registró tu reporte de disconformidad',
-                "Hemos registrado tu evaluación de «{$estado}» en el pedido {$id} y notificado a Administración (Daniel Lara) con tus observaciones.",
-                'Ver mi pedido',
+                "Hemos registrado tu cierre como «{$estado}» en el pedido {$id} y notificado a Administración.",
+                'Ver mis compras',
                 '#tus-compras'
             );
             break;
@@ -1069,7 +1012,7 @@ function ciarm_tus_compras_render_email(array $msg, array $order): string {
         $rows[] = ['Justificación / Referencia', $order['justificacion']];
     }
     if (!empty($order['aprobador'])) {
-        $rows[] = ['Aprobador Ejecutivo', $order['aprobador']];
+        $rows[] = ['Aprobación', $order['aprobador']];
     }
     if (!empty($msg['comment'])) {
         $rows[] = ['Observaciones / Comentario', $msg['comment']];

@@ -40,11 +40,12 @@ export function evaluateOrderApprovalRequirement(tipo, monto, currentAreaMonthly
     projectedAreaMonthlyOpex: projectedAreaOpex,
     opexLimit: limit,
     exceedsOpexLimit,
-    requiresApproval
+    requiresApproval,
+    initialState: requiresApproval ? TUS_COMPRAS_STATES.EN_APROBACION : TUS_COMPRAS_STATES.ENVIADA
   };
 }
 
-export function computeAllowedActions(order, access) {
+export function computeAllowedActions(order, access, viewKind = 'all') {
   if (!order || !access) return [];
   const state = String(order.estado || '');
   const actorEmail = String(access.correo || '').trim().toLowerCase();
@@ -55,17 +56,23 @@ export function computeAllowedActions(order, access) {
     || String(order.tipo || '').toUpperCase() === 'CAPEX'
     || Number(order.acumuladoMesArea || 0) > TUS_COMPRAS_OPEX_LIMIT;
 
+  // En vista del solicitante ("Mis Compras"), solo es informativo y únicamente habilita el cierre cuando está en estado 4)
+  if (viewKind === 'mine') {
+    if (state === TUS_COMPRAS_STATES.ENTREGADA && isOwner) {
+      return ['CONFIRM_CONFORME', 'CONFIRM_DISCONFORME'];
+    }
+    return [];
+  }
+
   const actions = [];
   if (state === TUS_COMPRAS_STATES.ENVIADA) {
     if (canAdmin && !requiresApproval) actions.push('RECEIVE_OPEX');
-    if (canAdmin || canApprove) actions.push('SEND_APPROVAL');
   } else if (state === TUS_COMPRAS_STATES.EN_PROCESO) {
     if (canAdmin) {
       actions.push('RECEIVE_ITEMS_ADM');
-      actions.push('SEND_APPROVAL');
     }
   } else if (state === TUS_COMPRAS_STATES.EN_APROBACION) {
-    if (canApprove) {
+    if (canApprove || canAdmin) {
       actions.push('APPROVE_CAPEX');
       actions.push('REJECT_CAPEX');
     }

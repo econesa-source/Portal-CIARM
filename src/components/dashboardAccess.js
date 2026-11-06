@@ -28,13 +28,14 @@ export function applyDashboardAccess(container, response) {
       if (tc && tc.canCreate === false) {
         element.querySelector('a[href="#tus-compras-nuevo"]')?.remove();
       }
-      if ((tc?.canAdmin === true || tc?.canApprove === true) && !element.querySelector('a[href="#admin-tus-compras"]')) {
+      const isAdministracion = tc?.isAdministracion === true || (tc?.isDocenteDirector !== true && (tc?.canAdmin === true || tc?.canApprove === true));
+      if (isAdministracion && !element.querySelector('a[href="#admin-tus-compras"]')) {
         const hdr = element.querySelector('.tus-compras-card-header');
         if (hdr) {
           const admLink = document.createElement('a');
           admLink.href = '#admin-tus-compras';
           admLink.className = 'exact-btn dark';
-          admLink.textContent = tc?.canApprove && !tc?.canAdmin ? 'Aprobar Capex' : 'Administrar';
+          admLink.textContent = 'Administrar';
           hdr.append(admLink);
         }
       }

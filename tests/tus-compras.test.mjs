@@ -18,30 +18,33 @@ test('Tope mensual Opex de $10,000 MXN por área solicitante y clasificación Ca
   assert.equal(opexOk.projectedAreaMonthlyOpex, 9500);
   assert.equal(opexOk.exceedsOpexLimit, false);
   assert.equal(opexOk.requiresApproval, false);
+  assert.equal(opexOk.initialState, TUS_COMPRAS_STATES.ENVIADA);
 
   // Opex exactamente en el límite de $10,000 MXN
   const opexExact = evaluateOrderApprovalRequirement('OPEX', 6000, 4000);
   assert.equal(opexExact.projectedAreaMonthlyOpex, 10000);
   assert.equal(opexExact.requiresApproval, false);
+  assert.equal(opexExact.initialState, TUS_COMPRAS_STATES.ENVIADA);
 
-  // Opex que supera los $10,000 MXN mensuales acumulados del área (ej. 6,000 previos + 4,001 nuevos = 10,001 > 10,000)
+  // Opex que supera los $10,000 MXN mensuales acumulados del área: pasa automáticamente a 2b) En aprobación
   const opexExceeds = evaluateOrderApprovalRequirement('OPEX', 4001, 6000);
   assert.equal(opexExceeds.projectedAreaMonthlyOpex, 10001);
   assert.equal(opexExceeds.exceedsOpexLimit, true);
   assert.equal(opexExceeds.requiresApproval, true);
+  assert.equal(opexExceeds.initialState, TUS_COMPRAS_STATES.EN_APROBACION);
 
-  // Capex siempre requiere aprobación de Ezequiel Conesa aunque sea menor a $10,000 MXN
+  // Capex pasa automáticamente a 2b) En aprobación aunque sea menor a $10,000 MXN
   const capexSmall = evaluateOrderApprovalRequirement('CAPEX', 1500, 0);
   assert.equal(capexSmall.tipo, 'CAPEX');
   assert.equal(capexSmall.requiresApproval, true);
+  assert.equal(capexSmall.initialState, TUS_COMPRAS_STATES.EN_APROBACION);
 });
 
-test('Máquina de estados: solo 2a) y 2c) pueden avanzar al estado 3) Artículos Recibidos en Adm.', () => {
-  const danielAdmin = { correo: 'd.lara@ciarm.edu.mx', canAdmin: true, canApprove: false };
-  const ezequielApprover = { correo: 'e.conesa@ciarm.edu.mx', canAdmin: false, canApprove: true };
-  const directorDocente = { correo: 'director.docente@ciarm.edu.mx', canAdmin: false, canApprove: false };
+test('Máquina de estados: vista solicitante informativa y flujo de aprobación hacia 2a)', () => {
+  const adminAutorizador = { correo: 'd.lara@ciarm.edu.mx', isAdministracion: true, canAdmin: true, canApprove: true };
+  const directorDocente = { correo: 'director.docente@ciarm.edu.mx', isDocenteDirector: true, isAdministracion: false, canAdmin: false, canApprove: false };
 
-  // Estado 1) Solicitud enviada (Opex <= 10,000): Daniel puede recibir en 2a) o enviar a 2b), pero NO pasar a 3)
+  // Estado 1) Solicitud enviada (Opex <= 10,000): Administración recibe en 2a); el solicitante en Mis Compras ('mine') no ve botones de acción
   const order1Opex = {
     id: 'CMP-2026-00001',
     correo: 'director.docente@ciarm.edu.mx',
@@ -51,43 +54,39 @@ test('Máquina de estados: solo 2a) y 2c) pueden avanzar al estado 3) Artículos
     requiereAprobacion: false,
     estado: TUS_COMPRAS_STATES.ENVIADA
   };
-  assert.deepEqual(computeAllowedActions(order1Opex, danielAdmin), ['RECEIVE_OPEX', 'SEND_APPROVAL']);
-  assert.ok(!computeAllowedActions(order1Opex, danielAdmin).includes('RECEIVE_ITEMS_ADM'));
+  assert.deepEqual(computeAllowedActions(order1Opex, adminAutorizador, 'all'), ['RECEIVE_OPEX']);
+  assert.deepEqual(computeAllowedActions(order1Opex, directorDocente, 'mine'), []);
+  assert.ok(!computeAllowedActions(order1Opex, adminAutorizador, 'all').includes('RECEIVE_ITEMS_ADM'));
 
-  // Estado 1) Solicitud enviada (Capex o > 10,000): NO permite pasar a 2a), solo a 2b) En aprobación
-  const order1Capex = {
+  // Estado 2b) En aprobación (entra automáticamente al crearse si supera $10,000 o es Capex):
+  // Administración / Autorizador puede Aprobar (pasa a 2a) o Rechazar (2d); solicitante en 'mine' no ve botones de acción
+  const order2b = {
     ...order1Opex,
     tipo: 'CAPEX',
-    requiereAprobacion: true
+    requiereAprobacion: true,
+    estado: TUS_COMPRAS_STATES.EN_APROBACION
   };
-  assert.deepEqual(computeAllowedActions(order1Capex, danielAdmin), ['SEND_APPROVAL']);
+  assert.deepEqual(computeAllowedActions(order2b, adminAutorizador, 'all'), ['APPROVE_CAPEX', 'REJECT_CAPEX']);
+  assert.deepEqual(computeAllowedActions(order2b, directorDocente, 'mine'), []);
 
-  // Estado 2a) Solicitud recibida / En proceso: Daniel PUEDE avanzar a 3) Artículos Recibidos en Adm.
+  // Estado 2a) Solicitud recibida / En proceso: Administración avanza a 3) Artículos Recibidos en Adm.
   const order2a = { ...order1Opex, estado: TUS_COMPRAS_STATES.EN_PROCESO };
-  assert.ok(computeAllowedActions(order2a, danielAdmin).includes('RECEIVE_ITEMS_ADM'));
-
-  // Estado 2b) En aprobación: Daniel NO puede avanzar a 3); solo Ezequiel puede Aprobar (2c) o Rechazar (2d)
-  const order2b = { ...order1Capex, estado: TUS_COMPRAS_STATES.EN_APROBACION };
-  assert.deepEqual(computeAllowedActions(order2b, danielAdmin), []);
-  assert.deepEqual(computeAllowedActions(order2b, ezequielApprover), ['APPROVE_CAPEX', 'REJECT_CAPEX']);
-
-  // Estado 2c) Aprobada / En curso: Daniel PUEDE avanzar a 3) Artículos Recibidos en Adm.
-  const order2c = { ...order1Capex, estado: TUS_COMPRAS_STATES.APROBADA };
-  assert.deepEqual(computeAllowedActions(order2c, danielAdmin), ['RECEIVE_ITEMS_ADM']);
+  assert.deepEqual(computeAllowedActions(order2a, adminAutorizador, 'all'), ['RECEIVE_ITEMS_ADM']);
+  assert.deepEqual(computeAllowedActions(order2a, directorDocente, 'mine'), []);
 
   // Estado 2d) Rechazada: Estado terminal, NO puede avanzar a 3)
-  const order2d = { ...order1Capex, estado: TUS_COMPRAS_STATES.RECHAZADA };
-  assert.deepEqual(computeAllowedActions(order2d, danielAdmin), []);
-  assert.deepEqual(computeAllowedActions(order2d, ezequielApprover), []);
+  const order2d = { ...order2b, estado: TUS_COMPRAS_STATES.RECHAZADA };
+  assert.deepEqual(computeAllowedActions(order2d, adminAutorizador, 'all'), []);
 
-  // Estado 3) Artículos Recibidos en Adm.: Daniel avanza a 4) Compra Entregada al Solicitante
+  // Estado 3) Artículos Recibidos en Adm.: Administración avanza a 4) Compra Entregada al Solicitante
   const order3 = { ...order1Opex, estado: TUS_COMPRAS_STATES.RECIBIDOS_ADM };
-  assert.deepEqual(computeAllowedActions(order3, danielAdmin), ['DELIVER_TO_REQUESTER']);
+  assert.deepEqual(computeAllowedActions(order3, adminAutorizador, 'all'), ['DELIVER_TO_REQUESTER']);
+  assert.deepEqual(computeAllowedActions(order3, directorDocente, 'mine'), []);
 
-  // Estado 4) Compra Entregada al Solicitante: Solo el Solicitante evalúa 5) Recepción Conforme / Disconforme
+  // Estado 4) Compra Entregada al Solicitante: El Solicitante en Mis Compras ('mine') SÍ ve los botones de cierre Recepción Conforme / Disconforme
   const order4 = { ...order1Opex, estado: TUS_COMPRAS_STATES.ENTREGADA };
-  assert.deepEqual(computeAllowedActions(order4, danielAdmin), []);
-  assert.deepEqual(computeAllowedActions(order4, directorDocente), ['CONFIRM_CONFORME', 'CONFIRM_DISCONFORME']);
+  assert.deepEqual(computeAllowedActions(order4, adminAutorizador, 'all'), []);
+  assert.deepEqual(computeAllowedActions(order4, directorDocente, 'mine'), ['CONFIRM_CONFORME', 'CONFIRM_DISCONFORME']);
 });
 
 test('Visibilidad y rutas de Tus compras gobernadas por perfil DM03 (AG=docente, AJ=director)', () => {

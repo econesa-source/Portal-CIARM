@@ -6,6 +6,8 @@ import {
   TUS_COMPRAS_OPEX_LIMIT,
   canSeeTusCompras,
   evaluateOrderApprovalRequirement,
+  resolveEffectiveOrderState,
+  normalizeOrdersStates,
   computeAllowedActions
 } from '../src/services/tusComprasService.js';
 import { allowedRoute } from '../src/components/dashboardAccess.js';
@@ -38,6 +40,22 @@ test('Tope mensual Opex de $10,000 MXN por área solicitante y clasificación Ca
   assert.equal(capexSmall.tipo, 'CAPEX');
   assert.equal(capexSmall.requiresApproval, true);
   assert.equal(capexSmall.initialState, TUS_COMPRAS_STATES.EN_APROBACION);
+
+  // Verificar caso exacto de tickets 1, 2 y 3 (normalización de estado si en la hoja estaban en '1) Solicitud enviada')
+  const sampleOrders = [
+    { id: 'CMP-2026-00003', fecha: '2026-11-05', area: 'Docente', tipo: 'CAPEX', monto: 350000, estado: '1) Solicitud enviada' },
+    { id: 'CMP-2026-00002', fecha: '2026-11-05', area: 'Docente', tipo: 'OPEX', monto: 20000, estado: '1) Solicitud enviada' },
+    { id: 'CMP-2026-00001', fecha: '2026-11-05', area: 'Docente', tipo: 'OPEX', monto: 3000, estado: '1) Solicitud enviada' }
+  ];
+  normalizeOrdersStates(sampleOrders);
+  const t1 = sampleOrders.find(x => x.id === 'CMP-2026-00001');
+  const t2 = sampleOrders.find(x => x.id === 'CMP-2026-00002');
+  const t3 = sampleOrders.find(x => x.id === 'CMP-2026-00003');
+  assert.equal(t1.estado, TUS_COMPRAS_STATES.ENVIADA);
+  assert.equal(t2.estado, TUS_COMPRAS_STATES.EN_APROBACION);
+  assert.equal(t3.estado, TUS_COMPRAS_STATES.EN_APROBACION);
+  assert.equal(resolveEffectiveOrderState(t2), TUS_COMPRAS_STATES.EN_APROBACION);
+  assert.equal(resolveEffectiveOrderState(t3), TUS_COMPRAS_STATES.EN_APROBACION);
 });
 
 test('Máquina de estados: vista solicitante informativa y flujo de aprobación hacia 2a)', () => {

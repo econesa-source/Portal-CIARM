@@ -121,4 +121,16 @@ $order2a['estado'] = CIARM_TUS_COMPRAS_STATE_EN_PROCESO;
 $toState3 = ciarm_tus_compras_validate_transition($order2a, 'RECEIVE_ITEMS_ADM', $accDaniel);
 assert_true($toState3['newState'] === CIARM_TUS_COMPRAS_STATE_RECIBIDOS_ADM, '2a can advance to state 3');
 
+// 4. Verificar regla estricta de asignación de estado al parsear filas de PEDIDOS (tickets 1, 2 y 3)
+$rawPedidosRows = [
+    CIARM_TUS_COMPRAS_PEDIDOS_HEADERS,
+    ['CMP-2026-00001', '2026-11-05', '10:00:00', 'Dir', 'm.gomez@ciarm.edu.mx', 'Docente', 'OPEX', '3000.00', '3000.00', 'NO', 'una regla 2 plumones y mas cosas', '', '1) Solicitud enviada', 'Daniel Lara', '', '', '', '', '', '', '', '', '2026-11-05 10:00:00', 'v1'],
+    ['CMP-2026-00002', '2026-11-05', '10:05:00', 'Dir', 'm.gomez@ciarm.edu.mx', 'Docente', 'OPEX', '20000.00', '23000.00', 'NO', 'un kilo dfe plomo de prueba', '', '1) Solicitud enviada', 'Daniel Lara', '', '', '', '', '', '', '', '', '2026-11-05 10:05:00', 'v1'],
+    ['CMP-2026-00003', '2026-11-05', '10:10:00', 'Dir', 'm.gomez@ciarm.edu.mx', 'Docente', 'CAPEX', '350000.00', '23000.00', 'NO', 'otra prueba esto es capex', '', '1) Solicitud enviada', 'Daniel Lara', '', '', '', '', '', '', '', '', '2026-11-05 10:10:00', 'v1'],
+];
+$parsedPedidos = ciarm_tus_compras_parse_pedidos($rawPedidosRows);
+assert_true($parsedPedidos[0]['estado'] === CIARM_TUS_COMPRAS_STATE_ENVIADA, 'Ticket 1 (OPEX $3,000) stays in 1) Solicitud enviada');
+assert_true($parsedPedidos[1]['estado'] === CIARM_TUS_COMPRAS_STATE_EN_APROBACION, 'Ticket 2 (OPEX $20,000 > $10,000) must be 2b) En aprobación');
+assert_true($parsedPedidos[2]['estado'] === CIARM_TUS_COMPRAS_STATE_EN_APROBACION, 'Ticket 3 (CAPEX $350,000) must be 2b) En aprobación');
+
 echo "Tus Compras PHP tests: all passed\n";

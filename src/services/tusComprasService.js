@@ -45,9 +45,57 @@ export function evaluateOrderApprovalRequirement(tipo, monto, currentAreaMonthly
   };
 }
 
+export function resolveEffectiveOrderState(order, limit = TUS_COMPRAS_OPEX_LIMIT) {
+  if (!order) return TUS_COMPRAS_STATES.ENVIADA;
+  const rawState = String(order.estado || '').trim();
+  const isCapex = String(order.tipo || '').trim().toUpperCase() === 'CAPEX';
+  const monto = Number(order.monto) || 0;
+  const acum = Number(order.acumuladoMesArea) || 0;
+  const requiresApproval = Boolean(order.requiereAprobacion)
+    || isCapex
+    || (!isCapex && (monto > limit || acum > limit));
+
+  if (requiresApproval && (rawState === '' || rawState === TUS_COMPRAS_STATES.ENVIADA)) {
+    return TUS_COMPRAS_STATES.EN_APROBACION;
+  }
+  return rawState || TUS_COMPRAS_STATES.ENVIADA;
+}
+
+export function normalizeOrdersStates(orders, limit = TUS_COMPRAS_OPEX_LIMIT) {
+  if (!Array.isArray(orders)) return [];
+  const chronological = [...orders].sort((a, b) => String(a?.id || '').localeCompare(String(b?.id || '')));
+  const runningByAreaMonth = new Map();
+
+  for (const item of chronological) {
+    if (!item || typeof item !== 'object') continue;
+    const isCapex = String(item.tipo || '').trim().toUpperCase() === 'CAPEX';
+    const monto = Number(item.monto) || 0;
+    const rawState = String(item.estado || '').trim();
+    const areaKey = String(item.area || 'docente').trim().toLowerCase();
+    const ymKey = String(item.fecha || '').trim().slice(0, 7);
+    const bucket = `${areaKey}|${ymKey}`;
+
+    if (!isCapex && rawState !== TUS_COMPRAS_STATES.RECHAZADA) {
+      const nextSum = Math.round(((runningByAreaMonth.get(bucket) || 0) + monto) * 100) / 100;
+      runningByAreaMonth.set(bucket, nextSum);
+    }
+    const runningOpex = runningByAreaMonth.get(bucket) || 0;
+    const acum = !isCapex
+      ? Math.max(Number(item.acumuladoMesArea) || 0, runningOpex, monto)
+      : Math.max(Number(item.acumuladoMesArea) || 0, runningOpex);
+
+    item.acumuladoMesArea = acum;
+    if (isCapex || (!isCapex && (monto > limit || acum > limit))) {
+      item.requiereAprobacion = true;
+    }
+    item.estado = resolveEffectiveOrderState(item, limit);
+  }
+  return orders;
+}
+
 export function computeAllowedActions(order, access, viewKind = 'all') {
   if (!order || !access) return [];
-  const state = String(order.estado || '');
+  const state = resolveEffectiveOrderState(order);
   const actorEmail = String(access.correo || '').trim().toLowerCase();
   const isOwner = Boolean(actorEmail) && String(order.correo || '').trim().toLowerCase() === actorEmail;
   const canAdmin = Boolean(access.canAdmin);

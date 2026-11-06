@@ -456,6 +456,17 @@ function ciarm_tus_compras_fetch_all(?string $spreadsheetId = null): array {
     ];
 }
 
+function ciarm_tus_compras_extract_year_month(string $fecha): string {
+    $clean = trim($fecha);
+    if (preg_match('/^(\d{4})-(\d{2})/', $clean, $m)) {
+        return $m[1] . '-' . $m[2];
+    }
+    if (preg_match('/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/', $clean, $m)) {
+        return $m[3] . '-' . str_pad($m[2], 2, '0', STR_PAD_LEFT);
+    }
+    return substr($clean, 0, 7);
+}
+
 function ciarm_tus_compras_parse_pedidos(array $rows): array {
     if (count($rows) < 2) return [];
     $headers = array_map(static fn($h) => trim((string)$h), $rows[0]);
@@ -467,6 +478,7 @@ function ciarm_tus_compras_parse_pedidos(array $rows): array {
         return preg_replace('/^\x{200B}(?=[=+@\x27-])/u', '', $val) ?? $val;
     };
 
+    $runningOpexByAreaMonth = [];
     $list = [];
     for ($i = 1; $i < count($rows); $i++) {
         $row = $rows[$i];
@@ -474,25 +486,63 @@ function ciarm_tus_compras_parse_pedidos(array $rows): array {
         if ($id === '' || !preg_match('/^CMP-\d{4}-\d+$/', $id)) {
             continue;
         }
+        $fecha = $get($row, 'FECHA SOLICITUD');
+        $area = $get($row, 'ÁREA SOLICITANTE');
+        $tipo = strtoupper($get($row, 'TIPO COMPRA')) === 'CAPEX' ? 'CAPEX' : 'OPEX';
         $montoRaw = str_replace([',', '$', ' '], '', $get($row, 'MONTO ESTIMADO'));
         $acumRaw = str_replace([',', '$', ' '], '', $get($row, 'ACUMULADO MES ÁREA'));
+        $monto = round((float)$montoRaw, 2);
+        $storedAcum = round((float)$acumRaw, 2);
+        $rawEstado = $get($row, 'ESTADO');
+
+        $normArea = ciarm_tus_compras_normalize_token($area !== '' ? $area : 'docente');
+        $ym = ciarm_tus_compras_extract_year_month($fecha);
+        $bucketKey = $normArea . '|' . $ym;
+
+        if ($tipo === 'OPEX' && $rawEstado !== CIARM_TUS_COMPRAS_STATE_RECHAZADA) {
+            $runningOpexByAreaMonth[$bucketKey] = round(($runningOpexByAreaMonth[$bucketKey] ?? 0.0) + $monto, 2);
+        }
+        $runningAreaOpex = $runningOpexByAreaMonth[$bucketKey] ?? 0.0;
+        $acumuladoMesArea = $tipo === 'OPEX' ? max($storedAcum, $runningAreaOpex, $monto) : max($storedAcum, $runningAreaOpex);
+
+        $reqNorm = ciarm_tus_compras_normalize_token($get($row, 'REQUIERE APROBACIÓN'));
+        $requiresApproval = ($tipo === 'CAPEX')
+            || ($tipo === 'OPEX' && $monto > CIARM_TUS_COMPRAS_OPEX_LIMIT)
+            || ($tipo === 'OPEX' && $acumuladoMesArea > CIARM_TUS_COMPRAS_OPEX_LIMIT)
+            || ($reqNorm === 'si');
+
+        // Regla estricta de asignación de estado:
+        // Si es CAPEX o si siendo OPEX excede el límite mensual de $10,000 MXN del área,
+        // NUNCA debe quedar en "1) Solicitud enviada", sino en "2b) En aprobación".
+        $estado = $rawEstado !== '' ? $rawEstado : CIARM_TUS_COMPRAS_STATE_ENVIADA;
+        $needsStateSync = false;
+        if ($requiresApproval && ($estado === CIARM_TUS_COMPRAS_STATE_ENVIADA || $rawEstado === '')) {
+            $estado = CIARM_TUS_COMPRAS_STATE_EN_APROBACION;
+            $needsStateSync = true;
+        }
+
+        $aprobador = $get($row, 'APROBADOR');
+        if ($requiresApproval && ($aprobador === '' || str_starts_with($aprobador, 'No requiere'))) {
+            $aprobador = 'En aprobación (Administración)';
+        }
+
         $list[] = [
             'rowNumber' => $i + 1,
             'id' => $id,
-            'fecha' => $get($row, 'FECHA SOLICITUD'),
+            'fecha' => $fecha,
             'hora' => $get($row, 'HORA SOLICITUD'),
             'solicitante' => $get($row, 'SOLICITANTE'),
             'correo' => strtolower($get($row, 'CORREO SOLICITANTE')),
-            'area' => $get($row, 'ÁREA SOLICITANTE'),
-            'tipo' => strtoupper($get($row, 'TIPO COMPRA')) === 'CAPEX' ? 'CAPEX' : 'OPEX',
-            'monto' => round((float)$montoRaw, 2),
-            'acumuladoMesArea' => round((float)$acumRaw, 2),
-            'requiereAprobacion' => strtoupper($get($row, 'REQUIERE APROBACIÓN')) === 'SÍ',
+            'area' => $area,
+            'tipo' => $tipo,
+            'monto' => $monto,
+            'acumuladoMesArea' => $acumuladoMesArea,
+            'requiereAprobacion' => $requiresApproval,
             'descripcion' => $get($row, 'ARTÍCULOS / DESCRIPCIÓN'),
             'justificacion' => $get($row, 'JUSTIFICACIÓN / PROVEEDOR'),
-            'estado' => $get($row, 'ESTADO'),
+            'estado' => $estado,
             'responsableAdm' => $get($row, 'RESPONSABLE ADM') ?: 'Daniel Lara',
-            'aprobador' => $get($row, 'APROBADOR'),
+            'aprobador' => $aprobador,
             'fechaAprobacion' => $get($row, 'FECHA APROBACIÓN'),
             'comentarioAprobacion' => $get($row, 'COMENTARIO APROBACIÓN'),
             'fechaRecepcionAdm' => $get($row, 'FECHA RECEPCIÓN ADM'),
@@ -502,9 +552,40 @@ function ciarm_tus_compras_parse_pedidos(array $rows): array {
             'adjuntos' => $get($row, 'ARCHIVOS ADJUNTOS'),
             'ultimaActualizacion' => $get($row, 'ÚLTIMA ACTUALIZACIÓN'),
             'version' => $get($row, 'VERSIÓN') ?: 'v1',
+            '_needsStateSync' => $needsStateSync,
         ];
     }
     return $list;
+}
+
+function ciarm_tus_compras_sync_normalized_orders(array $pedidos, string $sheetId, string $token): void {
+    $data = [];
+    foreach ($pedidos as $p) {
+        if (empty($p['_needsStateSync']) || empty($p['rowNumber'])) {
+            continue;
+        }
+        $rowNum = (int)$p['rowNumber'];
+        $data[] = [
+            'range' => "'PEDIDOS'!A{$rowNum}:X{$rowNum}",
+            'values' => [ciarm_tus_compras_order_to_row($p)],
+        ];
+    }
+    if ($data === []) {
+        return;
+    }
+    $batchUpdateUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId) . '/values:batchUpdate';
+    @ciarm_http_json($batchUpdateUrl, [
+        'post' => true,
+        'headers' => [
+            'Accept: application/json',
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $token,
+        ],
+        'body' => json_encode([
+            'valueInputOption' => 'RAW',
+            'data' => $data,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+    ]);
 }
 
 function ciarm_tus_compras_parse_bitacora(array $rows, ?string $filterPedidoId = null): array {
@@ -543,16 +624,17 @@ function ciarm_tus_compras_parse_bitacora(array $rows, ?string $filterPedidoId =
 }
 
 function ciarm_tus_compras_area_monthly_opex(array $pedidos, string $area, string $yearMonth, ?string $excludeId = null): float {
-    $normArea = ciarm_tus_compras_normalize_token($area);
+    $normArea = ciarm_tus_compras_normalize_token($area !== '' ? $area : 'docente');
     if ($normArea === '') return 0.0;
     $sum = 0.0;
     foreach ($pedidos as $p) {
         if ($excludeId !== null && ($p['id'] ?? '') === $excludeId) continue;
         if (strtoupper((string)($p['tipo'] ?? '')) !== 'OPEX') continue;
         if (($p['estado'] ?? '') === CIARM_TUS_COMPRAS_STATE_RECHAZADA) continue;
-        $pArea = ciarm_tus_compras_normalize_token((string)($p['area'] ?? ''));
+        $rawPArea = (string)($p['area'] ?? '');
+        $pArea = ciarm_tus_compras_normalize_token($rawPArea !== '' ? $rawPArea : 'docente');
         if ($pArea !== $normArea) continue;
-        $pMonth = substr((string)($p['fecha'] ?? ''), 0, 7);
+        $pMonth = ciarm_tus_compras_extract_year_month((string)($p['fecha'] ?? ''));
         if ($pMonth !== $yearMonth) continue;
         $sum += (float)($p['monto'] ?? 0);
     }

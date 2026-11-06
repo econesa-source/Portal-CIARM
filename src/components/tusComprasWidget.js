@@ -8,12 +8,14 @@ import {
   TUS_COMPRAS_STATES,
   TUS_COMPRAS_OPEX_LIMIT,
   evaluateOrderApprovalRequirement,
+  resolveEffectiveOrderState,
+  normalizeOrdersStates,
   getTusComprasContext,
   listTusCompras,
   createTusCompra,
   transitionTusCompra,
   uploadTusCompraAttachment
-} from '../services/tusComprasService.js';
+} from '../services/tusComprasService.js?v=18.7.16-tc2';
 
 const ACTION_META = Object.freeze({
   RECEIVE_OPEX: {
@@ -373,7 +375,7 @@ async function renderListView(container, ctx, kind, controller) {
   }
   if (!active()) return;
 
-  let items = Array.isArray(listData.items) ? listData.items : [];
+  let items = normalizeOrdersStates(Array.isArray(listData.items) ? listData.items : []);
   let stateFilter = 'ALL';
   let searchQuery = '';
 
@@ -382,7 +384,9 @@ async function renderListView(container, ctx, kind, controller) {
     countsByState[st] = 0;
   });
   items.forEach(item => {
-    countsByState[item.estado] = (countsByState[item.estado] || 0) + 1;
+    const effState = resolveEffectiveOrderState(item);
+    item.estado = effState;
+    countsByState[effState] = (countsByState[effState] || 0) + 1;
   });
 
   container.innerHTML = `

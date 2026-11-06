@@ -72,6 +72,7 @@ try {
 
             $store = ciarm_tus_compras_fetch_all();
             $pedidos = ciarm_tus_compras_parse_pedidos($store['pedidosRows']);
+            ciarm_tus_compras_sync_normalized_orders($pedidos, $store['sheetId'], $store['token']);
             $bitacora = ciarm_tus_compras_parse_bitacora($store['bitacoraRows']);
             $byPedido = [];
             foreach ($bitacora as $entry) {
@@ -112,6 +113,7 @@ try {
             }
             $store = ciarm_tus_compras_fetch_all();
             $pedidos = ciarm_tus_compras_parse_pedidos($store['pedidosRows']);
+            ciarm_tus_compras_sync_normalized_orders($pedidos, $store['sheetId'], $store['token']);
             $found = null;
             foreach ($pedidos as $p) {
                 if ($p['id'] === $id) {

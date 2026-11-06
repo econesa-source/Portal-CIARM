@@ -123,9 +123,54 @@ function inicializarHojasTusCompras(book) {
   return { ok: true, spreadsheetId: ss.getId(), name: ss.getName() };
 }
 
-function autorizarPermisosCorreoTusCompras() {
+/**
+ * Paso 1: Implementar como Aplicación Web (Ejecutar como: Yo | Acceso: Cualquier persona).
+ * Paso 2: Seleccionar esta función "registrarWebAppYProbarCorreo" arriba y pulsar "▷ Ejecutar".
+ * Esto autoriza MailApp y guarda automáticamente la URL del WebApp en la pestaña "CONFIG COMPRAS"
+ * para que el Portal CIARM envíe todas las notificaciones de Tus Compras por Google Workspace.
+ */
+function registrarWebAppYProbarCorreo() {
+  var ss = tusComprasResolveBook(null);
+  inicializarHojasTusCompras(ss);
+  var cfg = ss.getSheetByName('CONFIG COMPRAS');
+  var webAppUrl = '';
+  try {
+    webAppUrl = ScriptApp.getService().getUrl() || '';
+  } catch (e) {}
+
+  var now = Utilities.formatDate(new Date(), TUS_COMPRAS_CONFIG.TIMEZONE, 'yyyy-MM-dd HH:mm:ss');
+  var actor = '';
+  try {
+    actor = Session.getActiveUser().getEmail() || 'admin';
+  } catch (e) {
+    actor = 'admin';
+  }
+
+  if (webAppUrl) {
+    var rows = cfg.getDataRange().getValues();
+    var foundRow = -1;
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][0] || '').trim() === 'WEBAPP_URL_CORREOS') {
+        foundRow = i + 1;
+        break;
+      }
+    }
+    var newRow = ['WEBAPP_URL_CORREOS', webAppUrl, 'URL de la Aplicación Web de Apps Script para envío de correos MailApp', actor, now];
+    if (foundRow > 0) {
+      cfg.getRange(foundRow, 1, 1, 5).setValues([newRow]);
+    } else {
+      cfg.appendRow(newRow);
+    }
+  }
+
   var quota = typeof MailApp !== 'undefined' && MailApp.getRemainingDailyQuota ? MailApp.getRemainingDailyQuota() : 0;
-  Logger.log('Permiso MailApp autorizado correctamente para Tus Compras. Cuota restante: ' + quota);
+  Logger.log('Permiso MailApp autorizado. Cuota diaria restante: ' + quota);
+  Logger.log('URL de WebApp detectada y guardada en CONFIG COMPRAS: ' + (webAppUrl || '(Falta implementar como Aplicación Web)'));
+  return { ok: true, webAppUrl: webAppUrl, quota: quota };
+}
+
+function autorizarPermisosCorreoTusCompras() {
+  return registrarWebAppYProbarCorreo();
 }
 
 function doGet(e) {

@@ -15,6 +15,8 @@ require_once __DIR__ . '/tickets-portal-lib.php';
 
 const CIARM_TUS_COMPRAS_STAGING_SHEET_ID = '1b2DOU0iY7yw-93NEHDIZKhfZNTBirZiPMMbXvOaXMso';
 const CIARM_TUS_COMPRAS_PROD_SHEET_ID = '1q6mwmL-9JiNGk3TJZoJ1sJZiaR3AOO4OLEGiJuKQraQ';
+const CIARM_TUS_COMPRAS_STAGING_WEBAPP = '';
+const CIARM_TUS_COMPRAS_PROD_WEBAPP = '';
 const CIARM_TUS_COMPRAS_OPEX_LIMIT = 10000.0;
 const CIARM_TUS_COMPRAS_ADMIN_EMAIL = 'd.lara@ciarm.edu.mx';
 const CIARM_TUS_COMPRAS_APPROVER_EMAILS = ['e.conesa@ciarm.edu.mx'];
@@ -446,7 +448,7 @@ function ciarm_tus_compras_fetch_all(?string $spreadsheetId = null): array {
     $token = ciarm_tus_compras_sheets_token();
     ciarm_tus_compras_ensure_schema($sheetId, $token);
 
-    $ranges = ["'PEDIDOS'!A1:X2000", "'BITACORA PEDIDOS'!A1:M5000"];
+    $ranges = ["'PEDIDOS'!A1:X2000", "'BITACORA PEDIDOS'!A1:M5000", "'CONFIG COMPRAS'!A1:E20"];
     $query = implode('&', array_map(static fn($r) => 'ranges=' . rawurlencode($r), $ranges));
     $url = 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId)
         . '/values:batchGet?' . $query . '&valueRenderOption=FORMATTED_VALUE';
@@ -459,12 +461,22 @@ function ciarm_tus_compras_fetch_all(?string $spreadsheetId = null): array {
 
     $pedidosValues = $res['body']['valueRanges'][0]['values'] ?? [];
     $bitacoraValues = $res['body']['valueRanges'][1]['values'] ?? [];
+    $configValues = $res['body']['valueRanges'][2]['values'] ?? [];
+
+    foreach (array_slice($configValues, 1) as $cfgRow) {
+        $cfgKey = trim((string)($cfgRow[0] ?? ''));
+        $cfgVal = trim((string)($cfgRow[1] ?? ''));
+        if ($cfgKey === 'WEBAPP_URL_CORREOS' && str_starts_with($cfgVal, 'https://script.google.com/macros/s/')) {
+            $GLOBALS['ciarm_tus_compras_detected_webapp'] = $cfgVal;
+        }
+    }
 
     return [
         'sheetId' => $sheetId,
         'token' => $token,
         'pedidosRows' => $pedidosValues,
         'bitacoraRows' => $bitacoraValues,
+        'configRows' => $configValues,
     ];
 }
 
@@ -1152,9 +1164,70 @@ function ciarm_tus_compras_render_email(array $msg, array $order): string {
         . '</div><div style="background:#f8fafc;padding:12px 20px;font-size:12px;color:#64748b;border-top:1px solid #e2e8f0;">Notificación automática del Módulo Tus Compras CIARM (' . $esc($order['id'] ?? '') . ').</div></div>';
 }
 
+function ciarm_tus_compras_active_webapp(?string $host = null): string {
+    $isProd = ciarm_tickets_is_production_host($host);
+    $envVar = getenv($isProd ? 'CIARM_TUS_COMPRAS_PROD_WEBAPP' : 'CIARM_TUS_COMPRAS_STAGING_WEBAPP');
+    if (is_string($envVar) && str_starts_with(trim($envVar), 'https://script.google.com/macros/s/')) {
+        return trim($envVar);
+    }
+    $constUrl = $isProd ? CIARM_TUS_COMPRAS_PROD_WEBAPP : CIARM_TUS_COMPRAS_STAGING_WEBAPP;
+    if ($constUrl !== '' && str_starts_with($constUrl, 'https://script.google.com/macros/s/')) {
+        return $constUrl;
+    }
+    $detected = (string)($GLOBALS['ciarm_tus_compras_detected_webapp'] ?? '');
+    if ($detected !== '' && str_starts_with($detected, 'https://script.google.com/macros/s/')) {
+        return $detected;
+    }
+    return '';
+}
+
 function ciarm_tus_compras_dispatch_notifications(string $event, array $order, string $comment = '', ?callable $mailer = null, array $extraAdminEmails = []): array {
     $messages = ciarm_tus_compras_build_notification_plan($event, $order, $comment, $extraAdminEmails);
     $deliveries = [];
+
+    // 1. Intentar envío prioritario mediante Google Apps Script WebApp (MailApp.sendEmail en Google Workspace)
+    $webAppUrl = $mailer === null ? ciarm_tus_compras_active_webapp() : '';
+    if ($webAppUrl !== '' && count($messages) > 0) {
+        $gasMessages = [];
+        foreach ($messages as $msg) {
+            $gasMessages[] = [
+                'role' => $msg['role'],
+                'to' => $msg['to'],
+                'subject' => $msg['subject'],
+                'text' => $msg['intro'],
+                'html' => ciarm_tus_compras_render_email($msg, $order),
+            ];
+        }
+        try {
+            $gasRes = ciarm_http_json($webAppUrl, [
+                'post' => true,
+                'headers' => ['Accept: application/json', 'Content-Type: application/json'],
+                'body' => json_encode([
+                    'action' => 'sendNotifications',
+                    'orderId' => $order['id'] ?? '',
+                    'event' => $event,
+                    'messages' => $gasMessages,
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'timeout' => 20,
+            ]);
+            if ($gasRes['status'] === 200 && ($gasRes['body']['ok'] ?? false) === true && is_array($gasRes['body']['deliveries'] ?? null)) {
+                $deliveries = $gasRes['body']['deliveries'];
+                $sentCount = count(array_filter($deliveries, static fn($d) => ($d['status'] ?? '') === 'ENVIADO'));
+                $errCount = count(array_filter($deliveries, static fn($d) => ($d['status'] ?? '') === 'ERROR'));
+                $overall = count($deliveries) === 0 ? 'OMITIDO' : ($errCount === 0 ? 'ENVIADO' : ($sentCount > 0 ? 'PARCIAL' : 'ERROR'));
+                $rcptSummary = implode(', ', array_map(static fn($d) => ($d['to'] ?? '') . ':' . ($d['status'] ?? '') . '[GAS]', $deliveries));
+                return [
+                    'event' => $event,
+                    'status' => $rcptSummary !== '' ? ($overall . ' (' . $rcptSummary . ')') : $overall,
+                    'overallStatus' => $overall,
+                    'via' => 'gas-mailapp',
+                    'deliveries' => $deliveries,
+                ];
+            }
+        } catch (Throwable $gasErr) {
+            error_log('Tus Compras GAS MailApp fallback: ' . $gasErr->getMessage());
+        }
+    }
     $sendFn = $mailer ?? static function (string $to, string $subject, string $html): array {
         $mx = ciarm_ticket_smtp_mx_send($to, $subject, $html, 'smtp.google.com', 25);
         if (($mx['ok'] ?? false) === true) {

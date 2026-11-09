@@ -1,14 +1,19 @@
 /**
  * Servicio Frontend para el Módulo "Tus compras" (Pedidos de compra Opex / Capex)
- * Tope mensual Opex por área solicitante: $10,000.00 MXN
+ * Tope mensual Opex por área solicitante: $8,000.00 MXN
+ * Umbral de cotización obligatoria: > $3,000.00 MXN
  */
 
-export const TUS_COMPRAS_OPEX_LIMIT = 10000;
+export const TUS_COMPRAS_OPEX_LIMIT = 8000;
+export const TUS_COMPRAS_QUOTE_THRESHOLD = 3000;
 
 export const TUS_COMPRAS_STATES = Object.freeze({
   ENVIADA: '1) Solicitud enviada',
   EN_PROCESO: '2a) Solicitud recibida / En proceso',
+  EN_COTIZACION: '2a-1) En cotización',
+  COTIZACIONES_RECIBIDAS: '2a-2) Cotizaciones recibidas',
   EN_APROBACION: '2b) En aprobación',
+  OC_GENERADA: '2c) Orden de Compra generada',
   APROBADA: '2c) Aprobada / En curso',
   RECHAZADA: '2d) Rechazada',
   RECIBIDOS_ADM: '3) Artículos Recibidos en Adm.',
@@ -24,6 +29,21 @@ export function canSeeTusCompras(response) {
   return false;
 }
 
+export function getEffectiveOrderAmount(order) {
+  if (!order || typeof order !== 'object') return 0;
+  const montoOC = Number(order.montoOrdenCompra) || 0;
+  if (montoOC > 0) return Math.round(montoOC * 100) / 100;
+  const montoEst = Number(order.montoEstimado ?? order.monto) || 0;
+  return Math.round(montoEst * 100) / 100;
+}
+
+export function requiresQuotationProcess(orderOrMonto) {
+  const monto = typeof orderOrMonto === 'object' && orderOrMonto !== null
+    ? getEffectiveOrderAmount(orderOrMonto)
+    : Math.max(0, Number(orderOrMonto) || 0);
+  return monto > TUS_COMPRAS_QUOTE_THRESHOLD;
+}
+
 export function evaluateOrderApprovalRequirement(tipo, monto, currentAreaMonthlyOpex = 0, limit = TUS_COMPRAS_OPEX_LIMIT) {
   const cleanTipo = String(tipo || 'OPEX').toUpperCase() === 'CAPEX' ? 'CAPEX' : 'OPEX';
   const numMonto = Math.max(0, Number(monto) || 0);
@@ -33,12 +53,15 @@ export function evaluateOrderApprovalRequirement(tipo, monto, currentAreaMonthly
     : Math.round(currentOpex * 100) / 100;
   const exceedsOpexLimit = cleanTipo === 'OPEX' && projectedAreaOpex > limit;
   const requiresApproval = cleanTipo === 'CAPEX' || exceedsOpexLimit;
+  const requiresQuotation = numMonto > TUS_COMPRAS_QUOTE_THRESHOLD;
   return {
     tipo: cleanTipo,
     monto: numMonto,
     currentAreaMonthlyOpex: currentOpex,
     projectedAreaMonthlyOpex: projectedAreaOpex,
     opexLimit: limit,
+    quoteThreshold: TUS_COMPRAS_QUOTE_THRESHOLD,
+    requiresQuotation,
     exceedsOpexLimit,
     requiresApproval,
     initialState: requiresApproval ? TUS_COMPRAS_STATES.EN_APROBACION : TUS_COMPRAS_STATES.ENVIADA
@@ -49,7 +72,7 @@ export function resolveEffectiveOrderState(order, limit = TUS_COMPRAS_OPEX_LIMIT
   if (!order) return TUS_COMPRAS_STATES.ENVIADA;
   const rawState = String(order.estado || '').trim();
   const isCapex = String(order.tipo || '').trim().toUpperCase() === 'CAPEX';
-  const monto = Number(order.monto) || 0;
+  const monto = getEffectiveOrderAmount(order);
   const acum = Number(order.acumuladoMesArea) || 0;
   const requiresApproval = Boolean(order.requiereAprobacion)
     || isCapex
@@ -69,7 +92,14 @@ export function normalizeOrdersStates(orders, limit = TUS_COMPRAS_OPEX_LIMIT) {
   for (const item of chronological) {
     if (!item || typeof item !== 'object') continue;
     const isCapex = String(item.tipo || '').trim().toUpperCase() === 'CAPEX';
-    const monto = Number(item.monto) || 0;
+    const montoEst = Number(item.montoEstimado ?? item.monto) || 0;
+    const montoOC = Number(item.montoOrdenCompra) || 0;
+    const monto = montoOC > 0 ? montoOC : montoEst;
+    item.montoEstimado = montoEst;
+    item.montoOrdenCompra = montoOC;
+    item.monto = monto;
+    item.requiereCotizacion = montoEst > TUS_COMPRAS_QUOTE_THRESHOLD;
+
     const rawState = String(item.estado || '').trim();
     const areaKey = String(item.area || 'docente').trim().toLowerCase();
     const ymKey = String(item.fecha || '').trim().slice(0, 7);
@@ -81,7 +111,7 @@ export function normalizeOrdersStates(orders, limit = TUS_COMPRAS_OPEX_LIMIT) {
     }
     const runningOpex = runningByAreaMonth.get(bucket) || 0;
     const acum = !isCapex
-      ? Math.max(Number(item.acumuladoMesArea) || 0, runningOpex, monto)
+      ? (montoOC > 0 ? Math.max(runningOpex, monto) : Math.max(Number(item.acumuladoMesArea) || 0, runningOpex, monto))
       : Math.max(Number(item.acumuladoMesArea) || 0, runningOpex);
 
     item.acumuladoMesArea = acum;
@@ -103,6 +133,8 @@ export function computeAllowedActions(order, access, viewKind = 'all') {
   const requiresApproval = Boolean(order.requiereAprobacion)
     || String(order.tipo || '').toUpperCase() === 'CAPEX'
     || Number(order.acumuladoMesArea || 0) > TUS_COMPRAS_OPEX_LIMIT;
+  const montoBase = Number(order.montoEstimado ?? order.monto) || 0;
+  const requiresQuotation = montoBase > TUS_COMPRAS_QUOTE_THRESHOLD;
 
   // En vista del solicitante ("Mis Compras"), solo es informativo y únicamente habilita el cierre cuando está en estado 4)
   if (viewKind === 'mine') {
@@ -114,17 +146,23 @@ export function computeAllowedActions(order, access, viewKind = 'all') {
 
   const actions = [];
   if (state === TUS_COMPRAS_STATES.ENVIADA) {
-    if (canAdmin && !requiresApproval) actions.push('RECEIVE_OPEX');
+    if (canAdmin && !requiresApproval) {
+      actions.push(requiresQuotation ? 'START_QUOTING' : 'ISSUE_PURCHASE_ORDER');
+    }
   } else if (state === TUS_COMPRAS_STATES.EN_PROCESO) {
     if (canAdmin) {
-      actions.push('RECEIVE_ITEMS_ADM');
+      actions.push(requiresQuotation ? 'START_QUOTING' : 'ISSUE_PURCHASE_ORDER');
     }
+  } else if (state === TUS_COMPRAS_STATES.EN_COTIZACION) {
+    if (canAdmin) actions.push('RECEIVE_QUOTES');
+  } else if (state === TUS_COMPRAS_STATES.COTIZACIONES_RECIBIDAS) {
+    if (canAdmin) actions.push('ISSUE_PURCHASE_ORDER');
   } else if (state === TUS_COMPRAS_STATES.EN_APROBACION) {
     if (canApprove || canAdmin) {
       actions.push('APPROVE_CAPEX');
       actions.push('REJECT_CAPEX');
     }
-  } else if (state === TUS_COMPRAS_STATES.APROBADA) {
+  } else if (state === TUS_COMPRAS_STATES.OC_GENERADA || state === TUS_COMPRAS_STATES.APROBADA) {
     if (canAdmin) actions.push('RECEIVE_ITEMS_ADM');
   } else if (state === TUS_COMPRAS_STATES.RECIBIDOS_ADM) {
     if (canAdmin) actions.push('DELIVER_TO_REQUESTER');
@@ -334,6 +372,9 @@ export function computeTusComprasExecutiveMetrics(orders, filters = {}, nowMs = 
     const isDanielStage = [
       TUS_COMPRAS_STATES.ENVIADA,
       TUS_COMPRAS_STATES.EN_PROCESO,
+      TUS_COMPRAS_STATES.EN_COTIZACION,
+      TUS_COMPRAS_STATES.COTIZACIONES_RECIBIDAS,
+      TUS_COMPRAS_STATES.OC_GENERADA,
       TUS_COMPRAS_STATES.APROBADA,
       TUS_COMPRAS_STATES.RECIBIDOS_ADM
     ].includes(state);

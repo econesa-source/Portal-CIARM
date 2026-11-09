@@ -4,7 +4,10 @@ import { readFileSync } from 'node:fs';
 import {
   TUS_COMPRAS_STATES,
   TUS_COMPRAS_OPEX_LIMIT,
+  TUS_COMPRAS_QUOTE_THRESHOLD,
   canSeeTusCompras,
+  getEffectiveOrderAmount,
+  requiresQuotationProcess,
   evaluateOrderApprovalRequirement,
   resolveEffectiveOrderState,
   normalizeOrdersStates,
@@ -13,58 +16,68 @@ import {
 } from '../src/services/tusComprasService.js';
 import { allowedRoute } from '../src/components/dashboardAccess.js';
 
-test('Tope mensual Opex de $10,000 MXN por área solicitante y clasificación Capex', () => {
-  assert.equal(TUS_COMPRAS_OPEX_LIMIT, 10000);
+test('Tope mensual Opex de $8,000 MXN por área solicitante, umbral de cotización de $3,000 MXN y monto único válido de Orden de Compra', () => {
+  assert.equal(TUS_COMPRAS_OPEX_LIMIT, 8000);
+  assert.equal(TUS_COMPRAS_QUOTE_THRESHOLD, 3000);
 
-  // Opex dentro del límite mensual acumulado del área (ej. 4,000 previos + 5,500 nuevos = 9,500 <= 10,000)
-  const opexOk = evaluateOrderApprovalRequirement('OPEX', 5500, 4000);
-  assert.equal(opexOk.projectedAreaMonthlyOpex, 9500);
+  // Opex dentro del límite mensual acumulado del área (ej. 3,000 previos + 4,500 nuevos = 7,500 <= 8,000)
+  const opexOk = evaluateOrderApprovalRequirement('OPEX', 4500, 3000);
+  assert.equal(opexOk.projectedAreaMonthlyOpex, 7500);
   assert.equal(opexOk.exceedsOpexLimit, false);
   assert.equal(opexOk.requiresApproval, false);
   assert.equal(opexOk.initialState, TUS_COMPRAS_STATES.ENVIADA);
 
-  // Opex exactamente en el límite de $10,000 MXN
-  const opexExact = evaluateOrderApprovalRequirement('OPEX', 6000, 4000);
-  assert.equal(opexExact.projectedAreaMonthlyOpex, 10000);
+  // Opex exactamente en el límite de $8,000 MXN
+  const opexExact = evaluateOrderApprovalRequirement('OPEX', 5000, 3000);
+  assert.equal(opexExact.projectedAreaMonthlyOpex, 8000);
   assert.equal(opexExact.requiresApproval, false);
   assert.equal(opexExact.initialState, TUS_COMPRAS_STATES.ENVIADA);
 
-  // Opex que supera los $10,000 MXN mensuales acumulados del área: pasa automáticamente a 2b) En aprobación
-  const opexExceeds = evaluateOrderApprovalRequirement('OPEX', 4001, 6000);
-  assert.equal(opexExceeds.projectedAreaMonthlyOpex, 10001);
+  // Opex que supera los $8,000 MXN mensuales acumulados del área: pasa automáticamente a 2b) En aprobación
+  const opexExceeds = evaluateOrderApprovalRequirement('OPEX', 2001, 6000);
+  assert.equal(opexExceeds.projectedAreaMonthlyOpex, 8001);
   assert.equal(opexExceeds.exceedsOpexLimit, true);
   assert.equal(opexExceeds.requiresApproval, true);
   assert.equal(opexExceeds.initialState, TUS_COMPRAS_STATES.EN_APROBACION);
 
-  // Capex pasa automáticamente a 2b) En aprobación aunque sea menor a $10,000 MXN
+  // Capex pasa automáticamente a 2b) En aprobación aunque sea menor a $8,000 MXN
   const capexSmall = evaluateOrderApprovalRequirement('CAPEX', 1500, 0);
   assert.equal(capexSmall.tipo, 'CAPEX');
   assert.equal(capexSmall.requiresApproval, true);
   assert.equal(capexSmall.initialState, TUS_COMPRAS_STATES.EN_APROBACION);
 
-  // Verificar caso exacto de tickets 1, 2 y 3 (normalización de estado si en la hoja estaban en '1) Solicitud enviada')
+  // Umbral de cotización > $3,000 MXN
+  assert.equal(requiresQuotationProcess({ monto: 3000 }), false);
+  assert.equal(requiresQuotationProcess({ monto: 3000.01 }), true);
+
+  // Monto de Orden de Compra ajustado reemplaza al monto estimado del usuario como único monto válido para presupuesto
+  assert.equal(getEffectiveOrderAmount({ montoEstimado: 5000, montoOrdenCompra: 0 }), 5000);
+  assert.equal(getEffectiveOrderAmount({ montoEstimado: 5000, montoOrdenCompra: 4200 }), 4200);
+
+  // Verificar caso exacto de tickets 1, 2 y 3 (normalización de estado y recálculo de presupuesto con montoOrdenCompra)
   const sampleOrders = [
     { id: 'CMP-2026-00003', fecha: '2026-11-05', area: 'Docente', tipo: 'CAPEX', monto: 350000, estado: '1) Solicitud enviada' },
     { id: 'CMP-2026-00002', fecha: '2026-11-05', area: 'Docente', tipo: 'OPEX', monto: 20000, estado: '1) Solicitud enviada' },
-    { id: 'CMP-2026-00001', fecha: '2026-11-05', area: 'Docente', tipo: 'OPEX', monto: 3000, estado: '1) Solicitud enviada' }
+    { id: 'CMP-2026-00001', fecha: '2026-11-05', area: 'Docente', tipo: 'OPEX', monto: 3000, montoEstimado: 3000, montoOrdenCompra: 2650, estado: '2c) Orden de Compra generada' }
   ];
   normalizeOrdersStates(sampleOrders);
   const t1 = sampleOrders.find(x => x.id === 'CMP-2026-00001');
   const t2 = sampleOrders.find(x => x.id === 'CMP-2026-00002');
   const t3 = sampleOrders.find(x => x.id === 'CMP-2026-00003');
-  assert.equal(t1.estado, TUS_COMPRAS_STATES.ENVIADA);
+  assert.equal(t1.estado, TUS_COMPRAS_STATES.OC_GENERADA);
+  assert.equal(t1.monto, 2650); // Monto ajustado por Daniel al generar la OC
   assert.equal(t2.estado, TUS_COMPRAS_STATES.EN_APROBACION);
   assert.equal(t3.estado, TUS_COMPRAS_STATES.EN_APROBACION);
   assert.equal(resolveEffectiveOrderState(t2), TUS_COMPRAS_STATES.EN_APROBACION);
   assert.equal(resolveEffectiveOrderState(t3), TUS_COMPRAS_STATES.EN_APROBACION);
 });
 
-test('Máquina de estados: vista solicitante informativa y flujo de aprobación hacia 2a)', () => {
+test('Máquina de estados: umbral de $3,000 MXN para cotizaciones y generación de Orden de Compra', () => {
   const adminAutorizador = { correo: 'd.lara@ciarm.edu.mx', isAdministracion: true, canAdmin: true, canApprove: true };
   const directorDocente = { correo: 'director.docente@ciarm.edu.mx', isDocenteDirector: true, isAdministracion: false, canAdmin: false, canApprove: false };
 
-  // Estado 1) Solicitud enviada (Opex <= 10,000): Administración recibe en 2a); el solicitante en Mis Compras ('mine') no ve botones de acción
-  const order1Opex = {
+  // Caso A: Pedido <= $3,000 MXN en 1) Solicitud enviada -> Daniel genera directamente la Orden de Compra (ISSUE_PURCHASE_ORDER)
+  const order1Under3000 = {
     id: 'CMP-2026-00001',
     correo: 'director.docente@ciarm.edu.mx',
     tipo: 'OPEX',
@@ -73,37 +86,59 @@ test('Máquina de estados: vista solicitante informativa y flujo de aprobación 
     requiereAprobacion: false,
     estado: TUS_COMPRAS_STATES.ENVIADA
   };
-  assert.deepEqual(computeAllowedActions(order1Opex, adminAutorizador, 'all'), ['RECEIVE_OPEX']);
-  assert.deepEqual(computeAllowedActions(order1Opex, directorDocente, 'mine'), []);
-  assert.ok(!computeAllowedActions(order1Opex, adminAutorizador, 'all').includes('RECEIVE_ITEMS_ADM'));
+  assert.deepEqual(computeAllowedActions(order1Under3000, adminAutorizador, 'all'), ['ISSUE_PURCHASE_ORDER']);
+  assert.deepEqual(computeAllowedActions(order1Under3000, directorDocente, 'mine'), []);
 
-  // Estado 2b) En aprobación (entra automáticamente al crearse si supera $10,000 o es Capex):
-  // Administración / Autorizador puede Aprobar (pasa a 2a) o Rechazar (2d); solicitante en 'mine' no ve botones de acción
+  // Caso B: Pedido > $3,000 MXN (ej. $4,500 OPEX dentro de $8,000) -> Daniel debe iniciar cotización (START_QUOTING)
+  const order1Over3000 = {
+    ...order1Under3000,
+    id: 'CMP-2026-00002',
+    monto: 4500,
+    acumuladoMesArea: 4500
+  };
+  assert.deepEqual(computeAllowedActions(order1Over3000, adminAutorizador, 'all'), ['START_QUOTING']);
+
+  // En cotización (2a-1) -> Daniel debe informar recepción de cotizaciones y adjuntarlas (RECEIVE_QUOTES)
+  const orderQuoting = { ...order1Over3000, estado: TUS_COMPRAS_STATES.EN_COTIZACION };
+  assert.deepEqual(computeAllowedActions(orderQuoting, adminAutorizador, 'all'), ['RECEIVE_QUOTES']);
+
+  // Cotizaciones recibidas (2a-2) -> Daniel genera la Orden de Compra y ajusta el monto (ISSUE_PURCHASE_ORDER)
+  const orderQuotesReceived = { ...order1Over3000, estado: TUS_COMPRAS_STATES.COTIZACIONES_RECIBIDAS };
+  assert.deepEqual(computeAllowedActions(orderQuotesReceived, adminAutorizador, 'all'), ['ISSUE_PURCHASE_ORDER']);
+
+  // Orden de Compra generada (2c) -> Daniel registra llegada de artículos a Adm. (RECEIVE_ITEMS_ADM)
+  const orderOcGenerated = { ...order1Over3000, estado: TUS_COMPRAS_STATES.OC_GENERADA };
+  assert.deepEqual(computeAllowedActions(orderOcGenerated, adminAutorizador, 'all'), ['RECEIVE_ITEMS_ADM']);
+
+  // Estado 2b) En aprobación: Autorizador puede Aprobar (pasa a 2a) o Rechazar (2d)
   const order2b = {
-    ...order1Opex,
+    ...order1Under3000,
     tipo: 'CAPEX',
+    monto: 2500,
     requiereAprobacion: true,
     estado: TUS_COMPRAS_STATES.EN_APROBACION
   };
   assert.deepEqual(computeAllowedActions(order2b, adminAutorizador, 'all'), ['APPROVE_CAPEX', 'REJECT_CAPEX']);
   assert.deepEqual(computeAllowedActions(order2b, directorDocente, 'mine'), []);
 
-  // Estado 2a) Solicitud recibida / En proceso: Administración avanza a 3) Artículos Recibidos en Adm.
-  const order2a = { ...order1Opex, estado: TUS_COMPRAS_STATES.EN_PROCESO };
-  assert.deepEqual(computeAllowedActions(order2a, adminAutorizador, 'all'), ['RECEIVE_ITEMS_ADM']);
-  assert.deepEqual(computeAllowedActions(order2a, directorDocente, 'mine'), []);
+  // Estado 2a) Solicitud recibida / En proceso tras aprobar en 2b):
+  // Si <= $3,000 -> ISSUE_PURCHASE_ORDER; si > $3,000 -> START_QUOTING
+  const order2aSmall = { ...order2b, estado: TUS_COMPRAS_STATES.EN_PROCESO };
+  assert.deepEqual(computeAllowedActions(order2aSmall, adminAutorizador, 'all'), ['ISSUE_PURCHASE_ORDER']);
+  const order2aLarge = { ...order2b, monto: 12000, estado: TUS_COMPRAS_STATES.EN_PROCESO };
+  assert.deepEqual(computeAllowedActions(order2aLarge, adminAutorizador, 'all'), ['START_QUOTING']);
 
   // Estado 2d) Rechazada: Estado terminal, NO puede avanzar a 3)
   const order2d = { ...order2b, estado: TUS_COMPRAS_STATES.RECHAZADA };
   assert.deepEqual(computeAllowedActions(order2d, adminAutorizador, 'all'), []);
 
   // Estado 3) Artículos Recibidos en Adm.: Administración avanza a 4) Compra Entregada al Solicitante
-  const order3 = { ...order1Opex, estado: TUS_COMPRAS_STATES.RECIBIDOS_ADM };
+  const order3 = { ...order1Under3000, estado: TUS_COMPRAS_STATES.RECIBIDOS_ADM };
   assert.deepEqual(computeAllowedActions(order3, adminAutorizador, 'all'), ['DELIVER_TO_REQUESTER']);
   assert.deepEqual(computeAllowedActions(order3, directorDocente, 'mine'), []);
 
   // Estado 4) Compra Entregada al Solicitante: El Solicitante en Mis Compras ('mine') SÍ ve los botones de cierre Recepción Conforme / Disconforme
-  const order4 = { ...order1Opex, estado: TUS_COMPRAS_STATES.ENTREGADA };
+  const order4 = { ...order1Under3000, estado: TUS_COMPRAS_STATES.ENTREGADA };
   assert.deepEqual(computeAllowedActions(order4, adminAutorizador, 'all'), []);
   assert.deepEqual(computeAllowedActions(order4, directorDocente, 'mine'), ['CONFIRM_CONFORME', 'CONFIRM_DISCONFORME']);
 });

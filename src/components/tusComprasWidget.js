@@ -1,12 +1,16 @@
 /**
  * Módulo "Tus compras" - Sistema simplificado de pedidos de compra (Opex / Capex)
  * Coordinado por Administración (Daniel Lara) con aprobación ejecutiva (Ezequiel Conesa)
- * para compras Capex o cuando el acumulado mensual Opex del área solicitante supera $10,000 MXN.
+ * para compras Capex o cuando el acumulado mensual Opex del área solicitante supera $8,000 MXN.
+ * Para compras > $3,000 MXN Daniel cotiza, adjunta cotizaciones y luego genera la Orden de Compra;
+ * para compras <= $3,000 MXN genera directamente la Orden de Compra informando fecha OC, entrega estimada y monto definitivo.
  */
 
 import {
   TUS_COMPRAS_STATES,
   TUS_COMPRAS_OPEX_LIMIT,
+  TUS_COMPRAS_QUOTE_THRESHOLD,
+  getEffectiveOrderAmount,
   evaluateOrderApprovalRequirement,
   resolveEffectiveOrderState,
   normalizeOrdersStates,
@@ -17,7 +21,7 @@ import {
   createTusCompra,
   transitionTusCompra,
   uploadTusCompraAttachment
-} from '../services/tusComprasService.js?v=18.7.16-tc6';
+} from '../services/tusComprasService.js?v=18.7.16-tc8';
 
 const ACTION_META = Object.freeze({
   RECEIVE_OPEX: {
@@ -26,6 +30,30 @@ const ACTION_META = Object.freeze({
     confirmTitle: 'Pasar a 2a) Solicitud recibida / En proceso',
     description: 'Confirma que el pedido Opex ha sido recibido en Administración y pasa a proceso de compra.',
     requireComment: false
+  },
+  START_QUOTING: {
+    label: '2a-1) Informar En Cotización (> $3,000)',
+    badgeClass: 'dark',
+    confirmTitle: '2a-1) Informar que está cotizando (> $3,000.00 MXN)',
+    description: 'Al superar los $3,000.00 MXN, informa al solicitante que iniciaste el proceso de cotización y define la fecha estimada de cierre de cotizaciones.',
+    requireComment: false,
+    requireQuoteCloseDate: true
+  },
+  RECEIVE_QUOTES: {
+    label: '2a-2) Informar Recepción de Cotizaciones',
+    badgeClass: 'dark',
+    confirmTitle: '2a-2) Informar Recepción y Adjuntar Cotizaciones',
+    description: 'Informa la recepción de las cotizaciones y adjúntalas obligatoriamente al expediente para luego gestionar la Orden de Compra.',
+    requireComment: false,
+    requireQuoteAttachment: true
+  },
+  ISSUE_PURCHASE_ORDER: {
+    label: '2c) Generar Orden de Compra',
+    badgeClass: 'dark',
+    confirmTitle: '2c) Generar Orden de Compra y Ajustar Monto Válido',
+    description: 'Informa la fecha en que generaste la Orden de Compra, define la fecha estimada de entrega y ajusta el monto estimado por el usuario (este será el único monto válido descontado del presupuesto mensual del área).',
+    requireComment: false,
+    requirePurchaseOrderFields: true
   },
   APPROVE_CAPEX: {
     label: 'Aprobar y pasar a 2a)',
@@ -92,10 +120,41 @@ function stateBadgeStyle(state) {
   }
   if (state === TUS_COMPRAS_STATES.EN_APROBACION) return 'background:#fef3c7;color:#92400e;border:1px solid #fcd34d;';
   if (state === TUS_COMPRAS_STATES.ENTREGADA) return 'background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;';
-  if (state === TUS_COMPRAS_STATES.APROBADA || state === TUS_COMPRAS_STATES.EN_PROCESO || state === TUS_COMPRAS_STATES.RECIBIDOS_ADM) {
+  if (
+    state === TUS_COMPRAS_STATES.OC_GENERADA ||
+    state === TUS_COMPRAS_STATES.APROBADA ||
+    state === TUS_COMPRAS_STATES.EN_PROCESO ||
+    state === TUS_COMPRAS_STATES.EN_COTIZACION ||
+    state === TUS_COMPRAS_STATES.COTIZACIONES_RECIBIDAS ||
+    state === TUS_COMPRAS_STATES.RECIBIDOS_ADM
+  ) {
     return 'background:#e0f2fe;color:#075985;border:1px solid #7dd3fc;';
   }
   return 'background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;';
+}
+
+function renderAttachmentsLinks(order) {
+  if (!order) return '';
+  const links = [];
+  if (order.adjuntoDetalle) {
+    links.push(`<a href="${escapeHtml(order.adjuntoDetalle)}" target="_blank" rel="noopener noreferrer" style="color:#1e3a8a;font-weight:600;text-decoration:underline;">📄 Detalle del pedido (Solicitante)</a>`);
+  }
+  if (order.adjuntoCotizacionPreliminar) {
+    links.push(`<a href="${escapeHtml(order.adjuntoCotizacionPreliminar)}" target="_blank" rel="noopener noreferrer" style="color:#0369a1;font-weight:600;text-decoration:underline;">💵 Cotización preliminar (Solicitante)</a>`);
+  }
+  if (order.adjuntoCotizacionesAdm) {
+    String(order.adjuntoCotizacionesAdm)
+      .split('|')
+      .map(s => s.trim())
+      .filter(Boolean)
+      .forEach((url, idx) => {
+        links.push(`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color:#047857;font-weight:700;text-decoration:underline;">📑 Cotización oficial Adm.${idx > 0 ? ` #${idx + 1}` : ''} (Daniel Lara)</a>`);
+      });
+  }
+  if (!links.length && order.adjuntos && /^https?:\/\//i.test(String(order.adjuntos).trim())) {
+    links.push(`<a href="${escapeHtml(order.adjuntos)}" target="_blank" rel="noopener noreferrer" style="color:#1e3a8a;font-weight:600;text-decoration:underline;">📎 Ver archivo adjunto</a>`);
+  }
+  return links.join(' · ');
 }
 
 function renderStepProgress(state) {
@@ -115,9 +174,12 @@ function renderStepProgress(state) {
   ].includes(s);
   const step5Done = [TUS_COMPRAS_STATES.CONFORME, TUS_COMPRAS_STATES.DISCONFORME].includes(s);
 
-  let step2Label = '2) En proceso / Aprobación';
+  let step2Label = '2) En proceso / Cotización / OC';
   if (s === TUS_COMPRAS_STATES.EN_PROCESO) step2Label = '2a) Recibida / En proceso';
+  else if (s === TUS_COMPRAS_STATES.EN_COTIZACION) step2Label = '2a-1) En cotización';
+  else if (s === TUS_COMPRAS_STATES.COTIZACIONES_RECIBIDAS) step2Label = '2a-2) Cotizaciones recibidas';
   else if (s === TUS_COMPRAS_STATES.EN_APROBACION) step2Label = '2b) En aprobación';
+  else if (s === TUS_COMPRAS_STATES.OC_GENERADA) step2Label = '2c) Orden de Compra generada';
   else if (s === TUS_COMPRAS_STATES.APROBADA) step2Label = '2c) Aprobada / En curso';
   else if (s === TUS_COMPRAS_STATES.RECHAZADA) step2Label = '2d) Rechazada';
 
@@ -238,12 +300,12 @@ function renderCreateView(container, ctx, controller) {
 
       <div class="solicitud-heading">
         <h2>Nuevo Pedido de Compra · Tus compras</h2>
-        <p>Registra tu solicitud de compra para Administración (Daniel Lara). Pedidos Opex hasta $10,000.00 MXN acumulados al mes por área se procesan directamente; pedidos Capex o que superen $10,000.00 MXN mensuales requieren aprobación de Ezequiel Conesa.</p>
+        <p>Registra tu solicitud de compra para Administración (Daniel Lara). Pedidos Opex hasta $8,000.00 MXN acumulados al mes por área se procesan directamente; pedidos Capex o que superen $8,000.00 MXN mensuales requieren aprobación de Administración. Para pedidos superiores a $3,000.00 MXN, Administración realizará proceso de cotización previo a la Orden de Compra.</p>
       </div>
 
       <div id="tus-compras-budget-banner" style="background:#f8fafc;border:1px solid #cbd5e1;border-left:4px solid #26487F;border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:14px;">
-        <div><strong>Área solicitante (DM03):</strong> ${escapeHtml(access.area || 'Docente')} · <strong>Acumulado Opex del mes (${escapeHtml(ctx.yearMonth || '')}):</strong> ${formatCurrency(currentOpex)} / ${formatCurrency(opexLimit)}</div>
-        <div style="margin-top:4px;color:#334155;">Disponible Opex directo en el mes para tu área: <strong>${formatCurrency(remainingOpex)}</strong></div>
+        <div><strong>Área solicitante (DM03):</strong> ${escapeHtml(access.area || 'Docente')} · <strong>Acumulado Opex válido del mes (${escapeHtml(ctx.yearMonth || '')}):</strong> ${formatCurrency(currentOpex)} / ${formatCurrency(opexLimit)}</div>
+        <div style="margin-top:4px;color:#334155;">Disponible Opex directo en el mes para tu área: <strong>${formatCurrency(remainingOpex)}</strong> <span style="color:#64748b;font-size:12.5px;">(Al generarse la Orden de Compra, el monto ajustado por Administración será el único monto válido descontado del presupuesto mensual)</span></div>
       </div>
 
       <form id="form-tus-compras" class="solicitud-form">
@@ -262,18 +324,18 @@ function renderCreateView(container, ctx, controller) {
           <div class="solicitud-field">
             <label for="tc-tipo">TIPO DE COMPRA *</label>
             <select id="tc-tipo" name="tipo" required>
-              <option value="OPEX" selected>1) OPEX — Gasto operativo mensual (tope $10,000 MXN/mes por área)</option>
-              <option value="CAPEX">2) CAPEX — Inversión / Activo fijo (requiere aprobación de Ezequiel Conesa)</option>
+              <option value="OPEX" selected>1) OPEX — Gasto operativo mensual (tope $8,000 MXN/mes por área)</option>
+              <option value="CAPEX">2) CAPEX — Inversión / Activo fijo (requiere aprobación ejecutiva)</option>
             </select>
           </div>
           <div class="solicitud-field">
             <label for="tc-monto">MONTO TOTAL ESTIMADO (MXN) *</label>
-            <input type="number" id="tc-monto" name="monto" min="1" max="10000000" step="0.01" required placeholder="Ej. 3500.00" />
+            <input type="number" id="tc-monto" name="monto" min="1" max="10000000" step="0.01" required placeholder="Ej. 2500.00" />
           </div>
         </div>
 
         <div id="tc-route-preview" role="status" style="padding:10px 14px;border-radius:6px;background:#e0f2fe;color:#075985;font-size:13.5px;font-weight:600;margin-bottom:12px;">
-          Ingresa el monto estimado para verificar si se gestiona directamente por Daniel Lara (2a) o si requiere aprobación de Ezequiel Conesa (2b).
+          Ingresa el monto estimado para verificar si requiere aprobación (> $8,000.00 MXN mensual o CAPEX) y si requiere proceso de cotización (> $3,000.00 MXN).
         </div>
 
         <div class="solicitud-field solicitud-description">
@@ -286,9 +348,17 @@ function renderCreateView(container, ctx, controller) {
           <input type="text" id="tc-justificacion" name="justificacion" placeholder="Motivo pedagógico/operativo, proveedor sugerido o link de referencia..." />
         </div>
 
-        <div class="solicitud-field solicitud-files">
-          <label for="tc-adjunto">COTIZACIÓN O ARCHIVO ADJUNTO (OPCIONAL · PDF O IMAGEN MÁX. 10 MB)</label>
-          <input type="file" id="tc-adjunto" accept="image/*,.pdf" />
+        <div class="solicitud-identity">
+          <div class="solicitud-field solicitud-files">
+            <label for="tc-adjunto-detalle">1) ARCHIVO DE DETALLE DEL PEDIDO (OPCIONAL · NO OBLIGATORIO)</label>
+            <input type="file" id="tc-adjunto-detalle" accept="image/*,.pdf" />
+            <small style="display:block;margin-top:4px;color:#64748b;font-size:12px;">Especificaciones, listado o imagen de referencia de los artículos (PDF o imagen máx. 10 MB · Opcional).</small>
+          </div>
+          <div class="solicitud-field solicitud-files">
+            <label for="tc-adjunto-cotizacion">2) COTIZACIÓN PRELIMINAR DE REFERENCIA (OPCIONAL · NO OBLIGATORIO)</label>
+            <input type="file" id="tc-adjunto-cotizacion" accept="image/*,.pdf" />
+            <small style="display:block;margin-top:4px;color:#64748b;font-size:12px;">Si cuentas con una cotización preliminar de referencia puedes adjuntarla aquí (PDF o imagen máx. 10 MB · Opcional).</small>
+          </div>
         </div>
 
         <div class="solicitud-submit-row">
@@ -307,7 +377,8 @@ function renderCreateView(container, ctx, controller) {
   const preview = container.querySelector('#tc-route-preview');
   const form = container.querySelector('#form-tus-compras');
   const btnSubmit = container.querySelector('#btn-submit-tus-compras');
-  const fileInput = container.querySelector('#tc-adjunto');
+  const fileDetalleInput = container.querySelector('#tc-adjunto-detalle');
+  const fileCotPrelimInput = container.querySelector('#tc-adjunto-cotizacion');
   const statusBox = container.querySelector('#tc-form-status');
 
   function updatePreview() {
@@ -319,17 +390,21 @@ function renderCreateView(container, ctx, controller) {
       preview.textContent = 'Ingresa el monto estimado para calcular la ruta de atención.';
       return;
     }
+    const quoteNotice = evalRes.requiresQuotation
+      ? `Al superar ${formatCurrency(TUS_COMPRAS_QUOTE_THRESHOLD)}, Daniel Lara deberá cotizar, informar fecha estimada de cierre de cotizaciones, adjuntar las cotizaciones recibidas y posteriormente emitir la Orden de Compra ajustando el monto definitivo.`
+      : `Por ser menor o igual a ${formatCurrency(TUS_COMPRAS_QUOTE_THRESHOLD)}, al gestionarlo Daniel Lara generará directamente la Orden de Compra informando su fecha de emisión, fecha estimada de entrega y monto definitivo.`;
+
     if (evalRes.requiresApproval) {
       preview.style.background = '#fef3c7';
       preview.style.color = '#92400e';
       const reason = evalRes.tipo === 'CAPEX'
         ? 'por ser compra tipo CAPEX'
         : `porque el acumulado mensual Opex del área (${formatCurrency(evalRes.projectedAreaMonthlyOpex)}) supera el límite permitido de ${formatCurrency(opexLimit)}`;
-      preview.textContent = `Ruta automática: Al enviar el ticket pasará automáticamente al estado «2b) En aprobación» (${reason}). Cuando el autorizador (Administración) apruebe el ticket, pasará al estado «2a) Solicitud recibida / En proceso».`;
+      preview.textContent = `Ruta automática: Al enviar el ticket pasará automáticamente al estado «2b) En aprobación» (${reason}). Una vez aprobado, pasará a gestión de Daniel Lara. ${quoteNotice}`;
     } else {
       preview.style.background = '#dcfce7';
       preview.style.color = '#166534';
-      preview.textContent = `Ruta Opex dentro de presupuesto: Se registrará en «1) Solicitud enviada» para pasar a «2a) Solicitud recibida / En proceso» (Acumulado mensual proyectado del área: ${formatCurrency(evalRes.projectedAreaMonthlyOpex)} ≤ ${formatCurrency(opexLimit)}).`;
+      preview.textContent = `Ruta Opex dentro de presupuesto: Se registrará en «1) Solicitud enviada» (Acumulado mensual proyectado del área: ${formatCurrency(evalRes.projectedAreaMonthlyOpex)} ≤ ${formatCurrency(opexLimit)}). ${quoteNotice}`;
     }
   }
 
@@ -346,12 +421,19 @@ function renderCreateView(container, ctx, controller) {
     statusBox.textContent = 'Registrando pedido de compra y enviando notificaciones por correo…';
 
     try {
-      let adjuntoUrl = '';
-      const file = fileInput?.files?.[0];
-      if (file) {
-        statusBox.textContent = 'Subiendo archivo adjunto…';
-        const uploaded = await uploadTusCompraAttachment(file, ctx.csrfToken, controller.signal);
-        adjuntoUrl = uploaded.url || '';
+      let adjuntoDetalleUrl = '';
+      let adjuntoCotPrelimUrl = '';
+      const fileDetalle = fileDetalleInput?.files?.[0];
+      if (fileDetalle) {
+        statusBox.textContent = 'Subiendo archivo de Detalle del pedido…';
+        const upDet = await uploadTusCompraAttachment(fileDetalle, ctx.csrfToken, controller.signal);
+        adjuntoDetalleUrl = upDet.url || '';
+      }
+      const fileCotPrelim = fileCotPrelimInput?.files?.[0];
+      if (fileCotPrelim) {
+        statusBox.textContent = 'Subiendo archivo de Cotización preliminar de referencia…';
+        const upCot = await uploadTusCompraAttachment(fileCotPrelim, ctx.csrfToken, controller.signal);
+        adjuntoCotPrelimUrl = upCot.url || '';
       }
       statusBox.textContent = 'Guardando pedido y notificando a Administración…';
       const result = await createTusCompra(
@@ -360,7 +442,8 @@ function renderCreateView(container, ctx, controller) {
           monto: Number(inputMonto.value),
           descripcion: container.querySelector('#tc-descripcion').value.trim(),
           justificacion: container.querySelector('#tc-justificacion').value.trim(),
-          adjuntos: adjuntoUrl
+          adjuntoDetalle: adjuntoDetalleUrl,
+          adjuntoCotizacionPreliminar: adjuntoCotPrelimUrl
         },
         ctx.csrfToken,
         controller.signal
@@ -419,8 +502,8 @@ async function renderListView(container, ctx, kind, controller) {
         <h1>${kind === 'all' ? 'Gestión y Aprobaciones · Tus compras' : 'Mis Compras y Validación de Recepción'}</h1>
         <p>${
           kind === 'all'
-            ? 'Administra el ciclo de pedidos Opex (≤ $10,000 MXN/mes por área) y Capex (> $10,000 MXN/mes). Al aprobar un ticket en 2b) En aprobación, pasa al estado 2a) Solicitud recibida / En proceso.'
-            : 'Consulta el estado informativo de tus tickets de compra. Cuando tu compra sea entregada podrás cerrar el ticket clasificándolo como Recepción Conforme o Recepción Disconforme.'
+            ? 'Administra el ciclo de pedidos Opex (≤ $8,000 MXN/mes por área) y Capex (> $8,000 MXN/mes). En compras > $3,000 MXN Daniel cotiza, adjunta cotizaciones y luego genera la Orden de Compra; en compras ≤ $3,000 MXN genera directamente la Orden de Compra ajustando el monto único válido del presupuesto.'
+            : 'Consulta el estado informativo de tus tickets de compra, fechas estimadas de cotización/entrega y Orden de Compra. Cuando tu compra sea entregada podrás cerrar el ticket clasificándolo como Recepción Conforme o Recepción Disconforme.'
         }</p>
       </header>
 
@@ -492,6 +575,13 @@ async function renderListView(container, ctx, kind, controller) {
               ${filtered
                 .map(order => {
                   const canCloseReception = order.estado === TUS_COMPRAS_STATES.ENTREGADA;
+                  const hasOC = Number(order.montoOrdenCompra) > 0;
+                  const montoEst = Number(order.montoEstimado ?? order.monto) || 0;
+                  const datesSummary = [
+                    order.fechaCierreCotizacion ? `Cierre cotiz. est.: ${order.fechaCierreCotizacion}` : '',
+                    order.fechaOrdenCompra ? `Fecha OC: ${order.fechaOrdenCompra}` : '',
+                    order.fechaEntregaEstimada ? `Entrega est.: ${order.fechaEntregaEstimada}` : ''
+                  ].filter(Boolean).join(' · ');
                   return `
                     <tr data-order-id="${escapeHtml(order.id)}">
                       <td><strong>${escapeHtml(order.id)}</strong></td>
@@ -500,9 +590,17 @@ async function renderListView(container, ctx, kind, controller) {
                         <span style="padding:2px 7px;border-radius:4px;font-size:11.5px;font-weight:700;${
                           order.tipo === 'CAPEX' ? 'background:#fae8ff;color:#86198f;' : 'background:#f1f5f9;color:#0f172a;'
                         }">${escapeHtml(order.tipo)}</span>
-                        <div style="font-weight:700;margin-top:3px;">${formatCurrency(order.monto)}</div>
+                        <div style="font-weight:700;margin-top:3px;">${formatCurrency(getEffectiveOrderAmount(order))}</div>
+                        ${
+                          hasOC
+                            ? `<div style="font-size:11px;color:#047857;font-weight:600;">Monto OC válido (Est.: ${formatCurrency(montoEst)})</div>`
+                            : `<div style="font-size:11px;color:#64748b;">Monto estimado inicial</div>`
+                        }
                       </td>
-                      <td>${escapeHtml(order.descripcion)}</td>
+                      <td>
+                        <div>${escapeHtml(order.descripcion)}</div>
+                        ${datesSummary ? `<div style="margin-top:4px;font-size:11.5px;color:#1e3a8a;font-weight:600;">📅 ${escapeHtml(datesSummary)}</div>` : ''}
+                      </td>
                       <td>
                         <span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;${stateBadgeStyle(order.estado)}">
                           ${escapeHtml(order.estado)}
@@ -541,6 +639,10 @@ async function renderListView(container, ctx, kind, controller) {
     listEl.innerHTML = filtered
       .map(order => {
         const actions = Array.isArray(order.allowedActions) ? order.allowedActions : [];
+        const montoEst = Number(order.montoEstimado ?? order.monto) || 0;
+        const montoOC = Number(order.montoOrdenCompra) || 0;
+        const needsQuote = montoEst > TUS_COMPRAS_QUOTE_THRESHOLD;
+        const attachHtml = renderAttachmentsLinks(order);
         return `
           <article class="exact-card" data-order-id="${escapeHtml(order.id)}" style="padding:18px;border:1px solid #cbd5e1;border-radius:10px;background:#ffffff;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
@@ -551,8 +653,16 @@ async function renderListView(container, ctx, kind, controller) {
                     ? 'background:#fae8ff;color:#86198f;'
                     : 'background:#f1f5f9;color:#0f172a;'
                 }">${escapeHtml(order.tipo)}</span>
-                <span style="margin-left:6px;font-weight:700;color:#0f172a;">${formatCurrency(order.monto)}</span>
-                <span style="margin-left:6px;font-size:12px;color:#64748b;">(Acum. mes área ${escapeHtml(order.area)}: ${formatCurrency(order.acumuladoMesArea)})</span>
+                <span style="margin-left:6px;padding:3px 8px;border-radius:6px;font-size:11.5px;font-weight:700;${
+                  needsQuote ? 'background:#fef3c7;color:#92400e;' : 'background:#dcfce7;color:#166534;'
+                }">${needsQuote ? '> $3,000 · Requiere Cotización' : '≤ $3,000 · OC Directa'}</span>
+                <span style="margin-left:6px;font-weight:700;color:#0f172a;">${formatCurrency(getEffectiveOrderAmount(order))}</span>
+                ${
+                  montoOC > 0
+                    ? `<span style="margin-left:6px;font-size:12px;color:#047857;font-weight:700;">(Monto OC válido · Est. inicial: ${formatCurrency(montoEst)})</span>`
+                    : `<span style="margin-left:6px;font-size:12px;color:#64748b;">(Monto estimado inicial)</span>`
+                }
+                <span style="margin-left:6px;font-size:12px;color:#64748b;">· Acum. mes área ${escapeHtml(order.area)}: ${formatCurrency(order.acumuladoMesArea)} / ${formatCurrency(TUS_COMPRAS_OPEX_LIMIT)}</span>
               </div>
               <span style="padding:4px 10px;border-radius:999px;font-size:12.5px;font-weight:700;${stateBadgeStyle(order.estado)}">
                 ${escapeHtml(order.estado)}
@@ -569,7 +679,11 @@ async function renderListView(container, ctx, kind, controller) {
               <span><strong>Fecha:</strong> ${escapeHtml(order.fecha)} ${escapeHtml(order.hora || '')}</span>
               <span><strong>Adm.:</strong> ${escapeHtml(order.responsableAdm || 'Daniel Lara')}</span>
               ${order.aprobador ? `<span><strong>Aprobación:</strong> ${escapeHtml(order.aprobador)}</span>` : ''}
+              ${order.fechaCierreCotizacion ? `<span><strong>Cierre Cotiz. Est.:</strong> ${escapeHtml(order.fechaCierreCotizacion)}</span>` : ''}
+              ${order.fechaOrdenCompra ? `<span><strong>Fecha OC:</strong> ${escapeHtml(order.fechaOrdenCompra)}</span>` : ''}
+              ${order.fechaEntregaEstimada ? `<span><strong>Entrega Est.:</strong> ${escapeHtml(order.fechaEntregaEstimada)}</span>` : ''}
             </div>
+            ${attachHtml ? `<div style="margin-top:8px;font-size:12.5px;"><strong>Adjuntos:</strong> ${attachHtml}</div>` : ''}
 
             <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;border-top:1px solid #f1f5f9;padding-top:10px;">
               <div class="ticket-action-buttons" style="display:flex;flex-wrap:wrap;gap:8px;">
@@ -604,11 +718,69 @@ async function renderListView(container, ctx, kind, controller) {
     const meta = ACTION_META[eventCode];
     if (!order || !meta) return;
 
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const defaultPoAmount = Number(order.montoOrdenCompra || order.montoEstimado || order.monto || 0).toFixed(2);
+
     modalEl.innerHTML = `
       <form id="tc-transition-form">
         <h3 style="margin-top:0;color:#1e3a8a;">${escapeHtml(meta.confirmTitle)}</h3>
-        <p style="color:#334155;font-size:14px;"><strong>Pedido:</strong> ${escapeHtml(order.id)} · ${escapeHtml(order.tipo)} · ${formatCurrency(order.monto)}</p>
+        <p style="color:#334155;font-size:14px;"><strong>Pedido:</strong> ${escapeHtml(order.id)} · ${escapeHtml(order.tipo)} · ${formatCurrency(order.monto)} ${order.montoEstimado ? `<span style="color:#64748b;font-size:12.5px;">(Estimado inicial: ${formatCurrency(order.montoEstimado)})</span>` : ''}</p>
         <p style="color:#475569;font-size:13.5px;">${escapeHtml(meta.description)}</p>
+
+        ${
+          meta.requireQuoteCloseDate
+            ? `
+          <div style="margin:12px 0;">
+            <label for="tc-modal-quote-close-date" style="display:block;font-weight:600;font-size:13px;margin-bottom:4px;">
+              FECHA ESTIMADA DE CIERRE DE COTIZACIONES (OBLIGATORIA) *
+            </label>
+            <input id="tc-modal-quote-close-date" name="fechaCierreCotizacion" type="date" required value="${escapeHtml(order.fechaCierreCotizacion || todayIso)}" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;" />
+          </div>
+        `
+            : ''
+        }
+
+        ${
+          meta.requireQuoteAttachment
+            ? `
+          <div style="margin:12px 0;padding:10px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;">
+            <label for="tc-modal-quote-file" style="display:block;font-weight:600;font-size:13px;margin-bottom:4px;color:#0f172a;">
+              ADJUNTAR COTIZACIONES RECIBIDAS (OBLIGATORIO · PDF o Imagen) *
+            </label>
+            <input id="tc-modal-quote-file" name="quoteFile" type="file" accept="image/*,.pdf" required style="width:100%;font-size:13px;" />
+            <small style="color:#64748b;display:block;margin-top:4px;">Para compras superiores a $3,000.00 MXN es obligatorio adjuntar la(s) cotización(es) del proceso.</small>
+          </div>
+        `
+            : ''
+        }
+
+        ${
+          meta.requirePurchaseOrderFields
+            ? `
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0;">
+            <div>
+              <label for="tc-modal-po-date" style="display:block;font-weight:600;font-size:12.5px;margin-bottom:4px;">
+                FECHA EN QUE GENERÓ LA ORDEN DE COMPRA *
+              </label>
+              <input id="tc-modal-po-date" name="fechaOrdenCompra" type="date" required value="${escapeHtml(order.fechaOrdenCompra || todayIso)}" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;" />
+            </div>
+            <div>
+              <label for="tc-modal-delivery-date" style="display:block;font-weight:600;font-size:12.5px;margin-bottom:4px;">
+                FECHA ESTIMADA DE ENTREGA *
+              </label>
+              <input id="tc-modal-delivery-date" name="fechaEntregaEstimada" type="date" required value="${escapeHtml(order.fechaEntregaEstimada || '')}" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;" />
+            </div>
+          </div>
+          <div style="margin:12px 0;padding:10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;">
+            <label for="tc-modal-po-amount" style="display:block;font-weight:700;font-size:13px;margin-bottom:4px;color:#0c4a6e;">
+              MONTO REAL AJUSTADO DE LA ORDEN DE COMPRA (MXN) *
+            </label>
+            <input id="tc-modal-po-amount" name="montoOrdenCompra" type="number" min="1" max="10000000" step="0.01" required value="${escapeHtml(defaultPoAmount)}" style="width:100%;padding:8px;border:1px solid #7dd3fc;border-radius:6px;font-weight:700;" />
+            <small style="color:#0369a1;display:block;margin-top:4px;">Monto estimado informado por el usuario: <strong>${formatCurrency(order.montoEstimado || order.monto)}</strong>. El monto ajustado aquí será el <strong>monto único válido</strong> descontado del presupuesto mensual ($8,000.00 MXN) del área.</small>
+          </div>
+        `
+            : ''
+        }
 
         <div style="margin:12px 0;">
           <label for="tc-modal-comment" style="display:block;font-weight:600;font-size:13px;margin-bottom:4px;">
@@ -639,12 +811,61 @@ async function renderListView(container, ctx, kind, controller) {
         errEl.textContent = 'Debes ingresar un motivo de al menos 5 caracteres.';
         return;
       }
+
+      const payload = { id: order.id, event: eventCode, comment: commentVal };
+
+      if (meta.requireQuoteCloseDate) {
+        const quoteCloseDate = modalEl.querySelector('#tc-modal-quote-close-date')?.value?.trim() || '';
+        if (!quoteCloseDate) {
+          errEl.hidden = false;
+          errEl.textContent = 'Debes definir la fecha estimada de cierre de cotizaciones.';
+          return;
+        }
+        payload.fechaCierreCotizacion = quoteCloseDate;
+      }
+
+      if (meta.requirePurchaseOrderFields) {
+        const poDate = modalEl.querySelector('#tc-modal-po-date')?.value?.trim() || '';
+        const deliveryDate = modalEl.querySelector('#tc-modal-delivery-date')?.value?.trim() || '';
+        const poAmountRaw = Number(modalEl.querySelector('#tc-modal-po-amount')?.value || 0);
+        if (!poDate) {
+          errEl.hidden = false;
+          errEl.textContent = 'Debes informar la fecha en que generaste la Orden de Compra.';
+          return;
+        }
+        if (!deliveryDate) {
+          errEl.hidden = false;
+          errEl.textContent = 'Debes definir la fecha estimada de entrega.';
+          return;
+        }
+        if (!Number.isFinite(poAmountRaw) || poAmountRaw <= 0) {
+          errEl.hidden = false;
+          errEl.textContent = 'Debes ingresar un monto válido de Orden de Compra mayor a $0.00 MXN.';
+          return;
+        }
+        payload.fechaOrdenCompra = poDate;
+        payload.fechaEntregaEstimada = deliveryDate;
+        payload.montoOrdenCompra = poAmountRaw;
+      }
+
       submitBtn.disabled = true;
       submitBtn.textContent = 'Procesando…';
       errEl.hidden = true;
       try {
+        if (meta.requireQuoteAttachment) {
+          const fileEl = modalEl.querySelector('#tc-modal-quote-file');
+          const file = fileEl?.files?.[0];
+          if (!file) {
+            throw new Error('Debes adjuntar el archivo de cotizaciones para compras mayores a $3,000.00 MXN.');
+          }
+          submitBtn.textContent = 'Subiendo cotizaciones…';
+          const up = await uploadTusCompraAttachment(file, listData.csrfToken || ctx.csrfToken, signal);
+          payload.adjuntoCotizacionesAdm = up?.url || '';
+          submitBtn.textContent = 'Procesando…';
+        }
+
         const res = await transitionTusCompra(
-          { id: order.id, event: eventCode, comment: commentVal },
+          payload,
           listData.csrfToken || ctx.csrfToken,
           signal
         );
@@ -672,6 +893,7 @@ async function renderListView(container, ctx, kind, controller) {
     const order = items.find(x => x.id === orderId);
     if (!order) return;
     const history = Array.isArray(order.history) ? order.history : [];
+    const attachmentsHtml = renderAttachmentsLinks(order);
 
     modalEl.innerHTML = `
       <div>
@@ -682,13 +904,19 @@ async function renderListView(container, ctx, kind, controller) {
         <table style="width:100%;border-collapse:collapse;font-size:13.5px;margin:12px 0;">
           <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Estado Actual</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.estado)}</td></tr>
           <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Solicitante / Área</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.solicitante)} (${escapeHtml(order.correo)}) · ${escapeHtml(order.area)}</td></tr>
-          <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Tipo y Monto</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.tipo)} · ${formatCurrency(order.monto)} (Acumulado área: ${formatCurrency(order.acumuladoMesArea)})</td></tr>
+          <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Tipo y Monto Válido</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.tipo)} · <strong>${formatCurrency(order.monto)}</strong> (Acumulado mes área: ${formatCurrency(order.acumuladoMesArea)} / $8,000.00 MXN)</td></tr>
+          <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Monto Estimado (Usuario)</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${formatCurrency(order.montoEstimado || order.monto)}</td></tr>
+          ${Number(order.montoOrdenCompra || 0) > 0 ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#0f766e;">Monto Orden de Compra (Ajustado)</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#0f766e;">${formatCurrency(order.montoOrdenCompra)} (Único válido descontado de presupuesto)</td></tr>` : ''}
           <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Artículos</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.descripcion)}</td></tr>
           ${order.justificacion ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Justificación</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.justificacion)}</td></tr>` : ''}
+          ${order.fechaCierreCotizacion ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Fecha est. cierre cotizaciones</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.fechaCierreCotizacion)}</td></tr>` : ''}
+          ${order.fechaRecepcionCotizacion ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Fecha recepción cotizaciones</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.fechaRecepcionCotizacion)}</td></tr>` : ''}
+          ${order.fechaOrdenCompra ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Fecha generación Orden de Compra</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.fechaOrdenCompra)}</td></tr>` : ''}
+          ${order.fechaEntregaEstimada ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Fecha estimada de entrega</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.fechaEntregaEstimada)}</td></tr>` : ''}
           ${order.aprobador ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Aprobador</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.aprobador)} ${order.fechaAprobacion ? `(${escapeHtml(order.fechaAprobacion)})` : ''}</td></tr>` : ''}
           ${order.comentarioAprobacion ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Nota Aprobación</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.comentarioAprobacion)}</td></tr>` : ''}
           ${order.evaluacion ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Evaluación Recepción</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.evaluacion)} ${order.comentarioRecepcion ? `— ${escapeHtml(order.comentarioRecepcion)}` : ''}</td></tr>` : ''}
-          ${order.adjuntos ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Adjuntos</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;"><a href="${escapeHtml(order.adjuntos)}" target="_blank" rel="noopener noreferrer">Ver archivo adjunto</a></td></tr>` : ''}
+          ${attachmentsHtml ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Archivos Adjuntos</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${attachmentsHtml}</td></tr>` : ''}
         </table>
 
         <h4 style="margin:14px 0 8px;color:#0f172a;">Bitácora de Trazabilidad</h4>
@@ -794,7 +1022,7 @@ async function renderExecutiveDashboardView(container, ctx, controller) {
           Tipo de compra
           <select name="tipo" style="padding:7px 10px;border:1px solid #cbd5e1;border-radius:6px;">
             <option value="">Todos (OPEX + CAPEX)</option>
-            <option value="OPEX">Solo OPEX (≤ $10,000 directo / exceso)</option>
+            <option value="OPEX">Solo OPEX (≤ $8,000 directo / exceso)</option>
             <option value="CAPEX">Solo CAPEX (Inversión)</option>
           </select>
         </label>
@@ -820,6 +1048,7 @@ async function renderExecutiveDashboardView(container, ctx, controller) {
     const order = allItems.find(x => x.id === orderId);
     if (!order) return;
     const history = Array.isArray(order.history) ? order.history : [];
+    const attachmentsHtml = renderAttachmentsLinks(order);
     modalEl.innerHTML = `
       <div>
         <div>
@@ -829,9 +1058,16 @@ async function renderExecutiveDashboardView(container, ctx, controller) {
         <table style="width:100%;border-collapse:collapse;font-size:13.5px;margin:12px 0;">
           <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Estado Actual</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.estado)}</td></tr>
           <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Solicitante / Área</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.solicitante)} (${escapeHtml(order.correo)}) · ${escapeHtml(order.area)}</td></tr>
-          <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Tipo y Monto</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.tipo)} · ${formatCurrency(order.monto)} (Acumulado área: ${formatCurrency(order.acumuladoMesArea)})</td></tr>
+          <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Tipo y Monto Válido</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.tipo)} · <strong>${formatCurrency(order.monto)}</strong> (Acumulado mes área: ${formatCurrency(order.acumuladoMesArea)} / $8,000.00 MXN)</td></tr>
+          <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Monto Estimado (Usuario)</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${formatCurrency(order.montoEstimado || order.monto)}</td></tr>
+          ${Number(order.montoOrdenCompra || 0) > 0 ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#0f766e;">Monto Orden de Compra (Ajustado)</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#0f766e;">${formatCurrency(order.montoOrdenCompra)} (Único válido descontado de presupuesto)</td></tr>` : ''}
           <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Artículos</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.descripcion)}</td></tr>
+          ${order.fechaCierreCotizacion ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Fecha est. cierre cotizaciones</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.fechaCierreCotizacion)}</td></tr>` : ''}
+          ${order.fechaRecepcionCotizacion ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Fecha recepción cotizaciones</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.fechaRecepcionCotizacion)}</td></tr>` : ''}
+          ${order.fechaOrdenCompra ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Fecha generación Orden de Compra</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.fechaOrdenCompra)}</td></tr>` : ''}
+          ${order.fechaEntregaEstimada ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Fecha estimada de entrega</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.fechaEntregaEstimada)}</td></tr>` : ''}
           ${order.aprobador ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Aprobación</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.aprobador)} ${order.fechaAprobacion ? `(${escapeHtml(order.fechaAprobacion)})` : ''}</td></tr>` : ''}
+          ${attachmentsHtml ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Archivos Adjuntos</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${attachmentsHtml}</td></tr>` : ''}
         </table>
         <h4 style="margin:14px 0 8px;color:#0f172a;">Bitácora de Trazabilidad</h4>
         ${
@@ -898,6 +1134,9 @@ async function renderExecutiveDashboardView(container, ctx, controller) {
       TUS_COMPRAS_STATES.ENVIADA,
       TUS_COMPRAS_STATES.EN_APROBACION,
       TUS_COMPRAS_STATES.EN_PROCESO,
+      TUS_COMPRAS_STATES.EN_COTIZACION,
+      TUS_COMPRAS_STATES.COTIZACIONES_RECIBIDAS,
+      TUS_COMPRAS_STATES.OC_GENERADA,
       TUS_COMPRAS_STATES.RECIBIDOS_ADM,
       TUS_COMPRAS_STATES.ENTREGADA,
       TUS_COMPRAS_STATES.CONFORME,
@@ -1052,8 +1291,8 @@ async function renderExecutiveDashboardView(container, ctx, controller) {
       <!-- Segunda Fila: Ejecución Presupuestaria Mensual OPEX por Área + Backlog de Daniel Lara -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px;margin-bottom:18px;">
         <section style="background:#ffffff;border:1px solid #cbd5e1;border-radius:10px;padding:18px;">
-          <h2 style="margin:0 0 6px;font-size:16px;color:#1e3a8a;">💰 Consumo Mensual OPEX por Área vs. Tope ($10,000 MXN)</h2>
-          <p style="margin:0 0 14px;font-size:12.5px;color:#475569;">Monitoreo del límite mensual de $10,000.00 MXN por área solicitante (sobre el cual los pedidos pasan automáticamente a 2b En aprobación).</p>
+          <h2 style="margin:0 0 6px;font-size:16px;color:#1e3a8a;">💰 Consumo Mensual OPEX por Área vs. Tope ($8,000 MXN)</h2>
+          <p style="margin:0 0 14px;font-size:12.5px;color:#475569;">Monitoreo del límite mensual de $8,000.00 MXN por área solicitante (descontando el monto único válido ajustado en la Orden de Compra).</p>
           ${
             m.areaBudgets.length
               ? m.areaBudgets

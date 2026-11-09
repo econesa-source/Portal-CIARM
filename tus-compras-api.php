@@ -195,6 +195,19 @@ try {
         $descripcion = trim((string)($input['descripcion'] ?? ''));
         $justificacion = trim((string)($input['justificacion'] ?? ''));
         $adjuntos = trim((string)($input['adjuntos'] ?? ''));
+        $adjuntoDetalle = trim((string)($input['adjuntoDetalle'] ?? ''));
+        $adjuntoCotPrelim = trim((string)($input['adjuntoCotizacionPreliminar'] ?? ''));
+
+        $adjParts = [];
+        if ($adjuntoDetalle !== '') {
+            $adjParts[] = 'DETALLE: ' . $adjuntoDetalle;
+        }
+        if ($adjuntoCotPrelim !== '') {
+            $adjParts[] = 'COTIZACION_PRELIMINAR: ' . $adjuntoCotPrelim;
+        }
+        if ($adjuntos === '' && count($adjParts) > 0) {
+            $adjuntos = implode(' | ', $adjParts);
+        }
 
         if ($monto <= 0 || $monto > 10000000 || strlen($descripcion) < 5 || strlen($descripcion) > 2000) {
             ciarm_json_response(422, ['ok' => false, 'code' => 'VALIDATION']);
@@ -218,13 +231,16 @@ try {
             'area' => $area,
             'tipo' => $tipo,
             'monto' => $monto,
+            'montoEstimado' => $monto,
+            'montoOrdenCompra' => 0.0,
+            'requiereCotizacion' => $monto > CIARM_TUS_COMPRAS_QUOTE_THRESHOLD,
             'acumuladoMesArea' => $eval['projectedAreaMonthlyOpex'],
             'requiereAprobacion' => $eval['requiresApproval'],
             'descripcion' => $descripcion,
             'justificacion' => $justificacion,
             'estado' => $initialState,
             'responsableAdm' => 'Daniel Lara',
-            'aprobador' => $eval['requiresApproval'] ? 'En aprobación (Administración)' : 'No requiere (Opex ≤ $10,000)',
+            'aprobador' => $eval['requiresApproval'] ? 'En aprobación (Administración)' : 'No requiere (Opex ≤ $8,000)',
             'fechaAprobacion' => '',
             'comentarioAprobacion' => '',
             'fechaRecepcionAdm' => '',
@@ -232,13 +248,20 @@ try {
             'evaluacion' => '',
             'comentarioRecepcion' => '',
             'adjuntos' => $adjuntos,
+            'adjuntoDetalle' => $adjuntoDetalle,
+            'adjuntoCotizacionPreliminar' => $adjuntoCotPrelim,
+            'adjuntoCotizacionesAdm' => '',
+            'fechaCierreCotizacion' => '',
+            'fechaRecepcionCotizacion' => '',
+            'fechaOrdenCompra' => '',
+            'fechaEntregaEstimada' => '',
             'ultimaActualizacion' => $nowFull,
             'version' => 'v1',
         ];
 
         $rowValues = ciarm_tus_compras_order_to_row($newOrder);
         $appendPedidoUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($store['sheetId'])
-            . '/values/' . rawurlencode("'PEDIDOS'!A:X") . ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS';
+            . '/values/' . rawurlencode("'PEDIDOS'!A:AF") . ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS';
         $appendRes = ciarm_http_json($appendPedidoUrl, [
             'post' => true,
             'headers' => [
@@ -269,8 +292,8 @@ try {
             $eval['requiresApproval']
                 ? ($tipo === 'CAPEX'
                     ? 'Pedido Capex enviado y pasado automáticamente a 2b) En aprobación.'
-                    : 'Pedido Opex supera tope mensual permitido ($10,000 MXN del área); pasa automáticamente a 2b) En aprobación.')
-                : 'Pedido Opex dentro de presupuesto mensual del área (≤ $10,000 MXN).',
+                    : 'Pedido Opex supera tope mensual permitido ($8,000 MXN del área); pasa automáticamente a 2b) En aprobación.')
+                : 'Pedido Opex dentro de presupuesto mensual del área (≤ $8,000 MXN).',
             (string)($notif['status'] ?? 'ENVIADO'),
         ];
 
@@ -315,7 +338,7 @@ try {
             ciarm_json_response(404, ['ok' => false, 'code' => 'NOT_FOUND']);
         }
 
-        $transition = ciarm_tus_compras_validate_transition($target, $event, $access, $comment);
+        $transition = ciarm_tus_compras_validate_transition($target, $event, $access, $comment, $input);
         $prevState = (string)$target['estado'];
         $newState = (string)$transition['newState'];
 
@@ -324,7 +347,7 @@ try {
         $verNum = (int)preg_replace('/\D/', '', (string)($target['version'] ?? 'v1')) ?: 1;
         $target['version'] = 'v' . ($verNum + 1);
 
-        if ($adjuntoExtra !== '') {
+        if ($adjuntoExtra !== '' && $event !== 'RECEIVE_QUOTES') {
             $target['adjuntos'] = $target['adjuntos'] !== ''
                 ? ($target['adjuntos'] . ' | ' . $adjuntoExtra)
                 : $adjuntoExtra;
@@ -345,6 +368,46 @@ try {
             $target['aprobador'] = (string)$access['nombre'] . ' (' . $access['correo'] . ')';
             $target['fechaAprobacion'] = $nowFull;
             $target['comentarioAprobacion'] = $comment;
+        } elseif ($event === 'START_QUOTING') {
+            $target['fechaCierreCotizacion'] = trim((string)($input['fechaCierreCotizacion'] ?? ''));
+            if ($comment === '') {
+                $comment = 'En proceso de cotización · Fecha estimada de cierre: ' . $target['fechaCierreCotizacion'];
+            }
+        } elseif ($event === 'RECEIVE_QUOTES') {
+            $target['fechaRecepcionCotizacion'] = $nowFull;
+            $cotUrl = trim((string)($input['adjuntoCotizacionesAdm'] ?? $adjuntoExtra));
+            if ($cotUrl !== '') {
+                $target['adjuntoCotizacionesAdm'] = !empty($target['adjuntoCotizacionesAdm'])
+                    ? ($target['adjuntoCotizacionesAdm'] . ' | ' . $cotUrl)
+                    : $cotUrl;
+                $target['adjuntos'] = !empty($target['adjuntos'])
+                    ? ($target['adjuntos'] . ' | COTIZACIONES_ADM: ' . $cotUrl)
+                    : ('COTIZACIONES_ADM: ' . $cotUrl);
+            }
+            if ($comment === '') {
+                $comment = 'Cotizaciones recibidas y adjuntadas al expediente.';
+            }
+        } elseif ($event === 'ISSUE_PURCHASE_ORDER') {
+            $target['fechaOrdenCompra'] = trim((string)($input['fechaOrdenCompra'] ?? ''));
+            $target['fechaEntregaEstimada'] = trim((string)($input['fechaEntregaEstimada'] ?? ''));
+            $montoOC = round((float)($input['montoOrdenCompra'] ?? 0), 2);
+            $montoEstPrev = (float)($target['montoEstimado'] ?? ($target['monto'] ?? 0));
+            $target['montoEstimado'] = $montoEstPrev;
+            $target['montoOrdenCompra'] = $montoOC;
+            $target['monto'] = $montoOC; // Único monto válido descontado del presupuesto mensual del área
+            $orderYm = ciarm_tus_compras_extract_year_month((string)($target['fecha'] ?? ''));
+            $otherAreaOpex = ciarm_tus_compras_area_monthly_opex($pedidos, (string)($target['area'] ?? ''), $orderYm, $id);
+            $target['acumuladoMesArea'] = strtoupper((string)($target['tipo'] ?? 'OPEX')) === 'OPEX'
+                ? round($otherAreaOpex + $montoOC, 2)
+                : round($otherAreaOpex, 2);
+            $autoNote = sprintf(
+                'Orden de Compra generada (%s) · Entrega est.: %s · Monto OC válido: $%s MXN (Estimado inicial: $%s MXN)',
+                $target['fechaOrdenCompra'],
+                $target['fechaEntregaEstimada'],
+                number_format($montoOC, 2, '.', ','),
+                number_format($montoEstPrev, 2, '.', ',')
+            );
+            $comment = $comment !== '' ? ($comment . ' — ' . $autoNote) : $autoNote;
         } elseif ($event === 'RECEIVE_ITEMS_ADM') {
             $target['fechaRecepcionAdm'] = $nowFull;
         } elseif ($event === 'DELIVER_TO_REQUESTER') {
@@ -360,7 +423,7 @@ try {
         }
 
         $rowNum = (int)$target['rowNumber'];
-        $rowRange = "'PEDIDOS'!A{$rowNum}:X{$rowNum}";
+        $rowRange = "'PEDIDOS'!A{$rowNum}:AF{$rowNum}";
         $rowValues = ciarm_tus_compras_order_to_row($target);
 
         // Usamos values:batchUpdate (POST) para no depender de PUT en curl
@@ -445,6 +508,12 @@ try {
     $statusMap = [
         'VALIDATION' => 422,
         'COMMENT_REQUIRED' => 422,
+        'QUOTE_CLOSE_DATE_REQUIRED' => 422,
+        'QUOTE_ATTACHMENT_REQUIRED' => 422,
+        'PO_DATE_REQUIRED' => 422,
+        'ESTIMATED_DELIVERY_DATE_REQUIRED' => 422,
+        'PO_AMOUNT_REQUIRED' => 422,
+        'QUOTATION_FLOW_REQUIRED' => 409,
         'INVALID_TRANSITION' => 409,
         'INVALID_TRANSITION_STATE_3' => 409,
         'REQUIRES_CAPEX_APPROVAL' => 409,

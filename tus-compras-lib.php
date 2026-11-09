@@ -17,13 +17,17 @@ const CIARM_TUS_COMPRAS_STAGING_SHEET_ID = '1b2DOU0iY7yw-93NEHDIZKhfZNTBirZiPMMb
 const CIARM_TUS_COMPRAS_PROD_SHEET_ID = '1q6mwmL-9JiNGk3TJZoJ1sJZiaR3AOO4OLEGiJuKQraQ';
 const CIARM_TUS_COMPRAS_STAGING_WEBAPP = 'https://script.google.com/macros/s/AKfycbw01gXyUlNRqMBLGeMfkys8HNGJlnYnrMHGb76_LrnG1-atYM43vEOEQdmimPkUHyhb/exec';
 const CIARM_TUS_COMPRAS_PROD_WEBAPP = 'https://script.google.com/macros/s/AKfycbw01gXyUlNRqMBLGeMfkys8HNGJlnYnrMHGb76_LrnG1-atYM43vEOEQdmimPkUHyhb/exec';
-const CIARM_TUS_COMPRAS_OPEX_LIMIT = 10000.0;
+const CIARM_TUS_COMPRAS_OPEX_LIMIT = 8000.0;
+const CIARM_TUS_COMPRAS_QUOTE_THRESHOLD = 3000.0;
 const CIARM_TUS_COMPRAS_ADMIN_EMAIL = 'd.lara@ciarm.edu.mx';
 const CIARM_TUS_COMPRAS_APPROVER_EMAILS = ['e.conesa@ciarm.edu.mx'];
 
 const CIARM_TUS_COMPRAS_STATE_ENVIADA = '1) Solicitud enviada';
 const CIARM_TUS_COMPRAS_STATE_EN_PROCESO = '2a) Solicitud recibida / En proceso';
+const CIARM_TUS_COMPRAS_STATE_EN_COTIZACION = '2a-1) En cotización';
+const CIARM_TUS_COMPRAS_STATE_COTIZACIONES_RECIBIDAS = '2a-2) Cotizaciones recibidas';
 const CIARM_TUS_COMPRAS_STATE_EN_APROBACION = '2b) En aprobación';
+const CIARM_TUS_COMPRAS_STATE_OC_GENERADA = '2c) Orden de Compra generada';
 const CIARM_TUS_COMPRAS_STATE_APROBADA = '2c) Aprobada / En curso';
 const CIARM_TUS_COMPRAS_STATE_RECHAZADA = '2d) Rechazada';
 const CIARM_TUS_COMPRAS_STATE_RECIBIDOS_ADM = '3) Artículos Recibidos en Adm.';
@@ -34,7 +38,10 @@ const CIARM_TUS_COMPRAS_STATE_DISCONFORME = '5) Recepción Disconforme';
 const CIARM_TUS_COMPRAS_STATES = [
     CIARM_TUS_COMPRAS_STATE_ENVIADA,
     CIARM_TUS_COMPRAS_STATE_EN_PROCESO,
+    CIARM_TUS_COMPRAS_STATE_EN_COTIZACION,
+    CIARM_TUS_COMPRAS_STATE_COTIZACIONES_RECIBIDAS,
     CIARM_TUS_COMPRAS_STATE_EN_APROBACION,
+    CIARM_TUS_COMPRAS_STATE_OC_GENERADA,
     CIARM_TUS_COMPRAS_STATE_APROBADA,
     CIARM_TUS_COMPRAS_STATE_RECHAZADA,
     CIARM_TUS_COMPRAS_STATE_RECIBIDOS_ADM,
@@ -68,6 +75,14 @@ const CIARM_TUS_COMPRAS_PEDIDOS_HEADERS = [
     'ARCHIVOS ADJUNTOS',
     'ÚLTIMA ACTUALIZACIÓN',
     'VERSIÓN',
+    'MONTO ORDEN COMPRA',
+    'FECHA CIERRE COTIZACIÓN EST.',
+    'FECHA RECEPCIÓN COTIZACIÓN',
+    'FECHA ORDEN COMPRA',
+    'FECHA ENTREGA ESTIMADA',
+    'ADJUNTO DETALLE PEDIDO',
+    'ADJUNTO COTIZACIÓN PRELIMINAR',
+    'ADJUNTO COTIZACIONES ADM',
 ];
 
 const CIARM_TUS_COMPRAS_BITACORA_HEADERS = [
@@ -389,7 +404,7 @@ function ciarm_tus_compras_ensure_schema(?string $spreadsheetId = null, ?string 
         }
     }
 
-    $ranges = ["'PEDIDOS'!A1:X1", "'BITACORA PEDIDOS'!A1:M1", "'CONFIG COMPRAS'!A1:E5"];
+    $ranges = ["'PEDIDOS'!A1:AF1", "'BITACORA PEDIDOS'!A1:M1", "'CONFIG COMPRAS'!A1:E5"];
     $query = implode('&', array_map(static fn($r) => 'ranges=' . rawurlencode($r), $ranges));
     $getRes = ciarm_http_json(
         'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId) . '/values:batchGet?' . $query,
@@ -403,9 +418,9 @@ function ciarm_tus_compras_ensure_schema(?string $spreadsheetId = null, ?string 
     $updates = [];
 
     $pedidosRow1 = $valueRanges[0]['values'][0] ?? [];
-    if ($pedidosRow1 === [] || trim((string)($pedidosRow1[0] ?? '')) !== 'ID PEDIDO') {
+    if ($pedidosRow1 === [] || trim((string)($pedidosRow1[0] ?? '')) !== 'ID PEDIDO' || count($pedidosRow1) < count(CIARM_TUS_COMPRAS_PEDIDOS_HEADERS)) {
         $updates[] = [
-            'range' => "'PEDIDOS'!A1:X1",
+            'range' => "'PEDIDOS'!A1:AF1",
             'values' => [CIARM_TUS_COMPRAS_PEDIDOS_HEADERS],
         ];
     }
@@ -422,12 +437,13 @@ function ciarm_tus_compras_ensure_schema(?string $spreadsheetId = null, ?string 
     if ($configRows === [] || trim((string)($configRows[0][0] ?? '')) !== 'CLAVE') {
         $now = gmdate('Y-m-d H:i:s', time() - 5 * 3600);
         $updates[] = [
-            'range' => "'CONFIG COMPRAS'!A1:E4",
+            'range' => "'CONFIG COMPRAS'!A1:E5",
             'values' => [
                 CIARM_TUS_COMPRAS_CONFIG_HEADERS,
-                ['TOPE_OPEX_MENSUAL_AREA', '10000', 'Tope mensual acumulado Opex por área solicitante (MXN)', 'sistema', $now],
+                ['TOPE_OPEX_MENSUAL_AREA', '8000', 'Tope mensual acumulado Opex por área solicitante (MXN)', 'sistema', $now],
+                ['UMBRAL_COTIZACION_OBLIGATORIA', '3000', 'Umbral (> $3,000 MXN) que exige proceso de cotización', 'sistema', $now],
                 ['ADMIN_COMPRAS_EMAIL', CIARM_TUS_COMPRAS_ADMIN_EMAIL, 'Encargado de Administración (Compras)', 'sistema', $now],
-                ['APROBADOR_CAPEX_EMAIL', implode(',', CIARM_TUS_COMPRAS_APPROVER_EMAILS), 'Aprobador de Capex y excesos > $10,000 MXN', 'sistema', $now],
+                ['APROBADOR_CAPEX_EMAIL', implode(',', CIARM_TUS_COMPRAS_APPROVER_EMAILS), 'Aprobador de Capex y excesos > $8,000 MXN', 'sistema', $now],
             ],
         ];
     }
@@ -457,7 +473,7 @@ function ciarm_tus_compras_fetch_all(?string $spreadsheetId = null): array {
     $token = ciarm_tus_compras_sheets_token();
     ciarm_tus_compras_ensure_schema($sheetId, $token);
 
-    $ranges = ["'PEDIDOS'!A1:X2000", "'BITACORA PEDIDOS'!A1:M5000", "'CONFIG COMPRAS'!A1:E20"];
+    $ranges = ["'PEDIDOS'!A1:AF2000", "'BITACORA PEDIDOS'!A1:M5000", "'CONFIG COMPRAS'!A1:E20"];
     $query = implode('&', array_map(static fn($r) => 'ranges=' . rawurlencode($r), $ranges));
     $url = 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId)
         . '/values:batchGet?' . $query . '&valueRenderOption=FORMATTED_VALUE';
@@ -522,9 +538,14 @@ function ciarm_tus_compras_parse_pedidos(array $rows): array {
         $fecha = $get($row, 'FECHA SOLICITUD');
         $area = $get($row, 'ÁREA SOLICITANTE');
         $tipo = strtoupper($get($row, 'TIPO COMPRA')) === 'CAPEX' ? 'CAPEX' : 'OPEX';
-        $montoRaw = str_replace([',', '$', ' '], '', $get($row, 'MONTO ESTIMADO'));
+        $montoEstRaw = str_replace([',', '$', ' '], '', $get($row, 'MONTO ESTIMADO'));
+        $montoOCRaw = str_replace([',', '$', ' '], '', $get($row, 'MONTO ORDEN COMPRA'));
         $acumRaw = str_replace([',', '$', ' '], '', $get($row, 'ACUMULADO MES ÁREA'));
-        $monto = round((float)$montoRaw, 2);
+        $montoEstimado = round((float)$montoEstRaw, 2);
+        $montoOrdenCompra = round((float)$montoOCRaw, 2);
+        // Regla presupuestal: cuando Daniel genera la Orden de Compra y ajusta el monto,
+        // dicho montoOrdenCompra es el único monto válido a descontar del presupuesto mensual del área.
+        $montoEfectivo = $montoOrdenCompra > 0 ? $montoOrdenCompra : $montoEstimado;
         $storedAcum = round((float)$acumRaw, 2);
         $rawEstado = $get($row, 'ESTADO');
 
@@ -533,19 +554,25 @@ function ciarm_tus_compras_parse_pedidos(array $rows): array {
         $bucketKey = $normArea . '|' . $ym;
 
         if ($tipo === 'OPEX' && $rawEstado !== CIARM_TUS_COMPRAS_STATE_RECHAZADA) {
-            $runningOpexByAreaMonth[$bucketKey] = round(($runningOpexByAreaMonth[$bucketKey] ?? 0.0) + $monto, 2);
+            $runningOpexByAreaMonth[$bucketKey] = round(($runningOpexByAreaMonth[$bucketKey] ?? 0.0) + $montoEfectivo, 2);
         }
         $runningAreaOpex = $runningOpexByAreaMonth[$bucketKey] ?? 0.0;
-        $acumuladoMesArea = $tipo === 'OPEX' ? max($storedAcum, $runningAreaOpex, $monto) : max($storedAcum, $runningAreaOpex);
+        if ($tipo === 'OPEX') {
+            $acumuladoMesArea = $montoOrdenCompra > 0
+                ? max($runningAreaOpex, $montoEfectivo)
+                : max($storedAcum, $runningAreaOpex, $montoEfectivo);
+        } else {
+            $acumuladoMesArea = max($storedAcum, $runningAreaOpex);
+        }
 
         $reqNorm = ciarm_tus_compras_normalize_token($get($row, 'REQUIERE APROBACIÓN'));
         $requiresApproval = ($tipo === 'CAPEX')
-            || ($tipo === 'OPEX' && $monto > CIARM_TUS_COMPRAS_OPEX_LIMIT)
+            || ($tipo === 'OPEX' && $montoEfectivo > CIARM_TUS_COMPRAS_OPEX_LIMIT)
             || ($tipo === 'OPEX' && $acumuladoMesArea > CIARM_TUS_COMPRAS_OPEX_LIMIT)
             || ($reqNorm === 'si');
 
         // Regla estricta de asignación de estado:
-        // Si es CAPEX o si siendo OPEX excede el límite mensual de $10,000 MXN del área,
+        // Si es CAPEX o si siendo OPEX excede el límite mensual de $8,000 MXN del área,
         // NUNCA debe quedar en "1) Solicitud enviada", sino en "2b) En aprobación".
         $estado = $rawEstado !== '' ? $rawEstado : CIARM_TUS_COMPRAS_STATE_ENVIADA;
         $needsStateSync = false;
@@ -553,11 +580,19 @@ function ciarm_tus_compras_parse_pedidos(array $rows): array {
             $estado = CIARM_TUS_COMPRAS_STATE_EN_APROBACION;
             $needsStateSync = true;
         }
+        if ($montoOrdenCompra > 0 && abs($storedAcum - $acumuladoMesArea) > 0.009) {
+            $needsStateSync = true;
+        }
 
         $aprobador = $get($row, 'APROBADOR');
         if ($requiresApproval && ($aprobador === '' || str_starts_with($aprobador, 'No requiere'))) {
             $aprobador = 'En aprobación (Administración)';
         }
+
+        $adjuntoDetalle = $get($row, 'ADJUNTO DETALLE PEDIDO');
+        $adjuntoCotPrelim = $get($row, 'ADJUNTO COTIZACIÓN PRELIMINAR');
+        $adjuntoCotAdm = $get($row, 'ADJUNTO COTIZACIONES ADM');
+        $rawAdjuntos = $get($row, 'ARCHIVOS ADJUNTOS');
 
         $list[] = [
             'rowNumber' => $i + 1,
@@ -568,7 +603,10 @@ function ciarm_tus_compras_parse_pedidos(array $rows): array {
             'correo' => strtolower($get($row, 'CORREO SOLICITANTE')),
             'area' => $area,
             'tipo' => $tipo,
-            'monto' => $monto,
+            'monto' => $montoEfectivo,
+            'montoEstimado' => $montoEstimado,
+            'montoOrdenCompra' => $montoOrdenCompra,
+            'requiereCotizacion' => $montoEstimado > CIARM_TUS_COMPRAS_QUOTE_THRESHOLD,
             'acumuladoMesArea' => $acumuladoMesArea,
             'requiereAprobacion' => $requiresApproval,
             'descripcion' => $get($row, 'ARTÍCULOS / DESCRIPCIÓN'),
@@ -582,7 +620,14 @@ function ciarm_tus_compras_parse_pedidos(array $rows): array {
             'fechaEntrega' => $get($row, 'FECHA ENTREGA'),
             'evaluacion' => $get($row, 'EVALUACIÓN SOLICITANTE'),
             'comentarioRecepcion' => $get($row, 'COMENTARIO RECEPCIÓN'),
-            'adjuntos' => $get($row, 'ARCHIVOS ADJUNTOS'),
+            'adjuntos' => $rawAdjuntos,
+            'adjuntoDetalle' => $adjuntoDetalle,
+            'adjuntoCotizacionPreliminar' => $adjuntoCotPrelim,
+            'adjuntoCotizacionesAdm' => $adjuntoCotAdm,
+            'fechaCierreCotizacion' => $get($row, 'FECHA CIERRE COTIZACIÓN EST.'),
+            'fechaRecepcionCotizacion' => $get($row, 'FECHA RECEPCIÓN COTIZACIÓN'),
+            'fechaOrdenCompra' => $get($row, 'FECHA ORDEN COMPRA'),
+            'fechaEntregaEstimada' => $get($row, 'FECHA ENTREGA ESTIMADA'),
             'ultimaActualizacion' => $get($row, 'ÚLTIMA ACTUALIZACIÓN'),
             'version' => $get($row, 'VERSIÓN') ?: 'v1',
             '_needsStateSync' => $needsStateSync,
@@ -599,7 +644,7 @@ function ciarm_tus_compras_sync_normalized_orders(array $pedidos, string $sheetI
         }
         $rowNum = (int)$p['rowNumber'];
         $data[] = [
-            'range' => "'PEDIDOS'!A{$rowNum}:X{$rowNum}",
+            'range' => "'PEDIDOS'!A{$rowNum}:AF{$rowNum}",
             'values' => [ciarm_tus_compras_order_to_row($p)],
         ];
     }
@@ -669,15 +714,17 @@ function ciarm_tus_compras_area_monthly_opex(array $pedidos, string $area, strin
         if ($pArea !== $normArea) continue;
         $pMonth = ciarm_tus_compras_extract_year_month((string)($p['fecha'] ?? ''));
         if ($pMonth !== $yearMonth) continue;
-        $sum += (float)($p['monto'] ?? 0);
+        $montoOC = (float)($p['montoOrdenCompra'] ?? 0);
+        $montoEst = (float)($p['montoEstimado'] ?? ($p['monto'] ?? 0));
+        $sum += ($montoOC > 0 ? $montoOC : $montoEst);
     }
     return round($sum, 2);
 }
 
 /**
- * Determina si un pedido supera los límites permitidos o es Capex:
+ * Determina si un pedido supera los límites permitidos ($8,000 MXN mensuales OPEX) o es Capex:
  * - Si requiere aprobación, el estado inicial al enviarse pasa AUTOMÁTICAMENTE a '2b) En aprobación'.
- * - Si es Opex dentro del límite (<= $10,000 MXN acumulados en el mes para el área), nace en '1) Solicitud enviada'.
+ * - Si es Opex dentro del límite (<= $8,000 MXN acumulados en el mes para el área), nace en '1) Solicitud enviada'.
  */
 function ciarm_tus_compras_requires_approval(string $tipo, float $monto, float $currentAreaMonthlyOpex, float $limit = CIARM_TUS_COMPRAS_OPEX_LIMIT): array {
     $tipoNorm = strtoupper(trim($tipo)) === 'CAPEX' ? 'CAPEX' : 'OPEX';
@@ -686,12 +733,15 @@ function ciarm_tus_compras_requires_approval(string $tipo, float $monto, float $
         : round($currentAreaMonthlyOpex, 2);
     $exceedsOpexLimit = ($tipoNorm === 'OPEX' && $projectedAreaTotal > $limit);
     $requires = ($tipoNorm === 'CAPEX') || $exceedsOpexLimit;
+    $requiresQuotation = round($monto, 2) > CIARM_TUS_COMPRAS_QUOTE_THRESHOLD;
     return [
         'tipo' => $tipoNorm,
         'monto' => round($monto, 2),
         'currentAreaMonthlyOpex' => round($currentAreaMonthlyOpex, 2),
         'projectedAreaMonthlyOpex' => $projectedAreaTotal,
         'opexLimit' => $limit,
+        'quoteThreshold' => CIARM_TUS_COMPRAS_QUOTE_THRESHOLD,
+        'requiresQuotation' => $requiresQuotation,
         'exceedsOpexLimit' => $exceedsOpexLimit,
         'requiresApproval' => $requires,
         'initialState' => $requires ? CIARM_TUS_COMPRAS_STATE_EN_APROBACION : CIARM_TUS_COMPRAS_STATE_ENVIADA,
@@ -700,16 +750,23 @@ function ciarm_tus_compras_requires_approval(string $tipo, float $monto, float $
 
 /**
  * Máquina de estados de "Tus compras":
- * - Los pedidos que superan el límite o son Capex pasan automáticamente a '2b) En aprobación' al crearse.
+ * - Los pedidos que superan el límite de $8,000 MXN o son Capex pasan automáticamente a '2b) En aprobación' al crearse.
  * - Cuando el autorizador (perfil "administración" en AG y AJ) aprueba un ticket en '2b) En aprobación',
  *   pasa al estado '2a) Solicitud recibida / En proceso' (registrando la aprobación en bitácora).
  * - Si el autorizador lo rechaza desde '2b) En aprobación', pasa a '2d) Rechazada'.
- * - Los pedidos Opex dentro del límite nacen en '1) Solicitud enviada' y Administración los pasa a '2a) Solicitud recibida / En proceso'.
- * - Solo '2a) Solicitud recibida / En proceso' (y '2c) Aprobada / En curso' por compatibilidad) pueden avanzar a '3) Artículos Recibidos en Adm.'.
+ * - Una vez listo para gestión de Daniel Lara (en '1) Solicitud enviada' si es OPEX <= $8,000 o en '2a) Solicitud recibida / En proceso'):
+ *   * Si el pedido es <= $3,000 MXN: Daniel genera directamente la Orden de Compra ('ISSUE_PURCHASE_ORDER' -> '2c) Orden de Compra generada'),
+ *     informando fecha de OC, fecha estimada de entrega y ajustando el monto definitivo de la OC.
+ *   * Si el pedido es > $3,000 MXN:
+ *     1) Daniel informa que está cotizando y da fecha estimada de cierre de cotizaciones ('START_QUOTING' -> '2a-1) En cotización').
+ *     2) Cuando recibe las cotizaciones, informa recepción y adjunta las cotizaciones ('RECEIVE_QUOTES' -> '2a-2) Cotizaciones recibidas').
+ *     3) Luego gestiona la Orden de Compra ('ISSUE_PURCHASE_ORDER' -> '2c) Orden de Compra generada'), informando fecha de OC,
+ *        fecha estimada de entrega y ajustando el monto definitivo de la OC (único monto válido para descontar del presupuesto mensual del área).
+ * - De '2c) Orden de Compra generada' (o '2a)'/'2c) Aprobada / En curso' por compatibilidad) pasa a '3) Artículos Recibidos en Adm.'.
  * - De '3)' pasa a '4) Compra Entregada al Solicitante'.
  * - En '4)', únicamente el Solicitante cierra el ticket como '5) Recepción Conforme' o '5) Recepción Disconforme'.
  */
-function ciarm_tus_compras_validate_transition(array $order, string $event, array $access, string $comment = ''): array {
+function ciarm_tus_compras_validate_transition(array $order, string $event, array $access, string $comment = '', array $payload = []): array {
     $currentState = (string)($order['estado'] ?? '');
     $actorEmail = strtolower(trim((string)($access['correo'] ?? '')));
     $isOwner = ($actorEmail !== '' && strtolower(trim((string)($order['correo'] ?? ''))) === $actorEmail);
@@ -718,6 +775,8 @@ function ciarm_tus_compras_validate_transition(array $order, string $event, arra
     $requiresApproval = !empty($order['requiereAprobacion'])
         || strtoupper((string)($order['tipo'] ?? '')) === 'CAPEX'
         || ((float)($order['acumuladoMesArea'] ?? 0) > CIARM_TUS_COMPRAS_OPEX_LIMIT);
+    $montoBase = (float)($order['montoEstimado'] ?? ($order['monto'] ?? 0));
+    $requiresQuotation = $montoBase > CIARM_TUS_COMPRAS_QUOTE_THRESHOLD;
 
     switch ($event) {
         case 'RECEIVE_OPEX':
@@ -742,8 +801,6 @@ function ciarm_tus_compras_validate_transition(array $order, string $event, arra
             if ($currentState !== CIARM_TUS_COMPRAS_STATE_EN_APROBACION) {
                 throw new RuntimeException('INVALID_TRANSITION');
             }
-            // Cuando el autorizador (perfil "administración") aprueba el ticket en 2b),
-            // este tipo de ticket ahí recién pasa a estado 2a) Solicitud recibida / En proceso.
             return [
                 'newState' => CIARM_TUS_COMPRAS_STATE_EN_PROCESO,
                 'roleLabel' => 'Autorizador (Administración)',
@@ -764,11 +821,90 @@ function ciarm_tus_compras_validate_transition(array $order, string $event, arra
                 'roleLabel' => 'Autorizador (Administración)',
             ];
 
+        case 'START_QUOTING':
+            if (!$canAdmin) {
+                throw new RuntimeException('FORBIDDEN_ROLE');
+            }
+            if ($currentState === CIARM_TUS_COMPRAS_STATE_ENVIADA && $requiresApproval) {
+                throw new RuntimeException('REQUIRES_CAPEX_APPROVAL');
+            }
+            if (!in_array($currentState, [CIARM_TUS_COMPRAS_STATE_ENVIADA, CIARM_TUS_COMPRAS_STATE_EN_PROCESO], true)) {
+                throw new RuntimeException('INVALID_TRANSITION');
+            }
+            if (!$requiresQuotation) {
+                throw new RuntimeException('INVALID_TRANSITION');
+            }
+            $fechaCierre = trim((string)($payload['fechaCierreCotizacion'] ?? ''));
+            if ($fechaCierre === '') {
+                throw new RuntimeException('QUOTE_CLOSE_DATE_REQUIRED');
+            }
+            return [
+                'newState' => CIARM_TUS_COMPRAS_STATE_EN_COTIZACION,
+                'roleLabel' => 'Administración (Daniel Lara)',
+            ];
+
+        case 'RECEIVE_QUOTES':
+            if (!$canAdmin) {
+                throw new RuntimeException('FORBIDDEN_ROLE');
+            }
+            if ($currentState !== CIARM_TUS_COMPRAS_STATE_EN_COTIZACION) {
+                throw new RuntimeException('INVALID_TRANSITION');
+            }
+            $adjuntoCot = trim((string)($payload['adjuntoCotizacionesAdm'] ?? ($payload['adjuntos'] ?? '')));
+            if ($adjuntoCot === '') {
+                throw new RuntimeException('QUOTE_ATTACHMENT_REQUIRED');
+            }
+            return [
+                'newState' => CIARM_TUS_COMPRAS_STATE_COTIZACIONES_RECIBIDAS,
+                'roleLabel' => 'Administración (Daniel Lara)',
+            ];
+
+        case 'ISSUE_PURCHASE_ORDER':
+            if (!$canAdmin) {
+                throw new RuntimeException('FORBIDDEN_ROLE');
+            }
+            if ($currentState === CIARM_TUS_COMPRAS_STATE_ENVIADA && $requiresApproval) {
+                throw new RuntimeException('REQUIRES_CAPEX_APPROVAL');
+            }
+            if ($requiresQuotation) {
+                if ($currentState !== CIARM_TUS_COMPRAS_STATE_COTIZACIONES_RECIBIDAS) {
+                    throw new RuntimeException('QUOTATION_FLOW_REQUIRED');
+                }
+            } else {
+                if (!in_array($currentState, [
+                    CIARM_TUS_COMPRAS_STATE_ENVIADA,
+                    CIARM_TUS_COMPRAS_STATE_EN_PROCESO,
+                    CIARM_TUS_COMPRAS_STATE_COTIZACIONES_RECIBIDAS,
+                ], true)) {
+                    throw new RuntimeException('INVALID_TRANSITION');
+                }
+            }
+            $fechaOC = trim((string)($payload['fechaOrdenCompra'] ?? ''));
+            $fechaEntregaEst = trim((string)($payload['fechaEntregaEstimada'] ?? ''));
+            $montoOC = round((float)($payload['montoOrdenCompra'] ?? 0), 2);
+            if ($fechaOC === '') {
+                throw new RuntimeException('PO_DATE_REQUIRED');
+            }
+            if ($fechaEntregaEst === '') {
+                throw new RuntimeException('ESTIMATED_DELIVERY_DATE_REQUIRED');
+            }
+            if ($montoOC <= 0 || $montoOC > 10000000) {
+                throw new RuntimeException('PO_AMOUNT_REQUIRED');
+            }
+            return [
+                'newState' => CIARM_TUS_COMPRAS_STATE_OC_GENERADA,
+                'roleLabel' => 'Administración (Daniel Lara)',
+            ];
+
         case 'RECEIVE_ITEMS_ADM':
             if (!$canAdmin) {
                 throw new RuntimeException('FORBIDDEN_ROLE');
             }
-            if (!in_array($currentState, [CIARM_TUS_COMPRAS_STATE_EN_PROCESO, CIARM_TUS_COMPRAS_STATE_APROBADA], true)) {
+            if (!in_array($currentState, [
+                CIARM_TUS_COMPRAS_STATE_OC_GENERADA,
+                CIARM_TUS_COMPRAS_STATE_EN_PROCESO,
+                CIARM_TUS_COMPRAS_STATE_APROBADA,
+            ], true)) {
                 throw new RuntimeException('INVALID_TRANSITION_STATE_3');
             }
             return [
@@ -825,7 +961,7 @@ function ciarm_tus_compras_validate_transition(array $order, string $event, arra
  * - En la vista 'mine' (Mis Compras): el solicitante NO ve ningún botón de acción salvo cuando
  *   el ticket está en '4) Compra Entregada al Solicitante', donde ve CONFIRM_CONFORME y CONFIRM_DISCONFORME.
  * - En la vista 'all' (Gestión y Aprobaciones): el usuario con perfil "administración" ve las acciones
- *   administrativas/autorizadoras correspondientes a cada etapa.
+ *   administrativas/autorizadoras correspondientes a cada etapa y umbral ($3,000 MXN).
  */
 function ciarm_tus_compras_allowed_actions(array $order, array $access, string $viewKind = 'all'): array {
     $state = (string)($order['estado'] ?? '');
@@ -844,18 +980,32 @@ function ciarm_tus_compras_allowed_actions(array $order, array $access, string $
     $requiresApproval = !empty($order['requiereAprobacion'])
         || strtoupper((string)($order['tipo'] ?? '')) === 'CAPEX'
         || ((float)($order['acumuladoMesArea'] ?? 0) > CIARM_TUS_COMPRAS_OPEX_LIMIT);
+    $montoBase = (float)($order['montoEstimado'] ?? ($order['monto'] ?? 0));
+    $requiresQuotation = $montoBase > CIARM_TUS_COMPRAS_QUOTE_THRESHOLD;
 
     $actions = [];
     if ($state === CIARM_TUS_COMPRAS_STATE_ENVIADA) {
         if ($canAdmin && !$requiresApproval) {
-            $actions[] = 'RECEIVE_OPEX';
+            $actions[] = $requiresQuotation ? 'START_QUOTING' : 'ISSUE_PURCHASE_ORDER';
         }
     } elseif ($state === CIARM_TUS_COMPRAS_STATE_EN_APROBACION) {
         if ($canApprove || $canAdmin) {
             $actions[] = 'APPROVE_CAPEX';
             $actions[] = 'REJECT_CAPEX';
         }
-    } elseif ($state === CIARM_TUS_COMPRAS_STATE_EN_PROCESO || $state === CIARM_TUS_COMPRAS_STATE_APROBADA) {
+    } elseif ($state === CIARM_TUS_COMPRAS_STATE_EN_PROCESO) {
+        if ($canAdmin) {
+            $actions[] = $requiresQuotation ? 'START_QUOTING' : 'ISSUE_PURCHASE_ORDER';
+        }
+    } elseif ($state === CIARM_TUS_COMPRAS_STATE_EN_COTIZACION) {
+        if ($canAdmin) {
+            $actions[] = 'RECEIVE_QUOTES';
+        }
+    } elseif ($state === CIARM_TUS_COMPRAS_STATE_COTIZACIONES_RECIBIDAS) {
+        if ($canAdmin) {
+            $actions[] = 'ISSUE_PURCHASE_ORDER';
+        }
+    } elseif ($state === CIARM_TUS_COMPRAS_STATE_OC_GENERADA || $state === CIARM_TUS_COMPRAS_STATE_APROBADA) {
         if ($canAdmin) {
             $actions[] = 'RECEIVE_ITEMS_ADM';
         }
@@ -1034,6 +1184,74 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
             );
             break;
 
+        case 'START_QUOTING':
+            $fCierre = (string)($order['fechaCierreCotizacion'] ?? '');
+            $enqueue(
+                'solicitante',
+                $correoSolicitante,
+                "[Portal CIARM · Tus Compras] Pedido en proceso de cotización {$id} (2a-1)",
+                'Tu pedido de compra está en proceso de cotización',
+                "Administración (Daniel Lara) informó que tu pedido {$id} (mayor a \$3,000.00 MXN) se encuentra en proceso de cotización («{$estado}»). Fecha estimada de cierre de cotizaciones: {$fCierre}.",
+                'Ver detalle en Mis Compras',
+                '#tus-compras'
+            );
+            $enqueue(
+                'admin',
+                CIARM_TUS_COMPRAS_ADMIN_EMAIL,
+                "[Portal CIARM · Tus Compras] Inicio de cotización registrado {$id} (2a-1)",
+                'Proceso de cotización iniciado',
+                "Registraste que el pedido {$id} de {$solicitante} ({$area}) está en cotización con fecha estimada de cierre: {$fCierre}.",
+                'Ver panel de compras',
+                '#admin-tus-compras'
+            );
+            break;
+
+        case 'RECEIVE_QUOTES':
+            $enqueue(
+                'solicitante',
+                $correoSolicitante,
+                "[Portal CIARM · Tus Compras] Cotizaciones recibidas {$id} (2a-2)",
+                'Se recibieron las cotizaciones de tu pedido',
+                "Administración (Daniel Lara) informó la recepción de las cotizaciones para tu pedido {$id} («{$estado}») y las adjuntó al expediente. El siguiente paso será la generación de la Orden de Compra.",
+                'Ver cotizaciones en Mis Compras',
+                '#tus-compras'
+            );
+            $enqueue(
+                'admin',
+                CIARM_TUS_COMPRAS_ADMIN_EMAIL,
+                "[Portal CIARM · Tus Compras] Cotizaciones registradas {$id} (2a-2)",
+                'Recepción de cotizaciones registrada',
+                "Se adjuntaron las cotizaciones del pedido {$id} de {$solicitante} ({$area}). Ya puedes generar la Orden de Compra.",
+                'Generar Orden de Compra',
+                '#admin-tus-compras'
+            );
+            break;
+
+        case 'ISSUE_PURCHASE_ORDER':
+            $fOC = (string)($order['fechaOrdenCompra'] ?? '');
+            $fEntEst = (string)($order['fechaEntregaEstimada'] ?? '');
+            $mEstFmt = '$' . number_format((float)($order['montoEstimado'] ?? ($order['monto'] ?? 0)), 2, '.', ',') . ' MXN';
+            $mOCFmt = '$' . number_format((float)($order['montoOrdenCompra'] ?? ($order['monto'] ?? 0)), 2, '.', ',') . ' MXN';
+            $enqueue(
+                'solicitante',
+                $correoSolicitante,
+                "[Portal CIARM · Tus Compras] Orden de Compra generada {$id} — Entrega est. {$fEntEst}",
+                'Se ha generado la Orden de Compra de tu pedido',
+                "Administración (Daniel Lara) generó la Orden de Compra de tu pedido {$id} («{$estado}») con fecha {$fOC} y fecha estimada de entrega {$fEntEst}. Monto definitivo de la Orden de Compra (único válido descontado del presupuesto mensual del área): {$mOCFmt} (Monto estimado inicial: {$mEstFmt}).",
+                'Ver Orden de Compra en Mis Compras',
+                '#tus-compras'
+            );
+            $enqueue(
+                'admin',
+                CIARM_TUS_COMPRAS_ADMIN_EMAIL,
+                "[Portal CIARM · Tus Compras] Orden de Compra registrada {$id} ({$mOCFmt})",
+                'Orden de Compra generada y presupuesto actualizado',
+                "Generaste la Orden de Compra del pedido {$id} de {$solicitante} ({$area}) con fecha {$fOC}, entrega estimada {$fEntEst} y monto definitivo {$mOCFmt}.",
+                'Ver panel de compras',
+                '#admin-tus-compras'
+            );
+            break;
+
         case 'RECEIVE_ITEMS_ADM':
             $enqueue(
                 'solicitante',
@@ -1138,18 +1356,34 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
 
 function ciarm_tus_compras_render_email(array $msg, array $order): string {
     $esc = static fn(mixed $s): string => htmlspecialchars((string)($s ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-    $montoFmt = '$' . number_format((float)($order['monto'] ?? 0), 2, '.', ',') . ' MXN';
+    $montoEst = (float)($order['montoEstimado'] ?? ($order['monto'] ?? 0));
+    $montoOC = (float)($order['montoOrdenCompra'] ?? 0);
+    $montoEstFmt = '$' . number_format($montoEst, 2, '.', ',') . ' MXN';
+    $montoOCFmt = $montoOC > 0 ? ('$' . number_format($montoOC, 2, '.', ',') . ' MXN (Válido para presupuesto)') : 'Pendiente de Orden de Compra';
     $acumFmt = '$' . number_format((float)($order['acumuladoMesArea'] ?? 0), 2, '.', ',') . ' MXN';
     $rows = [
         ['Folio del Pedido', $order['id'] ?? ''],
         ['Estado Actual', $order['estado'] ?? ''],
         ['Tipo de Compra', ($order['tipo'] ?? 'OPEX') . (!empty($order['requiereAprobacion']) ? ' (Sujeto a aprobación)' : ' (Gestión directa Opex)')],
-        ['Monto Estimado', $montoFmt],
-        ['Acumulado Mensual Área', $acumFmt . ' (Tope Opex: $10,000.00 MXN)'],
+        ['Monto Estimado (Solicitante)', $montoEstFmt],
+        ['Monto Orden de Compra (Válido)', $montoOCFmt],
+        ['Acumulado Mensual Área', $acumFmt . ' (Tope Opex: $8,000.00 MXN)'],
         ['Solicitante', ($order['solicitante'] ?? '') . (!empty($order['area']) ? ' (' . $order['area'] . ')' : '')],
         ['Encargado Administración', $order['responsableAdm'] ?? 'Daniel Lara'],
         ['Artículos / Descripción', $order['descripcion'] ?? ''],
     ];
+    if (!empty($order['fechaCierreCotizacion'])) {
+        $rows[] = ['Fecha Est. Cierre Cotizaciones', $order['fechaCierreCotizacion']];
+    }
+    if (!empty($order['fechaRecepcionCotizacion'])) {
+        $rows[] = ['Fecha Recepción Cotizaciones', $order['fechaRecepcionCotizacion']];
+    }
+    if (!empty($order['fechaOrdenCompra'])) {
+        $rows[] = ['Fecha Generación Orden de Compra', $order['fechaOrdenCompra']];
+    }
+    if (!empty($order['fechaEntregaEstimada'])) {
+        $rows[] = ['Fecha Estimada de Entrega', $order['fechaEntregaEstimada']];
+    }
     if (!empty($order['justificacion'])) {
         $rows[] = ['Justificación / Referencia', $order['justificacion']];
     }
@@ -1301,6 +1535,8 @@ function ciarm_tus_compras_sanitize_cell(string $val): string {
 }
 
 function ciarm_tus_compras_order_to_row(array $order): array {
+    $montoEst = (float)($order['montoEstimado'] ?? ($order['monto'] ?? 0));
+    $montoOC = (float)($order['montoOrdenCompra'] ?? 0);
     return [
         (string)($order['id'] ?? ''),
         (string)($order['fecha'] ?? ''),
@@ -1309,7 +1545,7 @@ function ciarm_tus_compras_order_to_row(array $order): array {
         strtolower(trim((string)($order['correo'] ?? ''))),
         ciarm_tus_compras_sanitize_cell((string)($order['area'] ?? '')),
         strtoupper((string)($order['tipo'] ?? 'OPEX')) === 'CAPEX' ? 'CAPEX' : 'OPEX',
-        number_format((float)($order['monto'] ?? 0), 2, '.', ''),
+        number_format($montoEst, 2, '.', ''),
         number_format((float)($order['acumuladoMesArea'] ?? 0), 2, '.', ''),
         !empty($order['requiereAprobacion']) ? 'SÍ' : 'NO',
         ciarm_tus_compras_sanitize_cell((string)($order['descripcion'] ?? '')),
@@ -1326,6 +1562,14 @@ function ciarm_tus_compras_order_to_row(array $order): array {
         ciarm_tus_compras_sanitize_cell((string)($order['adjuntos'] ?? '')),
         (string)($order['ultimaActualizacion'] ?? ''),
         (string)($order['version'] ?? 'v1'),
+        $montoOC > 0 ? number_format($montoOC, 2, '.', '') : '',
+        (string)($order['fechaCierreCotizacion'] ?? ''),
+        (string)($order['fechaRecepcionCotizacion'] ?? ''),
+        (string)($order['fechaOrdenCompra'] ?? ''),
+        (string)($order['fechaEntregaEstimada'] ?? ''),
+        ciarm_tus_compras_sanitize_cell((string)($order['adjuntoDetalle'] ?? '')),
+        ciarm_tus_compras_sanitize_cell((string)($order['adjuntoCotizacionPreliminar'] ?? '')),
+        ciarm_tus_compras_sanitize_cell((string)($order['adjuntoCotizacionesAdm'] ?? '')),
     ];
 }
 

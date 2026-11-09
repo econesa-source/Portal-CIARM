@@ -79,25 +79,30 @@ assert_true($accEzequiel['canCreate'] === true, 'Administracion + Administracion
 assert_true($accEzequiel['canGerencial'] === true, 'Administracion + Administracion (except Daniel Lara) CAN see Vista Gerencial');
 assert_true($accDocDir['canGerencial'] === false, 'Docente + Director does not see Vista Gerencial');
 
-// 2. Verificar acumulado mensual Opex de $10,000 MXN por área solicitante y paso automático a 2b) En aprobación
+// 2. Verificar acumulado mensual Opex de $8,000 MXN por área solicitante (usando montoOrdenCompra como único monto válido) y paso automático a 2b) En aprobación
+assert_true(CIARM_TUS_COMPRAS_OPEX_LIMIT === 8000.0, 'OPEX monthly limit must be 8,000 MXN');
+assert_true(CIARM_TUS_COMPRAS_QUOTE_THRESHOLD === 3000.0, 'Quote threshold must be 3,000 MXN');
+
 $existingOrders = [
-    ['id' => 'CMP-2026-00001', 'area' => 'Primaria', 'tipo' => 'OPEX', 'monto' => 6000.0, 'fecha' => '2026-11-02', 'estado' => CIARM_TUS_COMPRAS_STATE_EN_PROCESO],
+    ['id' => 'CMP-2026-00001', 'area' => 'Primaria', 'tipo' => 'OPEX', 'monto' => 5000.0, 'montoEstimado' => 5000.0, 'montoOrdenCompra' => 4200.0, 'fecha' => '2026-11-02', 'estado' => CIARM_TUS_COMPRAS_STATE_OC_GENERADA], // descuenta 4,200 MXN (montoOrdenCompra ajustado)
     ['id' => 'CMP-2026-00002', 'area' => 'Primaria', 'tipo' => 'OPEX', 'monto' => 5000.0, 'fecha' => '2026-11-03', 'estado' => CIARM_TUS_COMPRAS_STATE_RECHAZADA], // rechazada no suma
-    ['id' => 'CMP-2026-00003', 'area' => 'Secundaria', 'tipo' => 'OPEX', 'monto' => 8000.0, 'fecha' => '2026-11-04', 'estado' => CIARM_TUS_COMPRAS_STATE_ENVIADA],
+    ['id' => 'CMP-2026-00003', 'area' => 'Secundaria', 'tipo' => 'OPEX', 'monto' => 7000.0, 'fecha' => '2026-11-04', 'estado' => CIARM_TUS_COMPRAS_STATE_ENVIADA],
 ];
 $primariaOpex = ciarm_tus_compras_area_monthly_opex($existingOrders, 'Primaria', '2026-11');
-assert_true($primariaOpex === 6000.0, 'Primaria Opex accumulated is 6,000 MXN');
+assert_true($primariaOpex === 4200.0, 'Primaria Opex accumulated uses adjusted PO amount (4,200 MXN)');
 
 $evalOk = ciarm_tus_compras_requires_approval('OPEX', 3500.0, $primariaOpex);
-assert_true($evalOk['requiresApproval'] === false && $evalOk['projectedAreaMonthlyOpex'] === 9500.0 && $evalOk['initialState'] === CIARM_TUS_COMPRAS_STATE_ENVIADA, '6000 + 3500 <= 10000 starts in 1) Solicitud enviada');
+assert_true($evalOk['requiresApproval'] === false && $evalOk['projectedAreaMonthlyOpex'] === 7700.0 && $evalOk['initialState'] === CIARM_TUS_COMPRAS_STATE_ENVIADA, '4200 + 3500 <= 8000 starts in 1) Solicitud enviada');
 
-$evalEx = ciarm_tus_compras_requires_approval('OPEX', 4500.0, $primariaOpex);
-assert_true($evalEx['requiresApproval'] === true && $evalEx['projectedAreaMonthlyOpex'] === 10500.0 && $evalEx['initialState'] === CIARM_TUS_COMPRAS_STATE_EN_APROBACION, '6000 + 4500 > 10000 automatically starts in 2b) En aprobación');
+$evalEx = ciarm_tus_compras_requires_approval('OPEX', 4000.0, $primariaOpex);
+assert_true($evalEx['requiresApproval'] === true && $evalEx['projectedAreaMonthlyOpex'] === 8200.0 && $evalEx['initialState'] === CIARM_TUS_COMPRAS_STATE_EN_APROBACION, '4200 + 4000 > 8000 automatically starts in 2b) En aprobación');
 
 $evalCapex = ciarm_tus_compras_requires_approval('CAPEX', 2000.0, 0.0);
 assert_true($evalCapex['requiresApproval'] === true && $evalCapex['initialState'] === CIARM_TUS_COMPRAS_STATE_EN_APROBACION, 'Capex automatically starts in 2b) En aprobación');
 
-// 3. Verificar que al aprobar un ticket en 2b) En aprobación, pasa a 2a) Solicitud recibida / En proceso y de ahí a 3)
+// 3. Verificar flujo por umbral de $3,000 MXN:
+//    - Pedido > $3,000 MXN: 2b -> 2a -> 2a-1 (START_QUOTING) -> 2a-2 (RECEIVE_QUOTES) -> 2c (ISSUE_PURCHASE_ORDER) -> 3 (RECEIVE_ITEMS_ADM)
+//    - Pedido <= $3,000 MXN: 1 o 2a -> 2c (ISSUE_PURCHASE_ORDER) -> 3 (RECEIVE_ITEMS_ADM)
 $order2b = [
     'id' => 'CMP-2026-00004',
     'correo' => 'm.gomez@ciarm.edu.mx',
@@ -105,6 +110,7 @@ $order2b = [
     'area' => 'Primaria',
     'tipo' => 'CAPEX',
     'monto' => 12000.0,
+    'montoEstimado' => 12000.0,
     'acumuladoMesArea' => 12000.0,
     'requiereAprobacion' => true,
     'estado' => CIARM_TUS_COMPRAS_STATE_EN_APROBACION,
@@ -123,10 +129,31 @@ assert_true($approved['newState'] === CIARM_TUS_COMPRAS_STATE_EN_PROCESO, 'Appro
 
 $order2a = $order2b;
 $order2a['estado'] = CIARM_TUS_COMPRAS_STATE_EN_PROCESO;
-$toState3 = ciarm_tus_compras_validate_transition($order2a, 'RECEIVE_ITEMS_ADM', $accDaniel);
-assert_true($toState3['newState'] === CIARM_TUS_COMPRAS_STATE_RECIBIDOS_ADM, '2a can advance to state 3');
 
-// 4. Verificar regla estricta de asignación de estado al parsear filas de PEDIDOS (tickets 1, 2 y 3)
+// Como es > $3,000 MXN ($12,000), debe pasar por cotización
+$quoting = ciarm_tus_compras_validate_transition($order2a, 'START_QUOTING', $accDaniel, 'Iniciando cotización', ['fechaCierreCotizacion' => '2026-11-12']);
+assert_true($quoting['newState'] === CIARM_TUS_COMPRAS_STATE_EN_COTIZACION, '2a (> $3,000) advances to 2a-1) En cotización');
+
+$order2a1 = $order2a;
+$order2a1['estado'] = CIARM_TUS_COMPRAS_STATE_EN_COTIZACION;
+$quotesRec = ciarm_tus_compras_validate_transition($order2a1, 'RECEIVE_QUOTES', $accDaniel, '3 cotizaciones recibidas', ['adjuntoCotizacionesAdm' => 'https://portal2.ciarm.edu.mx/uploads/tus-compras/cot.pdf']);
+assert_true($quotesRec['newState'] === CIARM_TUS_COMPRAS_STATE_COTIZACIONES_RECIBIDAS, '2a-1 advances to 2a-2) Cotizaciones recibidas with attachment');
+
+$order2a2 = $order2a1;
+$order2a2['estado'] = CIARM_TUS_COMPRAS_STATE_COTIZACIONES_RECIBIDAS;
+$poIssued = ciarm_tus_compras_validate_transition($order2a2, 'ISSUE_PURCHASE_ORDER', $accDaniel, 'OC emitida', [
+    'fechaOrdenCompra' => '2026-11-13',
+    'fechaEntregaEstimada' => '2026-11-20',
+    'montoOrdenCompra' => 11450.0,
+]);
+assert_true($poIssued['newState'] === CIARM_TUS_COMPRAS_STATE_OC_GENERADA && $poIssued['montoOrdenCompra'] === 11450.0, '2a-2 advances to 2c) Orden de Compra generada with adjusted PO amount');
+
+$order2c = $order2a2;
+$order2c['estado'] = CIARM_TUS_COMPRAS_STATE_OC_GENERADA;
+$toState3 = ciarm_tus_compras_validate_transition($order2c, 'RECEIVE_ITEMS_ADM', $accDaniel);
+assert_true($toState3['newState'] === CIARM_TUS_COMPRAS_STATE_RECIBIDOS_ADM, '2c can advance to state 3');
+
+// 4. Verificar regla estricta de asignación de estado al parsear filas de PEDIDOS (tickets 1, 2 y 3) y archivos opcionales diferenciados
 $rawPedidosRows = [
     CIARM_TUS_COMPRAS_PEDIDOS_HEADERS,
     ['CMP-2026-00001', '2026-11-05', '10:00:00', 'Dir', 'm.gomez@ciarm.edu.mx', 'Docente', 'OPEX', '3000.00', '3000.00', 'NO', 'una regla 2 plumones y mas cosas', '', '1) Solicitud enviada', 'Daniel Lara', '', '', '', '', '', '', '', '', '2026-11-05 10:00:00', 'v1'],
@@ -134,8 +161,8 @@ $rawPedidosRows = [
     ['CMP-2026-00003', '2026-11-05', '10:10:00', 'Dir', 'm.gomez@ciarm.edu.mx', 'Docente', 'CAPEX', '350000.00', '23000.00', 'NO', 'otra prueba esto es capex', '', '1) Solicitud enviada', 'Daniel Lara', '', '', '', '', '', '', '', '', '2026-11-05 10:10:00', 'v1'],
 ];
 $parsedPedidos = ciarm_tus_compras_parse_pedidos($rawPedidosRows);
-assert_true($parsedPedidos[0]['estado'] === CIARM_TUS_COMPRAS_STATE_ENVIADA, 'Ticket 1 (OPEX $3,000) stays in 1) Solicitud enviada');
-assert_true($parsedPedidos[1]['estado'] === CIARM_TUS_COMPRAS_STATE_EN_APROBACION, 'Ticket 2 (OPEX $20,000 > $10,000) must be 2b) En aprobación');
+assert_true($parsedPedidos[0]['estado'] === CIARM_TUS_COMPRAS_STATE_ENVIADA, 'Ticket 1 (OPEX $3,000 <= $8,000) stays in 1) Solicitud enviada');
+assert_true($parsedPedidos[1]['estado'] === CIARM_TUS_COMPRAS_STATE_EN_APROBACION, 'Ticket 2 (OPEX $20,000 > $8,000) must be 2b) En aprobación');
 assert_true($parsedPedidos[2]['estado'] === CIARM_TUS_COMPRAS_STATE_EN_APROBACION, 'Ticket 3 (CAPEX $350,000) must be 2b) En aprobación');
 
 echo "Tus Compras PHP tests: all passed\n";

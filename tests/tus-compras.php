@@ -71,38 +71,39 @@ assert_true($accAdmDir['visible'] === false && $accAdmDir['canCreate'] === false
 $accDaniel = ciarm_tus_compras_evaluate_access_rows($dm03Rows, 'd.lara@ciarm.edu.mx');
 assert_true($accDaniel['visible'] === true && $accDaniel['isAdministracion'] === true && $accDaniel['canAdmin'] === true, 'Administracion + Administracion is Admin');
 assert_true($accDaniel['canCreate'] === false, 'Daniel Lara cannot create purchase requests');
-assert_true($accDaniel['canGerencial'] === false, 'Daniel Lara does not see Vista Gerencial');
+assert_true($accDaniel['canGerencial'] === true, 'Daniel Lara CAN see Vista Gerencial');
 
 $accEzequiel = ciarm_tus_compras_evaluate_access_rows($dm03Rows, 'e.conesa@ciarm.edu.mx');
 assert_true($accEzequiel['visible'] === true && $accEzequiel['isAdministracion'] === true && $accEzequiel['canApprove'] === true, 'Administracion + Administracion is Approver');
 assert_true($accEzequiel['canCreate'] === true, 'Administracion + Administracion (except Daniel Lara) CAN create purchase requests');
-assert_true($accEzequiel['canGerencial'] === true, 'Administracion + Administracion (except Daniel Lara) CAN see Vista Gerencial');
+assert_true($accEzequiel['canGerencial'] === true, 'Administracion + Administracion CAN see Vista Gerencial');
 assert_true($accDocDir['canGerencial'] === false, 'Docente + Director does not see Vista Gerencial');
 
-// 2. Verificar acumulado mensual Opex de $8,000 MXN por área solicitante (usando montoOrdenCompra como único monto válido) y paso automático a 2b) En aprobación
-assert_true(CIARM_TUS_COMPRAS_OPEX_LIMIT === 8000.0, 'OPEX monthly limit must be 8,000 MXN');
+// 2. Verificar que NO hay límite mensual por área, umbral > $8,000 MXN para aprobación/3 cotizaciones y umbral > $3,000 MXN para 1 cotización
+assert_true(CIARM_TUS_COMPRAS_OPEX_LIMIT === 8000.0, 'Single purchase approval/3-quotes threshold must be 8,000 MXN');
+assert_true(CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD === 8000.0, 'Three quotes threshold must be 8,000 MXN');
 assert_true(CIARM_TUS_COMPRAS_QUOTE_THRESHOLD === 3000.0, 'Quote threshold must be 3,000 MXN');
 
 $existingOrders = [
-    ['id' => 'CMP-2026-00001', 'area' => 'Primaria', 'tipo' => 'OPEX', 'monto' => 5000.0, 'montoEstimado' => 5000.0, 'montoOrdenCompra' => 4200.0, 'fecha' => '2026-11-02', 'estado' => CIARM_TUS_COMPRAS_STATE_OC_GENERADA], // descuenta 4,200 MXN (montoOrdenCompra ajustado)
+    ['id' => 'CMP-2026-00001', 'area' => 'Primaria', 'tipo' => 'OPEX', 'monto' => 5000.0, 'montoEstimado' => 5000.0, 'montoOrdenCompra' => 4200.0, 'fecha' => '2026-11-02', 'estado' => CIARM_TUS_COMPRAS_STATE_OC_GENERADA], // acumula 4,200 MXN (montoOrdenCompra ajustado)
     ['id' => 'CMP-2026-00002', 'area' => 'Primaria', 'tipo' => 'OPEX', 'monto' => 5000.0, 'fecha' => '2026-11-03', 'estado' => CIARM_TUS_COMPRAS_STATE_RECHAZADA], // rechazada no suma
     ['id' => 'CMP-2026-00003', 'area' => 'Secundaria', 'tipo' => 'OPEX', 'monto' => 7000.0, 'fecha' => '2026-11-04', 'estado' => CIARM_TUS_COMPRAS_STATE_ENVIADA],
 ];
 $primariaOpex = ciarm_tus_compras_area_monthly_opex($existingOrders, 'Primaria', '2026-11');
 assert_true($primariaOpex === 4200.0, 'Primaria Opex accumulated uses adjusted PO amount (4,200 MXN)');
 
-$evalOk = ciarm_tus_compras_requires_approval('OPEX', 3500.0, $primariaOpex);
-assert_true($evalOk['requiresApproval'] === false && $evalOk['projectedAreaMonthlyOpex'] === 7700.0 && $evalOk['initialState'] === CIARM_TUS_COMPRAS_STATE_ENVIADA, '4200 + 3500 <= 8000 starts in 1) Solicitud enviada');
+// Aunque Primaria lleve 4,200 y pida 5,000 (acumulado 9,200 > 8,000), como NO hay monto límite por área y la compra individual (5,000) es <= 8,000, inicia en 1) Solicitud enviada y pide 1 cotización
+$evalNoAreaCap = ciarm_tus_compras_requires_approval('OPEX', 5000.0, $primariaOpex);
+assert_true($evalNoAreaCap['requiresApproval'] === false && $evalNoAreaCap['projectedAreaMonthlyOpex'] === 9200.0 && $evalNoAreaCap['requiredQuotesCount'] === 1 && $evalNoAreaCap['initialState'] === CIARM_TUS_COMPRAS_STATE_ENVIADA, 'No area monthly limit: $5,000 OPEX order stays in 1) Solicitud enviada even if area accumulated is $9,200');
 
-$evalEx = ciarm_tus_compras_requires_approval('OPEX', 4000.0, $primariaOpex);
-assert_true($evalEx['requiresApproval'] === true && $evalEx['projectedAreaMonthlyOpex'] === 8200.0 && $evalEx['initialState'] === CIARM_TUS_COMPRAS_STATE_EN_APROBACION, '4200 + 4000 > 8000 automatically starts in 2b) En aprobación');
+// Compra individual OPEX > $8,000 MXN pasa a 2b) En aprobación y requiere 3 cotizaciones
+$evalOver8000 = ciarm_tus_compras_requires_approval('OPEX', 8500.0, $primariaOpex);
+assert_true($evalOver8000['requiresApproval'] === true && $evalOver8000['requiresThreeQuotes'] === true && $evalOver8000['requiredQuotesCount'] === 3 && $evalOver8000['initialState'] === CIARM_TUS_COMPRAS_STATE_EN_APROBACION, 'Single OPEX purchase > $8,000 starts in 2b) En aprobación and requires 3 quotes');
 
 $evalCapex = ciarm_tus_compras_requires_approval('CAPEX', 2000.0, 0.0);
 assert_true($evalCapex['requiresApproval'] === true && $evalCapex['initialState'] === CIARM_TUS_COMPRAS_STATE_EN_APROBACION, 'Capex automatically starts in 2b) En aprobación');
 
-// 3. Verificar flujo por umbral de $3,000 MXN:
-//    - Pedido > $3,000 MXN: 2b -> 2a -> 2a-1 (START_QUOTING) -> 2a-2 (RECEIVE_QUOTES) -> 2c (ISSUE_PURCHASE_ORDER) -> 3 (RECEIVE_ITEMS_ADM)
-//    - Pedido <= $3,000 MXN: 1 o 2a -> 2c (ISSUE_PURCHASE_ORDER) -> 3 (RECEIVE_ITEMS_ADM)
+// 3. Verificar flujo por umbral de $3,000 y > $8,000 MXN (3 cotizaciones obligatorias cuando > $8,000 MXN):
 $order2b = [
     'id' => 'CMP-2026-00004',
     'correo' => 'm.gomez@ciarm.edu.mx',
@@ -130,14 +131,28 @@ assert_true($approved['newState'] === CIARM_TUS_COMPRAS_STATE_EN_PROCESO, 'Appro
 $order2a = $order2b;
 $order2a['estado'] = CIARM_TUS_COMPRAS_STATE_EN_PROCESO;
 
-// Como es > $3,000 MXN ($12,000), debe pasar por cotización
+// Como es > $8,000 MXN ($12,000), debe pasar por cotización y exigir 3 cotizaciones en RECEIVE_QUOTES
 $quoting = ciarm_tus_compras_validate_transition($order2a, 'START_QUOTING', $accDaniel, 'Iniciando cotización', ['fechaCierreCotizacion' => '2026-11-12']);
 assert_true($quoting['newState'] === CIARM_TUS_COMPRAS_STATE_EN_COTIZACION, '2a (> $3,000) advances to 2a-1) En cotización');
 
 $order2a1 = $order2a;
 $order2a1['estado'] = CIARM_TUS_COMPRAS_STATE_EN_COTIZACION;
-$quotesRec = ciarm_tus_compras_validate_transition($order2a1, 'RECEIVE_QUOTES', $accDaniel, '3 cotizaciones recibidas', ['adjuntoCotizacionesAdm' => 'https://portal2.ciarm.edu.mx/uploads/tus-compras/cot.pdf']);
-assert_true($quotesRec['newState'] === CIARM_TUS_COMPRAS_STATE_COTIZACIONES_RECIBIDAS, '2a-1 advances to 2a-2) Cotizaciones recibidas with attachment');
+
+// Si solo envía 1 cotización en una compra > $8,000 MXN, debe rechazar con THREE_QUOTES_REQUIRED
+$blockedOneQuote = false;
+try {
+    ciarm_tus_compras_validate_transition($order2a1, 'RECEIVE_QUOTES', $accDaniel, 'Solo 1 cotización', [
+        'adjuntoCotizacionesAdm' => 'https://drive.google.com/file/d/cot1/view',
+    ]);
+} catch (RuntimeException $e) {
+    $blockedOneQuote = ($e->getMessage() === 'THREE_QUOTES_REQUIRED');
+}
+assert_true($blockedOneQuote, 'Purchases > $8,000 MXN must reject RECEIVE_QUOTES if fewer than 3 quotation files are attached');
+
+$quotesRec = ciarm_tus_compras_validate_transition($order2a1, 'RECEIVE_QUOTES', $accDaniel, '3 cotizaciones recibidas', [
+    'adjuntoCotizacionesAdm' => 'https://drive.google.com/file/d/cot1/view | https://drive.google.com/file/d/cot2/view | https://drive.google.com/file/d/cot3/view',
+]);
+assert_true($quotesRec['newState'] === CIARM_TUS_COMPRAS_STATE_COTIZACIONES_RECIBIDAS && count($quotesRec['quoteUrls']) === 3, '2a-1 (> $8,000) advances to 2a-2) Cotizaciones recibidas when all 3 quotations are attached');
 
 $order2a2 = $order2a1;
 $order2a2['estado'] = CIARM_TUS_COMPRAS_STATE_COTIZACIONES_RECIBIDAS;

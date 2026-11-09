@@ -45,7 +45,6 @@ try {
             $pedidos = ciarm_tus_compras_parse_pedidos($store['pedidosRows']);
             $yearMonth = gmdate('Y-m', time() - 5 * 3600);
             $areaOpex = ciarm_tus_compras_area_monthly_opex($pedidos, (string)$access['area'], $yearMonth);
-            $remaining = max(0.0, round(CIARM_TUS_COMPRAS_OPEX_LIMIT - $areaOpex, 2));
 
             ciarm_json_response(200, [
                 'ok' => true,
@@ -54,8 +53,9 @@ try {
                     'csrfToken' => $csrfToken,
                     'yearMonth' => $yearMonth,
                     'areaMonthlyOpex' => $areaOpex,
-                    'areaMonthlyRemaining' => $remaining,
+                    'areaMonthlyRemaining' => null,
                     'opexLimit' => CIARM_TUS_COMPRAS_OPEX_LIMIT,
+                    'threeQuotesThreshold' => CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD,
                     'activeSheetId' => $store['sheetId'],
                 ],
             ]);
@@ -272,6 +272,8 @@ try {
             'montoEstimado' => $monto,
             'montoOrdenCompra' => 0.0,
             'requiereCotizacion' => $monto > CIARM_TUS_COMPRAS_QUOTE_THRESHOLD,
+            'requiereTresCotizaciones' => $monto > CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD,
+            'cotizacionesRequeridas' => $eval['requiredQuotesCount'] ?? ($monto > CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD ? 3 : ($monto > CIARM_TUS_COMPRAS_QUOTE_THRESHOLD ? 1 : 0)),
             'acumuladoMesArea' => $eval['projectedAreaMonthlyOpex'],
             'requiereAprobacion' => $eval['requiresApproval'],
             'descripcion' => $descripcion,
@@ -330,8 +332,8 @@ try {
             $eval['requiresApproval']
                 ? ($tipo === 'CAPEX'
                     ? 'Pedido Capex enviado y pasado automáticamente a 2b) En aprobación.'
-                    : 'Pedido Opex supera tope mensual permitido ($8,000 MXN del área); pasa automáticamente a 2b) En aprobación.')
-                : 'Pedido Opex dentro de presupuesto mensual del área (≤ $8,000 MXN).',
+                    : 'Pedido Opex mayor a $8,000 MXN; pasa automáticamente a 2b) En aprobación y requiere 3 cotizaciones.')
+                : 'Pedido Opex registrado (≤ $8,000 MXN · Sin monto límite por área).',
             (string)($notif['status'] ?? 'ENVIADO'),
         ];
 
@@ -413,7 +415,13 @@ try {
             }
         } elseif ($event === 'RECEIVE_QUOTES') {
             $target['fechaRecepcionCotizacion'] = $nowFull;
-            $cotUrl = trim((string)($input['adjuntoCotizacionesAdm'] ?? $adjuntoExtra));
+            $validatedQuotes = (array)($transition['quoteUrls'] ?? []);
+            if (count($validatedQuotes) > 0) {
+                $cotUrl = implode(' | ', $validatedQuotes);
+            } else {
+                $rawCot = $input['adjuntoCotizacionesAdm'] ?? $adjuntoExtra;
+                $cotUrl = is_array($rawCot) ? implode(' | ', array_filter(array_map('trim', $rawCot))) : trim((string)$rawCot);
+            }
             if ($cotUrl !== '') {
                 $target['adjuntoCotizacionesAdm'] = !empty($target['adjuntoCotizacionesAdm'])
                     ? ($target['adjuntoCotizacionesAdm'] . ' | ' . $cotUrl)
@@ -423,7 +431,9 @@ try {
                     : ('COTIZACIONES_ADM: ' . $cotUrl);
             }
             if ($comment === '') {
-                $comment = 'Cotizaciones recibidas y adjuntadas al expediente.';
+                $comment = count($validatedQuotes) >= 3
+                    ? '3 cotizaciones oficiales recibidas y adjuntadas al expediente.'
+                    : 'Cotizaciones recibidas y adjuntadas al expediente.';
             }
         } elseif ($event === 'ISSUE_PURCHASE_ORDER') {
             $target['fechaOrdenCompra'] = trim((string)($input['fechaOrdenCompra'] ?? ''));
@@ -548,6 +558,7 @@ try {
         'COMMENT_REQUIRED' => 422,
         'QUOTE_CLOSE_DATE_REQUIRED' => 422,
         'QUOTE_ATTACHMENT_REQUIRED' => 422,
+        'THREE_QUOTES_REQUIRED' => 422,
         'PO_DATE_REQUIRED' => 422,
         'ESTIMATED_DELIVERY_DATE_REQUIRED' => 422,
         'PO_AMOUNT_REQUIRED' => 422,

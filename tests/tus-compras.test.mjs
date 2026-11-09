@@ -4,10 +4,12 @@ import { readFileSync } from 'node:fs';
 import {
   TUS_COMPRAS_STATES,
   TUS_COMPRAS_OPEX_LIMIT,
+  TUS_COMPRAS_THREE_QUOTES_THRESHOLD,
   TUS_COMPRAS_QUOTE_THRESHOLD,
   TUS_COMPRAS_MAX_ATTACHMENT_BYTES,
   canSeeTusCompras,
   getEffectiveOrderAmount,
+  getRequiredQuotesCount,
   requiresQuotationProcess,
   validateTusCompraAttachmentFile,
   evaluateOrderApprovalRequirement,
@@ -18,8 +20,9 @@ import {
 } from '../src/services/tusComprasService.js';
 import { allowedRoute } from '../src/components/dashboardAccess.js';
 
-test('Tope mensual Opex de $8,000 MXN por área solicitante, umbral de cotización de $3,000 MXN y monto único válido de Orden de Compra', () => {
+test('Sin monto límite mensual por área, umbral de cotización (> $3,000 -> 1 cotización, > $8,000 -> 3 cotizaciones) y monto único válido de Orden de Compra', () => {
   assert.equal(TUS_COMPRAS_OPEX_LIMIT, 8000);
+  assert.equal(TUS_COMPRAS_THREE_QUOTES_THRESHOLD, 8000);
   assert.equal(TUS_COMPRAS_QUOTE_THRESHOLD, 3000);
   assert.equal(TUS_COMPRAS_MAX_ATTACHMENT_BYTES, 10 * 1024 * 1024);
 
@@ -30,33 +33,43 @@ test('Tope mensual Opex de $8,000 MXN por área solicitante, umbral de cotizaci�
     /supera el límite máximo permitido de 10 MB/
   );
 
-  // Opex dentro del límite mensual acumulado del área (ej. 3,000 previos + 4,500 nuevos = 7,500 <= 8,000)
-  const opexOk = evaluateOrderApprovalRequirement('OPEX', 4500, 3000);
-  assert.equal(opexOk.projectedAreaMonthlyOpex, 7500);
-  assert.equal(opexOk.exceedsOpexLimit, false);
-  assert.equal(opexOk.requiresApproval, false);
-  assert.equal(opexOk.initialState, TUS_COMPRAS_STATES.ENVIADA);
+  // Sin límite mensual por área: aunque el área lleve $7,000 MXN acumulados, un pedido OPEX de $4,500 (<= $8,000 individual) NO requiere aprobación y pide 1 cotización
+  const opexNoAreaCap = evaluateOrderApprovalRequirement('OPEX', 4500, 7000);
+  assert.equal(opexNoAreaCap.projectedAreaMonthlyOpex, 11500);
+  assert.equal(opexNoAreaCap.exceedsOpexLimit, false);
+  assert.equal(opexNoAreaCap.requiresApproval, false);
+  assert.equal(opexNoAreaCap.requiresQuotation, true);
+  assert.equal(opexNoAreaCap.requiresThreeQuotes, false);
+  assert.equal(opexNoAreaCap.requiredQuotesCount, 1);
+  assert.equal(opexNoAreaCap.initialState, TUS_COMPRAS_STATES.ENVIADA);
 
-  // Opex exactamente en el límite de $8,000 MXN
-  const opexExact = evaluateOrderApprovalRequirement('OPEX', 5000, 3000);
-  assert.equal(opexExact.projectedAreaMonthlyOpex, 8000);
+  // Opex exactamente en $8,000 MXN individuales
+  const opexExact = evaluateOrderApprovalRequirement('OPEX', 8000, 15000);
   assert.equal(opexExact.requiresApproval, false);
+  assert.equal(opexExact.requiresThreeQuotes, false);
+  assert.equal(opexExact.requiredQuotesCount, 1);
   assert.equal(opexExact.initialState, TUS_COMPRAS_STATES.ENVIADA);
 
-  // Opex que supera los $8,000 MXN mensuales acumulados del área: pasa automáticamente a 2b) En aprobación
-  const opexExceeds = evaluateOrderApprovalRequirement('OPEX', 2001, 6000);
-  assert.equal(opexExceeds.projectedAreaMonthlyOpex, 8001);
-  assert.equal(opexExceeds.exceedsOpexLimit, true);
-  assert.equal(opexExceeds.requiresApproval, true);
-  assert.equal(opexExceeds.initialState, TUS_COMPRAS_STATES.EN_APROBACION);
+  // Compra individual que supera los $8,000 MXN: pasa a 2b) En aprobación y requiere 3 cotizaciones de Daniel Lara
+  const opexOver8000 = evaluateOrderApprovalRequirement('OPEX', 8001, 0);
+  assert.equal(opexOver8000.exceedsOpexLimit, true);
+  assert.equal(opexOver8000.requiresApproval, true);
+  assert.equal(opexOver8000.requiresThreeQuotes, true);
+  assert.equal(opexOver8000.requiredQuotesCount, 3);
+  assert.equal(opexOver8000.initialState, TUS_COMPRAS_STATES.EN_APROBACION);
 
   // Capex pasa automáticamente a 2b) En aprobación aunque sea menor a $8,000 MXN
   const capexSmall = evaluateOrderApprovalRequirement('CAPEX', 1500, 0);
   assert.equal(capexSmall.tipo, 'CAPEX');
   assert.equal(capexSmall.requiresApproval, true);
+  assert.equal(capexSmall.requiredQuotesCount, 0);
   assert.equal(capexSmall.initialState, TUS_COMPRAS_STATES.EN_APROBACION);
 
-  // Umbral de cotización > $3,000 MXN
+  // Conteo de cotizaciones requeridas según monto de la compra
+  assert.equal(getRequiredQuotesCount({ monto: 3000 }), 0);
+  assert.equal(getRequiredQuotesCount({ monto: 3000.01 }), 1);
+  assert.equal(getRequiredQuotesCount({ monto: 8000 }), 1);
+  assert.equal(getRequiredQuotesCount({ monto: 8000.01 }), 3);
   assert.equal(requiresQuotationProcess({ monto: 3000 }), false);
   assert.equal(requiresQuotationProcess({ monto: 3000.01 }), true);
 
@@ -180,10 +193,10 @@ test('Visibilidad y rutas de Tus compras gobernadas por perfil DM03 (AG=docente,
     verified: true,
     enforced: true,
     codes: ['INT_TARJETA'],
-    tusCompras: { visible: true, canCreate: false, canAdmin: true, canApprove: false, canGerencial: false }
+    tusCompras: { visible: true, canCreate: false, canAdmin: true, canApprove: false, canGerencial: true }
   };
   assert.equal(allowedRoute('#admin-tus-compras', danielAdmin), true);
-  assert.equal(allowedRoute('#vision-gerencial-compras', danielAdmin), false);
+  assert.equal(allowedRoute('#vision-gerencial-compras', danielAdmin), true);
 
   const ezequielAdmin = {
     verified: true,

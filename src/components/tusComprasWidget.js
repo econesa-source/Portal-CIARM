@@ -1,17 +1,19 @@
 /**
  * Módulo "Tus compras" - Sistema simplificado de pedidos de compra (Opex / Capex)
  * Coordinado por Administración (Daniel Lara) con aprobación ejecutiva (Ezequiel Conesa)
- * para compras Capex o cuando el acumulado mensual Opex del área solicitante supera $8,000 MXN.
- * Para compras > $3,000 MXN Daniel cotiza, adjunta cotizaciones y luego genera la Orden de Compra;
- * para compras <= $3,000 MXN genera directamente la Orden de Compra informando fecha OC, entrega estimada y monto definitivo.
+ * para compras Capex o compras mayores a $8,000.00 MXN (sin monto límite mensual por área).
+ * Toda compra > $8,000.00 MXN debe pasar por 3 cotizaciones de parte de Daniel Lara;
+ * compras > $3,000.00 y <= $8,000.00 MXN requieren cotización previa (1 archivo), y <= $3,000.00 MXN generan OC directa.
  */
 
 import {
   TUS_COMPRAS_STATES,
   TUS_COMPRAS_OPEX_LIMIT,
+  TUS_COMPRAS_THREE_QUOTES_THRESHOLD,
   TUS_COMPRAS_QUOTE_THRESHOLD,
   TUS_COMPRAS_MAX_ATTACHMENT_BYTES,
   getEffectiveOrderAmount,
+  getRequiredQuotesCount,
   evaluateOrderApprovalRequirement,
   resolveEffectiveOrderState,
   normalizeOrdersStates,
@@ -23,7 +25,7 @@ import {
   transitionTusCompra,
   validateTusCompraAttachmentFile,
   uploadTusCompraAttachment
-} from '../services/tusComprasService.js?v=18.7.16-tc9';
+} from '../services/tusComprasService.js?v=18.7.16-tc10';
 
 const ACTION_META = Object.freeze({
   RECEIVE_OPEX: {
@@ -53,7 +55,7 @@ const ACTION_META = Object.freeze({
     label: '2c) Generar Orden de Compra',
     badgeClass: 'dark',
     confirmTitle: '2c) Generar Orden de Compra y Ajustar Monto Válido',
-    description: 'Informa la fecha en que generaste la Orden de Compra, define la fecha estimada de entrega y ajusta el monto estimado por el usuario (este será el único monto válido descontado del presupuesto mensual del área).',
+    description: 'Informa la fecha en que generaste la Orden de Compra, define la fecha estimada de entrega y ajusta el monto estimado por el usuario (este será el monto único válido del pedido).',
     requireComment: false,
     requirePurchaseOrderFields: true
   },
@@ -275,7 +277,7 @@ function renderTopNavigation(activeRoute, access) {
   const canCreate = Boolean(access?.canCreate);
   // El menú de Gestión y Aprobaciones solo corresponde a usuarios con perfil "administración" en área (AG) y nivel (AJ)
   const showAdminMenu = Boolean(access?.isAdministracion === true);
-  // Vista Gerencial: usuarios con área y nivel "administración" distintos de Daniel Lara
+  // Vista Gerencial: todos los usuarios con área y nivel "administración" (incluyendo a Daniel Lara)
   const showGerencialMenu = Boolean(access?.canGerencial === true);
   return `
     <div class="solicitud-topbar" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
@@ -294,7 +296,6 @@ function renderCreateView(container, ctx, controller) {
   const access = ctx.access || {};
   const currentOpex = Number(ctx.areaMonthlyOpex || 0);
   const opexLimit = Number(ctx.opexLimit || TUS_COMPRAS_OPEX_LIMIT);
-  const remainingOpex = Math.max(0, opexLimit - currentOpex);
 
   container.innerHTML = `
     <div class="card-container-wide solicitud-card">
@@ -302,12 +303,12 @@ function renderCreateView(container, ctx, controller) {
 
       <div class="solicitud-heading">
         <h2>Nuevo Pedido de Compra · Tus compras</h2>
-        <p>Registra tu solicitud de compra para Administración (Daniel Lara). Pedidos Opex hasta $8,000.00 MXN acumulados al mes por área se procesan directamente; pedidos Capex o que superen $8,000.00 MXN mensuales requieren aprobación de Administración. Para pedidos superiores a $3,000.00 MXN, Administración realizará proceso de cotización previo a la Orden de Compra.</p>
+        <p>Registra tu solicitud de compra para Administración (Daniel Lara). <strong>No hay monto límite mensual por área.</strong> Para compras mayores a $3,000.00 MXN se realiza proceso de cotización, y <strong>toda compra que supere los $8,000.00 MXN debe pasar por 3 cotizaciones de parte de Daniel Lara</strong> (además de aprobación ejecutiva).</p>
       </div>
 
       <div id="tus-compras-budget-banner" style="background:#f8fafc;border:1px solid #cbd5e1;border-left:4px solid #26487F;border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:14px;">
-        <div><strong>Área solicitante (DM03):</strong> ${escapeHtml(access.area || 'Docente')} · <strong>Acumulado Opex válido del mes (${escapeHtml(ctx.yearMonth || '')}):</strong> ${formatCurrency(currentOpex)} / ${formatCurrency(opexLimit)}</div>
-        <div style="margin-top:4px;color:#334155;">Disponible Opex directo en el mes para tu área: <strong>${formatCurrency(remainingOpex)}</strong> <span style="color:#64748b;font-size:12.5px;">(Al generarse la Orden de Compra, el monto ajustado por Administración será el único monto válido descontado del presupuesto mensual)</span></div>
+        <div><strong>Área solicitante (DM03):</strong> ${escapeHtml(access.area || 'Docente')} · <strong>Acumulado Opex del mes (${escapeHtml(ctx.yearMonth || '')}):</strong> ${formatCurrency(currentOpex)} <span style="color:#047857;font-weight:700;">(Sin monto límite mensual por área)</span></div>
+        <div style="margin-top:4px;color:#334155;font-size:13px;">Reglas por compra: <strong>≤ $3,000 MXN</strong> OC directa · <strong>&gt; $3,000 a $8,000 MXN</strong> 1 cotización · <strong>&gt; $8,000 MXN</strong> aprobación y <strong>3 cotizaciones obligatorias</strong> de parte de Daniel Lara.</div>
       </div>
 
       <form id="form-tus-compras" class="solicitud-form">
@@ -326,7 +327,7 @@ function renderCreateView(container, ctx, controller) {
           <div class="solicitud-field">
             <label for="tc-tipo">TIPO DE COMPRA *</label>
             <select id="tc-tipo" name="tipo" required>
-              <option value="OPEX" selected>1) OPEX — Gasto operativo mensual (tope $8,000 MXN/mes por área)</option>
+              <option value="OPEX" selected>1) OPEX — Gasto operativo (sin monto límite por área)</option>
               <option value="CAPEX">2) CAPEX — Inversión / Activo fijo (requiere aprobación ejecutiva)</option>
             </select>
           </div>
@@ -337,7 +338,7 @@ function renderCreateView(container, ctx, controller) {
         </div>
 
         <div id="tc-route-preview" role="status" style="padding:10px 14px;border-radius:6px;background:#e0f2fe;color:#075985;font-size:13.5px;font-weight:600;margin-bottom:12px;">
-          Ingresa el monto estimado para verificar si requiere aprobación (> $8,000.00 MXN mensual o CAPEX) y si requiere proceso de cotización (> $3,000.00 MXN).
+          Ingresa el monto estimado para verificar la ruta de cotización (≤ $3,000 OC directa · &gt; $3,000 cotización · &gt; $8,000 pasa por 3 cotizaciones de Daniel Lara).
         </div>
 
         <div class="solicitud-field solicitud-description">
@@ -412,8 +413,10 @@ function renderCreateView(container, ctx, controller) {
       preview.textContent = 'Ingresa el monto estimado para calcular la ruta de atención.';
       return;
     }
-    const quoteNotice = evalRes.requiresQuotation
-      ? `Al superar ${formatCurrency(TUS_COMPRAS_QUOTE_THRESHOLD)}, Daniel Lara deberá cotizar, informar fecha estimada de cierre de cotizaciones, adjuntar las cotizaciones recibidas y posteriormente emitir la Orden de Compra ajustando el monto definitivo.`
+    const quoteNotice = evalRes.requiresThreeQuotes
+      ? `Al superar ${formatCurrency(TUS_COMPRAS_THREE_QUOTES_THRESHOLD)}, esta compra debe pasar obligatoriamente por 3 cotizaciones de parte de Daniel Lara antes de emitir la Orden de Compra.`
+      : evalRes.requiresQuotation
+      ? `Al superar ${formatCurrency(TUS_COMPRAS_QUOTE_THRESHOLD)}, Daniel Lara deberá cotizar, informar fecha estimada de cierre de cotizaciones, adjuntar la cotización recibida y posteriormente emitir la Orden de Compra ajustando el monto definitivo.`
       : `Por ser menor o igual a ${formatCurrency(TUS_COMPRAS_QUOTE_THRESHOLD)}, al gestionarlo Daniel Lara generará directamente la Orden de Compra informando su fecha de emisión, fecha estimada de entrega y monto definitivo.`;
 
     if (evalRes.requiresApproval) {
@@ -421,12 +424,12 @@ function renderCreateView(container, ctx, controller) {
       preview.style.color = '#92400e';
       const reason = evalRes.tipo === 'CAPEX'
         ? 'por ser compra tipo CAPEX'
-        : `porque el acumulado mensual Opex del área (${formatCurrency(evalRes.projectedAreaMonthlyOpex)}) supera el límite permitido de ${formatCurrency(opexLimit)}`;
+        : `porque la compra supera los ${formatCurrency(opexLimit)}`;
       preview.textContent = `Ruta automática: Al enviar el ticket pasará automáticamente al estado «2b) En aprobación» (${reason}). Una vez aprobado, pasará a gestión de Daniel Lara. ${quoteNotice}`;
     } else {
       preview.style.background = '#dcfce7';
       preview.style.color = '#166534';
-      preview.textContent = `Ruta Opex dentro de presupuesto: Se registrará en «1) Solicitud enviada» (Acumulado mensual proyectado del área: ${formatCurrency(evalRes.projectedAreaMonthlyOpex)} ≤ ${formatCurrency(opexLimit)}). ${quoteNotice}`;
+      preview.textContent = `Ruta Opex directa (sin monto límite mensual por área): Se registrará en «1) Solicitud enviada». ${quoteNotice}`;
     }
   }
 
@@ -546,7 +549,7 @@ async function renderListView(container, ctx, kind, controller) {
         <h1>${kind === 'all' ? 'Gestión y Aprobaciones · Tus compras' : 'Mis Compras y Validación de Recepción'}</h1>
         <p>${
           kind === 'all'
-            ? 'Administra el ciclo de pedidos Opex (≤ $8,000 MXN/mes por área) y Capex (> $8,000 MXN/mes). En compras > $3,000 MXN Daniel cotiza, adjunta cotizaciones y luego genera la Orden de Compra; en compras ≤ $3,000 MXN genera directamente la Orden de Compra ajustando el monto único válido del presupuesto.'
+            ? 'Administra el ciclo de pedidos Opex y Capex (sin monto límite mensual por área). Compras ≤ $3,000 MXN generan OC directa; compras > $3,000 a $8,000 MXN requieren cotización previa (1 archivo); y toda compra > $8,000 MXN debe pasar por 3 cotizaciones de parte de Daniel Lara.'
             : 'Consulta el estado informativo de tus tickets de compra, fechas estimadas de cotización/entrega y Orden de Compra. Cuando tu compra sea entregada podrás cerrar el ticket clasificándolo como Recepción Conforme o Recepción Disconforme.'
         }</p>
       </header>
@@ -685,8 +688,18 @@ async function renderListView(container, ctx, kind, controller) {
         const actions = Array.isArray(order.allowedActions) ? order.allowedActions : [];
         const montoEst = Number(order.montoEstimado ?? order.monto) || 0;
         const montoOC = Number(order.montoOrdenCompra) || 0;
-        const needsQuote = montoEst > TUS_COMPRAS_QUOTE_THRESHOLD;
+        const reqQuotesCount = getRequiredQuotesCount(order);
         const attachHtml = renderAttachmentsLinks(order);
+        const quoteBadgeLabel = reqQuotesCount === 3
+          ? '> $8,000 · 3 Cotizaciones Obligatorias'
+          : reqQuotesCount === 1
+          ? '> $3,000 · Requiere Cotización'
+          : '≤ $3,000 · OC Directa';
+        const quoteBadgeStyle = reqQuotesCount === 3
+          ? 'background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;'
+          : reqQuotesCount === 1
+          ? 'background:#fef3c7;color:#92400e;'
+          : 'background:#dcfce7;color:#166534;';
         return `
           <article class="exact-card" data-order-id="${escapeHtml(order.id)}" style="padding:18px;border:1px solid #cbd5e1;border-radius:10px;background:#ffffff;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
@@ -697,16 +710,14 @@ async function renderListView(container, ctx, kind, controller) {
                     ? 'background:#fae8ff;color:#86198f;'
                     : 'background:#f1f5f9;color:#0f172a;'
                 }">${escapeHtml(order.tipo)}</span>
-                <span style="margin-left:6px;padding:3px 8px;border-radius:6px;font-size:11.5px;font-weight:700;${
-                  needsQuote ? 'background:#fef3c7;color:#92400e;' : 'background:#dcfce7;color:#166534;'
-                }">${needsQuote ? '> $3,000 · Requiere Cotización' : '≤ $3,000 · OC Directa'}</span>
+                <span style="margin-left:6px;padding:3px 8px;border-radius:6px;font-size:11.5px;font-weight:700;${quoteBadgeStyle}">${quoteBadgeLabel}</span>
                 <span style="margin-left:6px;font-weight:700;color:#0f172a;">${formatCurrency(getEffectiveOrderAmount(order))}</span>
                 ${
                   montoOC > 0
                     ? `<span style="margin-left:6px;font-size:12px;color:#047857;font-weight:700;">(Monto OC válido · Est. inicial: ${formatCurrency(montoEst)})</span>`
                     : `<span style="margin-left:6px;font-size:12px;color:#64748b;">(Monto estimado inicial)</span>`
                 }
-                <span style="margin-left:6px;font-size:12px;color:#64748b;">· Acum. mes área ${escapeHtml(order.area)}: ${formatCurrency(order.acumuladoMesArea)} / ${formatCurrency(TUS_COMPRAS_OPEX_LIMIT)}</span>
+                <span style="margin-left:6px;font-size:12px;color:#64748b;">· Acum. mes área ${escapeHtml(order.area)}: ${formatCurrency(order.acumuladoMesArea)} (Sin límite por área)</span>
               </div>
               <span style="padding:4px 10px;border-radius:999px;font-size:12.5px;font-weight:700;${stateBadgeStyle(order.estado)}">
                 ${escapeHtml(order.estado)}
@@ -764,6 +775,7 @@ async function renderListView(container, ctx, kind, controller) {
 
     const todayIso = new Date().toISOString().slice(0, 10);
     const defaultPoAmount = Number(order.montoOrdenCompra || order.montoEstimado || order.monto || 0).toFixed(2);
+    const requiredQuotes = getRequiredQuotesCount(order);
 
     modalEl.innerHTML = `
       <form id="tc-transition-form">
@@ -786,15 +798,46 @@ async function renderListView(container, ctx, kind, controller) {
 
         ${
           meta.requireQuoteAttachment
-            ? `
-          <div style="margin:12px 0;padding:10px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;">
-            <label for="tc-modal-quote-file" style="display:block;font-weight:600;font-size:13px;margin-bottom:4px;color:#0f172a;">
-              ADJUNTAR COTIZACIONES RECIBIDAS (OBLIGATORIO · PDF o Imagen · MÁX. 10 MB) *
-            </label>
-            <input id="tc-modal-quote-file" name="quoteFile" type="file" accept="image/*,.pdf" required style="width:100%;font-size:13px;" />
-            <small style="color:#64748b;display:block;margin-top:4px;">Para compras superiores a $3,000.00 MXN es obligatorio adjuntar la(s) cotización(es) del proceso (máximo 10 MB por archivo).</small>
+            ? requiredQuotes === 3
+              ? `
+          <div style="margin:12px 0;padding:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;">
+            <div style="font-weight:700;font-size:13.5px;color:#991b1b;margin-bottom:6px;">
+              📑 COMPRA MAYOR A $8,000.00 MXN: ES OBLIGATORIO ADJUNTAR 3 COTIZACIONES
+            </div>
+            <p style="margin:0 0 10px;font-size:12.5px;color:#7f1d1d;">
+              Toda compra que supere los $8,000.00 MXN debe pasar por 3 cotizaciones de parte de Daniel Lara (PDF o imagen · máximo 10 MB por archivo).
+            </p>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div>
+                <label for="tc-modal-quote-file-1" style="display:block;font-weight:700;font-size:12.5px;margin-bottom:3px;color:#0f172a;">
+                  1) COTIZACIÓN #1 (OBLIGATORIA · PDF o Imagen · MÁX. 10 MB) *
+                </label>
+                <input id="tc-modal-quote-file-1" class="tc-modal-quote-file-input" data-quote-idx="1" name="quoteFile1" type="file" accept="image/*,.pdf" required style="width:100%;font-size:13px;" />
+              </div>
+              <div>
+                <label for="tc-modal-quote-file-2" style="display:block;font-weight:700;font-size:12.5px;margin-bottom:3px;color:#0f172a;">
+                  2) COTIZACIÓN #2 (OBLIGATORIA · PDF o Imagen · MÁX. 10 MB) *
+                </label>
+                <input id="tc-modal-quote-file-2" class="tc-modal-quote-file-input" data-quote-idx="2" name="quoteFile2" type="file" accept="image/*,.pdf" required style="width:100%;font-size:13px;" />
+              </div>
+              <div>
+                <label for="tc-modal-quote-file-3" style="display:block;font-weight:700;font-size:12.5px;margin-bottom:3px;color:#0f172a;">
+                  3) COTIZACIÓN #3 (OBLIGATORIA · PDF o Imagen · MÁX. 10 MB) *
+                </label>
+                <input id="tc-modal-quote-file-3" class="tc-modal-quote-file-input" data-quote-idx="3" name="quoteFile3" type="file" accept="image/*,.pdf" required style="width:100%;font-size:13px;" />
+              </div>
+            </div>
           </div>
-        `
+              `
+              : `
+          <div style="margin:12px 0;padding:10px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;">
+            <label for="tc-modal-quote-file-1" style="display:block;font-weight:600;font-size:13px;margin-bottom:4px;color:#0f172a;">
+              ADJUNTAR COTIZACIÓN RECIBIDA (OBLIGATORIO · PDF o Imagen · MÁX. 10 MB) *
+            </label>
+            <input id="tc-modal-quote-file-1" class="tc-modal-quote-file-input" data-quote-idx="1" name="quoteFile1" type="file" accept="image/*,.pdf" required style="width:100%;font-size:13px;" />
+            <small style="color:#64748b;display:block;margin-top:4px;">Para compras entre $3,000.01 y $8,000.00 MXN es obligatorio adjuntar la cotización del proceso (máximo 10 MB por archivo).</small>
+          </div>
+              `
             : ''
         }
 
@@ -820,7 +863,7 @@ async function renderListView(container, ctx, kind, controller) {
               MONTO REAL AJUSTADO DE LA ORDEN DE COMPRA (MXN) *
             </label>
             <input id="tc-modal-po-amount" name="montoOrdenCompra" type="number" min="1" max="10000000" step="0.01" required value="${escapeHtml(defaultPoAmount)}" style="width:100%;padding:8px;border:1px solid #7dd3fc;border-radius:6px;font-weight:700;" />
-            <small style="color:#0369a1;display:block;margin-top:4px;">Monto estimado informado por el usuario: <strong>${formatCurrency(order.montoEstimado || order.monto)}</strong>. El monto ajustado aquí será el <strong>monto único válido</strong> descontado del presupuesto mensual ($8,000.00 MXN) del área.</small>
+            <small style="color:#0369a1;display:block;margin-top:4px;">Monto estimado informado por el usuario: <strong>${formatCurrency(order.montoEstimado || order.monto)}</strong>. El monto ajustado aquí será el <strong>monto único válido</strong> del pedido (sin límite mensual por área).</small>
           </div>
         `
             : ''
@@ -846,19 +889,22 @@ async function renderListView(container, ctx, kind, controller) {
     const form = modalEl.querySelector('#tc-transition-form');
     const submitBtn = modalEl.querySelector('#tc-modal-submit');
     const errEl = modalEl.querySelector('#tc-modal-error');
-    const quoteFileInput = modalEl.querySelector('#tc-modal-quote-file');
+    const quoteFileInputs = [...modalEl.querySelectorAll('.tc-modal-quote-file-input')];
 
-    quoteFileInput?.addEventListener('change', () => {
-      const f = quoteFileInput.files?.[0];
-      if (!f) return;
-      try {
-        validateTusCompraAttachmentFile(f, 'archivo de Cotizaciones recibidas');
-        errEl.hidden = true;
-      } catch (err) {
-        quoteFileInput.value = '';
-        errEl.hidden = false;
-        errEl.textContent = err.message;
-      }
+    quoteFileInputs.forEach(inputEl => {
+      inputEl.addEventListener('change', () => {
+        const f = inputEl.files?.[0];
+        if (!f) return;
+        const idxLabel = inputEl.dataset.quoteIdx ? `Cotización #${inputEl.dataset.quoteIdx}` : 'archivo de Cotizaciones recibidas';
+        try {
+          validateTusCompraAttachmentFile(f, idxLabel);
+          errEl.hidden = true;
+        } catch (err) {
+          inputEl.value = '';
+          errEl.hidden = false;
+          errEl.textContent = err.message;
+        }
+      });
     });
 
     form?.addEventListener('submit', async ev => {
@@ -911,23 +957,41 @@ async function renderListView(container, ctx, kind, controller) {
       errEl.hidden = true;
       try {
         if (meta.requireQuoteAttachment) {
-          const fileEl = modalEl.querySelector('#tc-modal-quote-file');
-          const file = fileEl?.files?.[0];
-          if (!file) {
-            throw new Error('Debes adjuntar el archivo de cotizaciones para compras mayores a $3,000.00 MXN.');
+          const neededCount = requiredQuotes === 3 ? 3 : 1;
+          const filesToUpload = [];
+          for (let i = 1; i <= neededCount; i++) {
+            const fileEl = modalEl.querySelector(`#tc-modal-quote-file-${i}`);
+            const f = fileEl?.files?.[0];
+            if (!f) {
+              throw new Error(
+                neededCount === 3
+                  ? `Falta adjuntar la Cotización #${i}. Toda compra mayor a $8,000.00 MXN debe contar con las 3 cotizaciones adjuntas.`
+                  : 'Debes adjuntar el archivo de cotización para compras mayores a $3,000.00 MXN.'
+              );
+            }
+            validateTusCompraAttachmentFile(f, `Cotización #${i}`);
+            filesToUpload.push({ idx: i, file: f });
           }
-          validateTusCompraAttachmentFile(file, 'archivo de Cotizaciones recibidas');
-          submitBtn.textContent = 'Subiendo cotizaciones a Google Drive…';
-          const up = await uploadTusCompraAttachment(
-            file,
-            listData.csrfToken || ctx.csrfToken,
-            signal,
-            'archivo de Cotizaciones recibidas'
-          );
-          payload.adjuntoCotizacionesAdm = up?.url || '';
-          if (!payload.adjuntoCotizacionesAdm) {
-            throw new Error(`No se logró verificar la carga del archivo «${file.name}» en Google Drive.`);
+
+          const uploadedUrls = [];
+          for (const item of filesToUpload) {
+            submitBtn.textContent =
+              neededCount === 3
+                ? `Subiendo Cotización #${item.idx} de 3 a Google Drive…`
+                : 'Subiendo cotización a Google Drive…';
+            const up = await uploadTusCompraAttachment(
+              item.file,
+              listData.csrfToken || ctx.csrfToken,
+              signal,
+              `Cotización #${item.idx}`
+            );
+            const url = up?.url || '';
+            if (!url) {
+              throw new Error(`No se logró verificar la carga de la Cotización #${item.idx} («${item.file.name}») en Google Drive.`);
+            }
+            uploadedUrls.push(url);
           }
+          payload.adjuntoCotizacionesAdm = uploadedUrls.join(' | ');
           submitBtn.textContent = 'Procesando…';
         }
 
@@ -971,9 +1035,9 @@ async function renderListView(container, ctx, kind, controller) {
         <table style="width:100%;border-collapse:collapse;font-size:13.5px;margin:12px 0;">
           <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Estado Actual</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.estado)}</td></tr>
           <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Solicitante / Área</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.solicitante)} (${escapeHtml(order.correo)}) · ${escapeHtml(order.area)}</td></tr>
-          <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Tipo y Monto Válido</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.tipo)} · <strong>${formatCurrency(order.monto)}</strong> (Acumulado mes área: ${formatCurrency(order.acumuladoMesArea)} / $8,000.00 MXN)</td></tr>
+          <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Tipo y Monto Válido</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.tipo)} · <strong>${formatCurrency(order.monto)}</strong> (Acumulado mes área: ${formatCurrency(order.acumuladoMesArea)} · Sin límite por área)</td></tr>
           <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Monto Estimado (Usuario)</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${formatCurrency(order.montoEstimado || order.monto)}</td></tr>
-          ${Number(order.montoOrdenCompra || 0) > 0 ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#0f766e;">Monto Orden de Compra (Ajustado)</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#0f766e;">${formatCurrency(order.montoOrdenCompra)} (Único válido descontado de presupuesto)</td></tr>` : ''}
+          ${Number(order.montoOrdenCompra || 0) > 0 ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#0f766e;">Monto Orden de Compra (Ajustado)</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#0f766e;">${formatCurrency(order.montoOrdenCompra)} (Monto único válido del pedido)</td></tr>` : ''}
           <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Artículos</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.descripcion)}</td></tr>
           ${order.justificacion ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Justificación</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.justificacion)}</td></tr>` : ''}
           ${order.fechaCierreCotizacion ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Fecha est. cierre cotizaciones</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.fechaCierreCotizacion)}</td></tr>` : ''}
@@ -1125,9 +1189,9 @@ async function renderExecutiveDashboardView(container, ctx, controller) {
         <table style="width:100%;border-collapse:collapse;font-size:13.5px;margin:12px 0;">
           <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Estado Actual</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.estado)}</td></tr>
           <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Solicitante / Área</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.solicitante)} (${escapeHtml(order.correo)}) · ${escapeHtml(order.area)}</td></tr>
-          <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Tipo y Monto Válido</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.tipo)} · <strong>${formatCurrency(order.monto)}</strong> (Acumulado mes área: ${formatCurrency(order.acumuladoMesArea)} / $8,000.00 MXN)</td></tr>
+          <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Tipo y Monto Válido</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.tipo)} · <strong>${formatCurrency(order.monto)}</strong> (Acumulado mes área: ${formatCurrency(order.acumuladoMesArea)} · Sin límite por área)</td></tr>
           <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Monto Estimado (Usuario)</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${formatCurrency(order.montoEstimado || order.monto)}</td></tr>
-          ${Number(order.montoOrdenCompra || 0) > 0 ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#0f766e;">Monto Orden de Compra (Ajustado)</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#0f766e;">${formatCurrency(order.montoOrdenCompra)} (Único válido descontado de presupuesto)</td></tr>` : ''}
+          ${Number(order.montoOrdenCompra || 0) > 0 ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#0f766e;">Monto Orden de Compra (Ajustado)</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#0f766e;">${formatCurrency(order.montoOrdenCompra)} (Monto único válido del pedido)</td></tr>` : ''}
           <tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Artículos</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.descripcion)}</td></tr>
           ${order.fechaCierreCotizacion ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Fecha est. cierre cotizaciones</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.fechaCierreCotizacion)}</td></tr>` : ''}
           ${order.fechaRecepcionCotizacion ? `<tr><td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">Fecha recepción cotizaciones</td><td style="padding:6px;border-bottom:1px solid #e2e8f0;">${escapeHtml(order.fechaRecepcionCotizacion)}</td></tr>` : ''}
@@ -1355,30 +1419,32 @@ async function renderExecutiveDashboardView(container, ctx, controller) {
         </section>
       </div>
 
-      <!-- Segunda Fila: Ejecución Presupuestaria Mensual OPEX por Área + Backlog de Daniel Lara -->
+        <!-- Segunda Fila: Ejecución Presupuestaria Mensual OPEX por Área + Backlog de Daniel Lara -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px;margin-bottom:18px;">
         <section style="background:#ffffff;border:1px solid #cbd5e1;border-radius:10px;padding:18px;">
-          <h2 style="margin:0 0 6px;font-size:16px;color:#1e3a8a;">💰 Consumo Mensual OPEX por Área vs. Tope ($8,000 MXN)</h2>
-          <p style="margin:0 0 14px;font-size:12.5px;color:#475569;">Monitoreo del límite mensual de $8,000.00 MXN por área solicitante (descontando el monto único válido ajustado en la Orden de Compra).</p>
+          <h2 style="margin:0 0 6px;font-size:16px;color:#1e3a8a;">💰 Consumo Mensual OPEX por Área Solicitante (Sin límite mensual por área)</h2>
+          <p style="margin:0 0 14px;font-size:12.5px;color:#475569;">Distribución del gasto mensual OPEX por área solicitante considerando el monto único válido ajustado en la Orden de Compra.</p>
           ${
             m.areaBudgets.length
-              ? m.areaBudgets
-                  .map(ab => {
-                    const pctUsed = Math.round((ab.currentMonthMonto / TUS_COMPRAS_OPEX_LIMIT) * 100);
-                    const barColor = pctUsed > 100 ? '#dc2626' : pctUsed >= 75 ? '#d97706' : '#059669';
-                    return `
-                      <div style="margin-bottom:12px;">
-                        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
-                          <strong>${escapeHtml(ab.area)} (${ab.count} pedidos OPEX)</strong>
-                          <span style="font-weight:700;color:${barColor};">${formatCurrency(ab.currentMonthMonto)} / ${formatCurrency(TUS_COMPRAS_OPEX_LIMIT)} (${pctUsed}%)</span>
+              ? (() => {
+                  const maxAreaSpend = Math.max(1, ...m.areaBudgets.map(x => Number(x.currentMonthMonto) || 0));
+                  return m.areaBudgets
+                    .map(ab => {
+                      const barPct = Math.min(100, Math.max(6, Math.round(((Number(ab.currentMonthMonto) || 0) / maxAreaSpend) * 100)));
+                      return `
+                        <div style="margin-bottom:12px;">
+                          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
+                            <strong>${escapeHtml(ab.area)} (${ab.count} pedidos OPEX)</strong>
+                            <span style="font-weight:700;color:#0369a1;">${formatCurrency(ab.currentMonthMonto)} (Sin límite por área)</span>
+                          </div>
+                          <div style="height:10px;background:#f1f5f9;border-radius:999px;overflow:hidden;">
+                            <div style="width:${barPct}%;height:100%;background:#0284c7;"></div>
+                          </div>
                         </div>
-                        <div style="height:10px;background:#f1f5f9;border-radius:999px;overflow:hidden;">
-                          <div style="width:${Math.min(100, pctUsed)}%;height:100%;background:${barColor};"></div>
-                        </div>
-                      </div>
-                    `;
-                  })
-                  .join('')
+                      `;
+                    })
+                    .join('');
+                })()
               : '<p style="font-size:13px;color:#64748b;">No hay consumos OPEX registrados para este filtro.</p>'
           }
         </section>

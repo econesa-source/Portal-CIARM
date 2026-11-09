@@ -1,10 +1,12 @@
 /**
  * Servicio Frontend para el Módulo "Tus compras" (Pedidos de compra Opex / Capex)
- * Tope mensual Opex por área solicitante: $8,000.00 MXN
- * Umbral de cotización obligatoria: > $3,000.00 MXN
+ * Sin monto límite mensual por área solicitante.
+ * Umbral de cotización: > $3,000.00 MXN (1 cotización si <= $8,000.00 MXN).
+ * Umbral de 3 cotizaciones obligatorias y aprobación: > $8,000.00 MXN por compra.
  */
 
 export const TUS_COMPRAS_OPEX_LIMIT = 8000;
+export const TUS_COMPRAS_THREE_QUOTES_THRESHOLD = 8000;
 export const TUS_COMPRAS_QUOTE_THRESHOLD = 3000;
 export const TUS_COMPRAS_MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // 10 MB por archivo
 
@@ -38,11 +40,22 @@ export function getEffectiveOrderAmount(order) {
   return Math.round(montoEst * 100) / 100;
 }
 
+export function getBaseQuoteAmount(orderOrMonto) {
+  if (typeof orderOrMonto === 'object' && orderOrMonto !== null) {
+    return Math.max(0, Number(orderOrMonto.montoEstimado ?? orderOrMonto.monto) || 0);
+  }
+  return Math.max(0, Number(orderOrMonto) || 0);
+}
+
+export function getRequiredQuotesCount(orderOrMonto) {
+  const monto = getBaseQuoteAmount(orderOrMonto);
+  if (monto > TUS_COMPRAS_THREE_QUOTES_THRESHOLD) return 3;
+  if (monto > TUS_COMPRAS_QUOTE_THRESHOLD) return 1;
+  return 0;
+}
+
 export function requiresQuotationProcess(orderOrMonto) {
-  const monto = typeof orderOrMonto === 'object' && orderOrMonto !== null
-    ? getEffectiveOrderAmount(orderOrMonto)
-    : Math.max(0, Number(orderOrMonto) || 0);
-  return monto > TUS_COMPRAS_QUOTE_THRESHOLD;
+  return getRequiredQuotesCount(orderOrMonto) > 0;
 }
 
 export function evaluateOrderApprovalRequirement(tipo, monto, currentAreaMonthlyOpex = 0, limit = TUS_COMPRAS_OPEX_LIMIT) {
@@ -52,9 +65,12 @@ export function evaluateOrderApprovalRequirement(tipo, monto, currentAreaMonthly
   const projectedAreaOpex = cleanTipo === 'OPEX'
     ? Math.round((currentOpex + numMonto) * 100) / 100
     : Math.round(currentOpex * 100) / 100;
-  const exceedsOpexLimit = cleanTipo === 'OPEX' && projectedAreaOpex > limit;
+  // Sin monto límite mensual por área: solo se evalúa el monto individual de la compra (> $8,000 MXN) o si es CAPEX
+  const exceedsOpexLimit = cleanTipo === 'OPEX' && numMonto > limit;
   const requiresApproval = cleanTipo === 'CAPEX' || exceedsOpexLimit;
   const requiresQuotation = numMonto > TUS_COMPRAS_QUOTE_THRESHOLD;
+  const requiresThreeQuotes = numMonto > TUS_COMPRAS_THREE_QUOTES_THRESHOLD;
+  const requiredQuotesCount = requiresThreeQuotes ? 3 : (requiresQuotation ? 1 : 0);
   return {
     tipo: cleanTipo,
     monto: numMonto,
@@ -62,7 +78,10 @@ export function evaluateOrderApprovalRequirement(tipo, monto, currentAreaMonthly
     projectedAreaMonthlyOpex: projectedAreaOpex,
     opexLimit: limit,
     quoteThreshold: TUS_COMPRAS_QUOTE_THRESHOLD,
+    threeQuotesThreshold: TUS_COMPRAS_THREE_QUOTES_THRESHOLD,
     requiresQuotation,
+    requiresThreeQuotes,
+    requiredQuotesCount,
     exceedsOpexLimit,
     requiresApproval,
     initialState: requiresApproval ? TUS_COMPRAS_STATES.EN_APROBACION : TUS_COMPRAS_STATES.ENVIADA
@@ -74,10 +93,9 @@ export function resolveEffectiveOrderState(order, limit = TUS_COMPRAS_OPEX_LIMIT
   const rawState = String(order.estado || '').trim();
   const isCapex = String(order.tipo || '').trim().toUpperCase() === 'CAPEX';
   const monto = getEffectiveOrderAmount(order);
-  const acum = Number(order.acumuladoMesArea) || 0;
   const requiresApproval = Boolean(order.requiereAprobacion)
     || isCapex
-    || (!isCapex && (monto > limit || acum > limit));
+    || (!isCapex && monto > limit);
 
   if (requiresApproval && (rawState === '' || rawState === TUS_COMPRAS_STATES.ENVIADA)) {
     return TUS_COMPRAS_STATES.EN_APROBACION;
@@ -100,6 +118,8 @@ export function normalizeOrdersStates(orders, limit = TUS_COMPRAS_OPEX_LIMIT) {
     item.montoOrdenCompra = montoOC;
     item.monto = monto;
     item.requiereCotizacion = montoEst > TUS_COMPRAS_QUOTE_THRESHOLD;
+    item.requiereTresCotizaciones = montoEst > TUS_COMPRAS_THREE_QUOTES_THRESHOLD;
+    item.cotizacionesRequeridas = getRequiredQuotesCount(montoEst);
 
     const rawState = String(item.estado || '').trim();
     const areaKey = String(item.area || 'docente').trim().toLowerCase();
@@ -116,8 +136,10 @@ export function normalizeOrdersStates(orders, limit = TUS_COMPRAS_OPEX_LIMIT) {
       : Math.max(Number(item.acumuladoMesArea) || 0, runningOpex);
 
     item.acumuladoMesArea = acum;
-    if (isCapex || (!isCapex && (monto > limit || acum > limit))) {
+    if (isCapex || (!isCapex && monto > limit)) {
       item.requiereAprobacion = true;
+    } else {
+      item.requiereAprobacion = Boolean(item.requiereAprobacion);
     }
     item.estado = resolveEffectiveOrderState(item, limit);
   }
@@ -131,9 +153,10 @@ export function computeAllowedActions(order, access, viewKind = 'all') {
   const isOwner = Boolean(actorEmail) && String(order.correo || '').trim().toLowerCase() === actorEmail;
   const canAdmin = Boolean(access.canAdmin);
   const canApprove = Boolean(access.canApprove);
+  const montoEfectivo = getEffectiveOrderAmount(order);
   const requiresApproval = Boolean(order.requiereAprobacion)
     || String(order.tipo || '').toUpperCase() === 'CAPEX'
-    || Number(order.acumuladoMesArea || 0) > TUS_COMPRAS_OPEX_LIMIT;
+    || montoEfectivo > TUS_COMPRAS_OPEX_LIMIT;
   const montoBase = Number(order.montoEstimado ?? order.monto) || 0;
   const requiresQuotation = montoBase > TUS_COMPRAS_QUOTE_THRESHOLD;
 

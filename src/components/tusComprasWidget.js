@@ -24,7 +24,7 @@ import {
   transitionTusCompra,
   validateTusCompraAttachmentFile,
   uploadTusCompraAttachment
-} from '../services/tusComprasService.js?v=18.7.16-tc12';
+} from '../services/tusComprasService.js?v=18.7.16-tc13';
 
 const ACTION_META = Object.freeze({
   RECEIVE_OPEX: {
@@ -954,23 +954,24 @@ async function renderListView(container, ctx, kind, controller) {
             filesToUpload.push({ idx: i, file: f });
           }
 
-          const uploadedUrls = [];
-          for (const item of filesToUpload) {
-            submitBtn.textContent = `Subiendo Cotización #${item.idx} de 3 a Google Drive…`;
-            const up = await uploadTusCompraAttachment(
-              item.file,
-              listData.csrfToken || ctx.csrfToken,
-              signal,
-              `Cotización #${item.idx}`
-            );
-            const url = up?.url || '';
-            if (!url) {
-              throw new Error(`No se logró verificar la carga de la Cotización #${item.idx} («${item.file.name}») en Google Drive.`);
-            }
-            uploadedUrls.push(url);
-          }
-          payload.adjuntoCotizacionesAdm = uploadedUrls.join(' | ');
-          submitBtn.textContent = 'Procesando…';
+          submitBtn.textContent = 'Subiendo las 3 cotizaciones…';
+          const uploadResults = await Promise.all(
+            filesToUpload.map(async item => {
+              const up = await uploadTusCompraAttachment(
+                item.file,
+                listData.csrfToken || ctx.csrfToken,
+                signal,
+                `Cotización #${item.idx}`
+              );
+              const url = up?.url || '';
+              if (!url) {
+                throw new Error(`No se logró verificar la carga de la Cotización #${item.idx} («${item.file.name}»).`);
+              }
+              return url;
+            })
+          );
+          payload.adjuntoCotizacionesAdm = uploadResults.join(' | ');
+          submitBtn.textContent = 'Guardando recepción…';
         }
 
         const res = await transitionTusCompra(

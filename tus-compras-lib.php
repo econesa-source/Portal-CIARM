@@ -1560,10 +1560,83 @@ function ciarm_tus_compras_notify_upload_failure(array $access, string $fileName
                 'event' => 'UPLOAD_FAILURE',
                 'messages' => $messages,
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'timeout' => 12,
+            'timeout' => 6,
         ]);
     } catch (Throwable $ignored) {
     }
+}
+
+function ciarm_tus_compras_storage_dirs(): array {
+    return [
+        ciarm_private_path('tus-compras-files'),
+        __DIR__ . '/storage/tus-compras-files',
+    ];
+}
+
+function ciarm_tus_compras_resolve_attachment_path(string $fileId): ?string {
+    $cleanId = trim($fileId);
+    if (!preg_match('/^tc_\d{8}_\d{6}_[a-f0-9]{24}_[a-zA-Z0-9._-]{1,95}$/', $cleanId)) {
+        return null;
+    }
+    foreach (ciarm_tus_compras_storage_dirs() as $dir) {
+        $candidate = rtrim($dir, '/\\') . '/' . $cleanId;
+        if (@is_file($candidate) && @is_readable($candidate)) {
+            return $candidate;
+        }
+    }
+    return null;
+}
+
+function ciarm_tus_compras_store_attachment(array $file, array $user): array {
+    $tmpPath = (string)($file['tmp_name'] ?? '');
+    if ($tmpPath === '' || (!is_uploaded_file($tmpPath) && !is_file($tmpPath))) {
+        throw new RuntimeException('VALIDATION');
+    }
+    $originalName = basename((string)($file['name'] ?? 'adjunto.pdf'));
+    $cleanName = preg_replace('/[^a-zA-Z0-9._-]/', '_', $originalName) ?: 'adjunto.pdf';
+    if (strlen($cleanName) > 80) {
+        $cleanName = substr($cleanName, -80);
+    }
+    $mime = (new finfo(FILEINFO_MIME_TYPE))->file($tmpPath) ?: 'application/octet-stream';
+    if (!preg_match('/\.(pdf|png|jpe?g|webp|gif)$/i', $cleanName)) {
+        $ext = match ($mime) {
+            'application/pdf' => '.pdf',
+            'image/png' => '.png',
+            'image/webp' => '.webp',
+            'image/gif' => '.gif',
+            default => '.jpg',
+        };
+        $cleanName .= $ext;
+    }
+
+    $storedName = 'tc_' . gmdate('Ymd_His', time() - 5 * 3600) . '_' . bin2hex(random_bytes(12)) . '_' . $cleanName;
+    foreach (ciarm_tus_compras_storage_dirs() as $dir) {
+        if (!@is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+        if (!@is_dir($dir) || !@is_writable($dir)) {
+            continue;
+        }
+        $destPath = rtrim($dir, '/\\') . '/' . $storedName;
+        $saved = @move_uploaded_file($tmpPath, $destPath);
+        if (!$saved) {
+            $saved = @copy($tmpPath, $destPath);
+        }
+        if ($saved && @is_file($destPath) && (int)@filesize($destPath) > 0) {
+            @chmod($destPath, 0644);
+            $baseUrl = function_exists('ciarm_tickets_active_base_url')
+                ? rtrim(ciarm_tickets_active_base_url(), '/')
+                : 'https://portal2.ciarm.edu.mx';
+            $url = $baseUrl . '/tus-compras-api.php?action=file&f=' . rawurlencode($storedName);
+            return [
+                'url' => $url,
+                'name' => $originalName,
+                'id' => $storedName,
+            ];
+        }
+    }
+
+    return ciarm_upload_evidence_to_drive($file, $user);
 }
 
 function ciarm_tus_compras_active_webapp(?string $host = null): string {

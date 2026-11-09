@@ -12,6 +12,29 @@ if (!in_array($method, ['GET', 'POST'], true)) {
     ciarm_json_response(405, ['ok' => false, 'code' => 'METHOD_NOT_ALLOWED']);
 }
 
+if ($method === 'GET' && ($_GET['action'] ?? '') === 'file') {
+    $fileId = trim((string)($_GET['f'] ?? ''));
+    $resolvedPath = ciarm_tus_compras_resolve_attachment_path($fileId);
+    if ($resolvedPath === null) {
+        ciarm_json_response(404, ['ok' => false, 'code' => 'NOT_FOUND', 'message' => 'Archivo adjunto no encontrado.']);
+    }
+    $mime = (new finfo(FILEINFO_MIME_TYPE))->file($resolvedPath) ?: 'application/octet-stream';
+    if (!str_starts_with($mime, 'image/') && $mime !== 'application/pdf') {
+        $mime = 'application/octet-stream';
+    }
+    $displayName = preg_replace('/^tc_\d{8}_\d{6}_[a-f0-9]{24}_/', '', basename($resolvedPath)) ?: basename($resolvedPath);
+    $fileSize = (int)@filesize($resolvedPath);
+    header('Content-Type: ' . $mime);
+    if ($fileSize > 0) {
+        header('Content-Length: ' . $fileSize);
+    }
+    header('Content-Disposition: inline; filename="' . addslashes($displayName) . '"');
+    header('Cache-Control: public, max-age=86400');
+    header('X-Content-Type-Options: nosniff');
+    readfile($resolvedPath);
+    exit;
+}
+
 if ($method === 'GET' && ($_GET['action'] ?? '') === 'ping') {
     $t0 = microtime(true);
     $canRead = false;
@@ -224,18 +247,18 @@ try {
             ]);
         }
         try {
-            $uploaded = ciarm_upload_evidence_to_drive($file, $user);
+            $uploaded = ciarm_tus_compras_store_attachment($file, $user);
             $uploadedUrl = trim((string)($uploaded['url'] ?? ''));
             if ($uploadedUrl === '' || !str_starts_with($uploadedUrl, 'http')) {
                 throw new RuntimeException('UPLOAD_EMPTY_URL');
             }
             ciarm_json_response(200, ['ok' => true, 'data' => $uploaded]);
         } catch (Throwable $upErr) {
-            ciarm_tus_compras_notify_upload_failure($access, $fileName, 'No se logró almacenar el archivo en Google Drive (' . $upErr->getMessage() . ').');
+            ciarm_tus_compras_notify_upload_failure($access, $fileName, 'No se logró almacenar el archivo adjunto (' . $upErr->getMessage() . ').');
             ciarm_json_response(502, [
                 'ok' => false,
                 'code' => 'UPLOAD_FAILED',
-                'message' => "No se logró cargar el archivo «{$fileName}» en Google Drive. Se ha informado del incidente; por favor intenta nuevamente.",
+                'message' => "No se logró cargar el archivo «{$fileName}». Se ha informado del incidente; por favor intenta nuevamente.",
             ]);
         }
     }

@@ -894,6 +894,9 @@ function ciarm_tus_compras_validate_transition(array $order, string $event, arra
             return [
                 'newState' => CIARM_TUS_COMPRAS_STATE_OC_GENERADA,
                 'roleLabel' => 'Administración (Daniel Lara)',
+                'fechaOrdenCompra' => $fechaOC,
+                'fechaEntregaEstimada' => $fechaEntregaEst,
+                'montoOrdenCompra' => $montoOC,
             ];
 
         case 'RECEIVE_ITEMS_ADM':

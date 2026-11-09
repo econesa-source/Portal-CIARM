@@ -271,16 +271,16 @@ try {
             'monto' => $monto,
             'montoEstimado' => $monto,
             'montoOrdenCompra' => 0.0,
-            'requiereCotizacion' => $monto > CIARM_TUS_COMPRAS_QUOTE_THRESHOLD,
-            'requiereTresCotizaciones' => $monto > CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD,
-            'cotizacionesRequeridas' => $eval['requiredQuotesCount'] ?? ($monto > CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD ? 3 : ($monto > CIARM_TUS_COMPRAS_QUOTE_THRESHOLD ? 1 : 0)),
+            'requiereCotizacion' => $monto >= CIARM_TUS_COMPRAS_QUOTE_THRESHOLD,
+            'requiereTresCotizaciones' => $monto >= CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD,
+            'cotizacionesRequeridas' => $eval['requiredQuotesCount'] ?? ($monto >= CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD ? 3 : 0),
             'acumuladoMesArea' => $eval['projectedAreaMonthlyOpex'],
             'requiereAprobacion' => $eval['requiresApproval'],
             'descripcion' => $descripcion,
             'justificacion' => $justificacion,
             'estado' => $initialState,
             'responsableAdm' => 'Daniel Lara',
-            'aprobador' => $eval['requiresApproval'] ? 'En aprobación (Administración)' : 'No requiere (Opex ≤ $8,000)',
+            'aprobador' => $eval['requiresApproval'] ? 'En aprobación (Administración)' : 'No requiere (Opex < $8,000)',
             'fechaAprobacion' => '',
             'comentarioAprobacion' => '',
             'fechaRecepcionAdm' => '',
@@ -332,8 +332,8 @@ try {
             $eval['requiresApproval']
                 ? ($tipo === 'CAPEX'
                     ? 'Pedido Capex enviado y pasado automáticamente a 2b) En aprobación.'
-                    : 'Pedido Opex mayor a $8,000 MXN; pasa automáticamente a 2b) En aprobación y requiere 3 cotizaciones.')
-                : 'Pedido Opex registrado (≤ $8,000 MXN · Sin monto límite por área).',
+                    : 'Pedido Opex mayor o igual a $8,000 MXN; pasa automáticamente a 2b) En aprobación y requiere 3 cotizaciones.')
+                : 'Pedido Opex registrado (< $8,000 MXN · OC directa sin cotización previa · Sin monto límite por área).',
             (string)($notif['status'] ?? 'ENVIADO'),
         ];
 

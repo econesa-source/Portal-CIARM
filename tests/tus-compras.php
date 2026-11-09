@@ -79,10 +79,10 @@ assert_true($accEzequiel['canCreate'] === true, 'Administracion + Administracion
 assert_true($accEzequiel['canGerencial'] === true, 'Administracion + Administracion CAN see Vista Gerencial');
 assert_true($accDocDir['canGerencial'] === false, 'Docente + Director does not see Vista Gerencial');
 
-// 2. Verificar que NO hay límite mensual por área, umbral > $8,000 MXN para aprobación/3 cotizaciones y umbral > $3,000 MXN para 1 cotización
+// 2. Verificar que NO hay límite mensual por área, y simplificación en 2 pasos (< $8,000 MXN -> OC directa sin cotización; >= $8,000 MXN -> 2b y 3 cotizaciones)
 assert_true(CIARM_TUS_COMPRAS_OPEX_LIMIT === 8000.0, 'Single purchase approval/3-quotes threshold must be 8,000 MXN');
 assert_true(CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD === 8000.0, 'Three quotes threshold must be 8,000 MXN');
-assert_true(CIARM_TUS_COMPRAS_QUOTE_THRESHOLD === 3000.0, 'Quote threshold must be 3,000 MXN');
+assert_true(CIARM_TUS_COMPRAS_QUOTE_THRESHOLD === 8000.0, 'Quote threshold must be 8,000 MXN');
 
 $existingOrders = [
     ['id' => 'CMP-2026-00001', 'area' => 'Primaria', 'tipo' => 'OPEX', 'monto' => 5000.0, 'montoEstimado' => 5000.0, 'montoOrdenCompra' => 4200.0, 'fecha' => '2026-11-02', 'estado' => CIARM_TUS_COMPRAS_STATE_OC_GENERADA], // acumula 4,200 MXN (montoOrdenCompra ajustado)
@@ -92,16 +92,16 @@ $existingOrders = [
 $primariaOpex = ciarm_tus_compras_area_monthly_opex($existingOrders, 'Primaria', '2026-11');
 assert_true($primariaOpex === 4200.0, 'Primaria Opex accumulated uses adjusted PO amount (4,200 MXN)');
 
-// Aunque Primaria lleve 4,200 y pida 5,000 (acumulado 9,200 > 8,000), como NO hay monto límite por área y la compra individual (5,000) es <= 8,000, inicia en 1) Solicitud enviada y pide 1 cotización
-$evalNoAreaCap = ciarm_tus_compras_requires_approval('OPEX', 5000.0, $primariaOpex);
-assert_true($evalNoAreaCap['requiresApproval'] === false && $evalNoAreaCap['projectedAreaMonthlyOpex'] === 9200.0 && $evalNoAreaCap['requiredQuotesCount'] === 1 && $evalNoAreaCap['initialState'] === CIARM_TUS_COMPRAS_STATE_ENVIADA, 'No area monthly limit: $5,000 OPEX order stays in 1) Solicitud enviada even if area accumulated is $9,200');
+// Paso 1: Compra < $8,000 MXN ($5,000) inicia en 1) Solicitud enviada y NO requiere cotización previa (0 cotizaciones), pasa directo a generación de OC
+$evalUnder8000 = ciarm_tus_compras_requires_approval('OPEX', 5000.0, $primariaOpex);
+assert_true($evalUnder8000['requiresApproval'] === false && $evalUnder8000['projectedAreaMonthlyOpex'] === 9200.0 && $evalUnder8000['requiredQuotesCount'] === 0 && $evalUnder8000['initialState'] === CIARM_TUS_COMPRAS_STATE_ENVIADA, 'No area monthly limit: $5,000 OPEX (< $8,000) stays in 1) Solicitud enviada and requires 0 quotes (direct PO)');
 
-// Compra individual OPEX > $8,000 MXN pasa a 2b) En aprobación y requiere 3 cotizaciones
-$evalOver8000 = ciarm_tus_compras_requires_approval('OPEX', 8500.0, $primariaOpex);
-assert_true($evalOver8000['requiresApproval'] === true && $evalOver8000['requiresThreeQuotes'] === true && $evalOver8000['requiredQuotesCount'] === 3 && $evalOver8000['initialState'] === CIARM_TUS_COMPRAS_STATE_EN_APROBACION, 'Single OPEX purchase > $8,000 starts in 2b) En aprobación and requires 3 quotes');
+// Paso 2: Compra individual OPEX >= $8,000 MXN (ej. $8,000 o $8,500) pasa a 2b) En aprobación y requiere 3 cotizaciones
+$evalAt8000 = ciarm_tus_compras_requires_approval('OPEX', 8000.0, $primariaOpex);
+assert_true($evalAt8000['requiresApproval'] === true && $evalAt8000['requiresThreeQuotes'] === true && $evalAt8000['requiredQuotesCount'] === 3 && $evalAt8000['initialState'] === CIARM_TUS_COMPRAS_STATE_EN_APROBACION, 'Single OPEX purchase >= $8,000 starts in 2b) En aprobación and requires 3 quotes');
 
 $evalCapex = ciarm_tus_compras_requires_approval('CAPEX', 2000.0, 0.0);
-assert_true($evalCapex['requiresApproval'] === true && $evalCapex['initialState'] === CIARM_TUS_COMPRAS_STATE_EN_APROBACION, 'Capex automatically starts in 2b) En aprobación');
+assert_true($evalCapex['requiresApproval'] === true && $evalCapex['requiredQuotesCount'] === 0 && $evalCapex['initialState'] === CIARM_TUS_COMPRAS_STATE_EN_APROBACION, 'Capex < $8,000 automatically starts in 2b) En aprobación and requires 0 quotes');
 
 // 3. Verificar flujo por umbral de $3,000 y > $8,000 MXN (3 cotizaciones obligatorias cuando > $8,000 MXN):
 $order2b = [

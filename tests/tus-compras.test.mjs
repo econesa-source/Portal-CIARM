@@ -20,10 +20,10 @@ import {
 } from '../src/services/tusComprasService.js';
 import { allowedRoute } from '../src/components/dashboardAccess.js';
 
-test('Sin monto límite mensual por área, umbral de cotización (> $3,000 -> 1 cotización, > $8,000 -> 3 cotizaciones) y monto único válido de Orden de Compra', () => {
+test('Simplificación en 2 pasos (< $8,000 MXN pasa directo a OC sin cotización previa; >= $8,000 MXN pasa por 2b y exige 3 cotizaciones) y sin límite por área', () => {
   assert.equal(TUS_COMPRAS_OPEX_LIMIT, 8000);
   assert.equal(TUS_COMPRAS_THREE_QUOTES_THRESHOLD, 8000);
-  assert.equal(TUS_COMPRAS_QUOTE_THRESHOLD, 3000);
+  assert.equal(TUS_COMPRAS_QUOTE_THRESHOLD, 8000);
   assert.equal(TUS_COMPRAS_MAX_ATTACHMENT_BYTES, 10 * 1024 * 1024);
 
   // Validación estricta de tamaño de archivo adjunto (máx. 10 MB por archivo)
@@ -33,24 +33,25 @@ test('Sin monto límite mensual por área, umbral de cotización (> $3,000 -> 1 
     /supera el límite máximo permitido de 10 MB/
   );
 
-  // Sin límite mensual por área: aunque el área lleve $7,000 MXN acumulados, un pedido OPEX de $4,500 (<= $8,000 individual) NO requiere aprobación y pide 1 cotización
-  const opexNoAreaCap = evaluateOrderApprovalRequirement('OPEX', 4500, 7000);
-  assert.equal(opexNoAreaCap.projectedAreaMonthlyOpex, 11500);
-  assert.equal(opexNoAreaCap.exceedsOpexLimit, false);
-  assert.equal(opexNoAreaCap.requiresApproval, false);
-  assert.equal(opexNoAreaCap.requiresQuotation, true);
-  assert.equal(opexNoAreaCap.requiresThreeQuotes, false);
-  assert.equal(opexNoAreaCap.requiredQuotesCount, 1);
-  assert.equal(opexNoAreaCap.initialState, TUS_COMPRAS_STATES.ENVIADA);
+  // Paso 1: Compras < $8,000 MXN (ej. $4,500 o $7,999.99) pasan directo a generación de OC sin requerir cotización previa (0 cotizaciones) ni aprobación OPEX, sin importar el acumulado del área
+  const opexUnder8000 = evaluateOrderApprovalRequirement('OPEX', 4500, 7000);
+  assert.equal(opexUnder8000.projectedAreaMonthlyOpex, 11500);
+  assert.equal(opexUnder8000.exceedsOpexLimit, false);
+  assert.equal(opexUnder8000.requiresApproval, false);
+  assert.equal(opexUnder8000.requiresQuotation, false);
+  assert.equal(opexUnder8000.requiresThreeQuotes, false);
+  assert.equal(opexUnder8000.requiredQuotesCount, 0);
+  assert.equal(opexUnder8000.initialState, TUS_COMPRAS_STATES.ENVIADA);
 
-  // Opex exactamente en $8,000 MXN individuales
-  const opexExact = evaluateOrderApprovalRequirement('OPEX', 8000, 15000);
-  assert.equal(opexExact.requiresApproval, false);
-  assert.equal(opexExact.requiresThreeQuotes, false);
-  assert.equal(opexExact.requiredQuotesCount, 1);
-  assert.equal(opexExact.initialState, TUS_COMPRAS_STATES.ENVIADA);
+  // Paso 2: Compras >= $8,000 MXN (ej. $8,000.00 o más) pasan por aprobación (2b) y exigen 3 cotizaciones de Daniel Lara
+  const opexAt8000 = evaluateOrderApprovalRequirement('OPEX', 8000, 0);
+  assert.equal(opexAt8000.exceedsOpexLimit, true);
+  assert.equal(opexAt8000.requiresApproval, true);
+  assert.equal(opexAt8000.requiresQuotation, true);
+  assert.equal(opexAt8000.requiresThreeQuotes, true);
+  assert.equal(opexAt8000.requiredQuotesCount, 3);
+  assert.equal(opexAt8000.initialState, TUS_COMPRAS_STATES.EN_APROBACION);
 
-  // Compra individual que supera los $8,000 MXN: pasa a 2b) En aprobación y requiere 3 cotizaciones de Daniel Lara
   const opexOver8000 = evaluateOrderApprovalRequirement('OPEX', 8001, 0);
   assert.equal(opexOver8000.exceedsOpexLimit, true);
   assert.equal(opexOver8000.requiresApproval, true);
@@ -58,20 +59,20 @@ test('Sin monto límite mensual por área, umbral de cotización (> $3,000 -> 1 
   assert.equal(opexOver8000.requiredQuotesCount, 3);
   assert.equal(opexOver8000.initialState, TUS_COMPRAS_STATES.EN_APROBACION);
 
-  // Capex pasa automáticamente a 2b) En aprobación aunque sea menor a $8,000 MXN
+  // Capex pasa automáticamente a 2b) En aprobación aunque sea menor a $8,000 MXN (y al ser < $8,000 no requiere cotización previa)
   const capexSmall = evaluateOrderApprovalRequirement('CAPEX', 1500, 0);
   assert.equal(capexSmall.tipo, 'CAPEX');
   assert.equal(capexSmall.requiresApproval, true);
   assert.equal(capexSmall.requiredQuotesCount, 0);
   assert.equal(capexSmall.initialState, TUS_COMPRAS_STATES.EN_APROBACION);
 
-  // Conteo de cotizaciones requeridas según monto de la compra
+  // Conteo de cotizaciones requeridas según monto de la compra (2 pasos: < 8000 -> 0, >= 8000 -> 3)
   assert.equal(getRequiredQuotesCount({ monto: 3000 }), 0);
-  assert.equal(getRequiredQuotesCount({ monto: 3000.01 }), 1);
-  assert.equal(getRequiredQuotesCount({ monto: 8000 }), 1);
+  assert.equal(getRequiredQuotesCount({ monto: 7999.99 }), 0);
+  assert.equal(getRequiredQuotesCount({ monto: 8000 }), 3);
   assert.equal(getRequiredQuotesCount({ monto: 8000.01 }), 3);
-  assert.equal(requiresQuotationProcess({ monto: 3000 }), false);
-  assert.equal(requiresQuotationProcess({ monto: 3000.01 }), true);
+  assert.equal(requiresQuotationProcess({ monto: 7999.99 }), false);
+  assert.equal(requiresQuotationProcess({ monto: 8000 }), true);
 
   // Monto de Orden de Compra ajustado reemplaza al monto estimado del usuario como único monto válido para presupuesto
   assert.equal(getEffectiveOrderAmount({ montoEstimado: 5000, montoOrdenCompra: 0 }), 5000);
@@ -95,47 +96,48 @@ test('Sin monto límite mensual por área, umbral de cotización (> $3,000 -> 1 
   assert.equal(resolveEffectiveOrderState(t3), TUS_COMPRAS_STATES.EN_APROBACION);
 });
 
-test('Máquina de estados: umbral de $3,000 MXN para cotizaciones y generación de Orden de Compra', () => {
+test('Máquina de estados en 2 pasos: < $8,000 MXN pasa directo a ISSUE_PURCHASE_ORDER; >= $8,000 MXN pasa por cotización (3 archivos) y luego OC', () => {
   const adminAutorizador = { correo: 'd.lara@ciarm.edu.mx', isAdministracion: true, canAdmin: true, canApprove: true };
   const directorDocente = { correo: 'director.docente@ciarm.edu.mx', isDocenteDirector: true, isAdministracion: false, canAdmin: false, canApprove: false };
 
-  // Caso A: Pedido <= $3,000 MXN en 1) Solicitud enviada -> Daniel genera directamente la Orden de Compra (ISSUE_PURCHASE_ORDER)
-  const order1Under3000 = {
+  // Caso A: Pedido < $8,000 MXN (ej. $3,000 o $6,500) en 1) Solicitud enviada -> Daniel genera directamente la Orden de Compra (ISSUE_PURCHASE_ORDER)
+  const orderUnder8000 = {
     id: 'CMP-2026-00001',
     correo: 'director.docente@ciarm.edu.mx',
     tipo: 'OPEX',
-    monto: 3000,
-    acumuladoMesArea: 3000,
+    monto: 6500,
+    acumuladoMesArea: 6500,
     requiereAprobacion: false,
     estado: TUS_COMPRAS_STATES.ENVIADA
   };
-  assert.deepEqual(computeAllowedActions(order1Under3000, adminAutorizador, 'all'), ['ISSUE_PURCHASE_ORDER']);
-  assert.deepEqual(computeAllowedActions(order1Under3000, directorDocente, 'mine'), []);
+  assert.deepEqual(computeAllowedActions(orderUnder8000, adminAutorizador, 'all'), ['ISSUE_PURCHASE_ORDER']);
+  assert.deepEqual(computeAllowedActions(orderUnder8000, directorDocente, 'mine'), []);
 
-  // Caso B: Pedido > $3,000 MXN (ej. $4,500 OPEX dentro de $8,000) -> Daniel debe iniciar cotización (START_QUOTING)
-  const order1Over3000 = {
-    ...order1Under3000,
+  // Caso B: Pedido >= $8,000 MXN (ej. $8,000 o $12,000) ya aprobado en 2a) -> Daniel debe iniciar cotización (START_QUOTING)
+  const orderAtOrOver8000 = {
+    ...orderUnder8000,
     id: 'CMP-2026-00002',
-    monto: 4500,
-    acumuladoMesArea: 4500
+    monto: 8000,
+    requiereAprobacion: true,
+    estado: TUS_COMPRAS_STATES.EN_PROCESO
   };
-  assert.deepEqual(computeAllowedActions(order1Over3000, adminAutorizador, 'all'), ['START_QUOTING']);
+  assert.deepEqual(computeAllowedActions(orderAtOrOver8000, adminAutorizador, 'all'), ['START_QUOTING']);
 
-  // En cotización (2a-1) -> Daniel debe informar recepción de cotizaciones y adjuntarlas (RECEIVE_QUOTES)
-  const orderQuoting = { ...order1Over3000, estado: TUS_COMPRAS_STATES.EN_COTIZACION };
+  // En cotización (2a-1) -> Daniel debe informar recepción de las 3 cotizaciones y adjuntarlas (RECEIVE_QUOTES)
+  const orderQuoting = { ...orderAtOrOver8000, estado: TUS_COMPRAS_STATES.EN_COTIZACION };
   assert.deepEqual(computeAllowedActions(orderQuoting, adminAutorizador, 'all'), ['RECEIVE_QUOTES']);
 
   // Cotizaciones recibidas (2a-2) -> Daniel genera la Orden de Compra y ajusta el monto (ISSUE_PURCHASE_ORDER)
-  const orderQuotesReceived = { ...order1Over3000, estado: TUS_COMPRAS_STATES.COTIZACIONES_RECIBIDAS };
+  const orderQuotesReceived = { ...orderAtOrOver8000, estado: TUS_COMPRAS_STATES.COTIZACIONES_RECIBIDAS };
   assert.deepEqual(computeAllowedActions(orderQuotesReceived, adminAutorizador, 'all'), ['ISSUE_PURCHASE_ORDER']);
 
   // Orden de Compra generada (2c) -> Daniel registra llegada de artículos a Adm. (RECEIVE_ITEMS_ADM)
-  const orderOcGenerated = { ...order1Over3000, estado: TUS_COMPRAS_STATES.OC_GENERADA };
+  const orderOcGenerated = { ...orderAtOrOver8000, estado: TUS_COMPRAS_STATES.OC_GENERADA };
   assert.deepEqual(computeAllowedActions(orderOcGenerated, adminAutorizador, 'all'), ['RECEIVE_ITEMS_ADM']);
 
   // Estado 2b) En aprobación: Autorizador puede Aprobar (pasa a 2a) o Rechazar (2d)
   const order2b = {
-    ...order1Under3000,
+    ...orderUnder8000,
     tipo: 'CAPEX',
     monto: 2500,
     requiereAprobacion: true,
@@ -145,10 +147,10 @@ test('Máquina de estados: umbral de $3,000 MXN para cotizaciones y generación 
   assert.deepEqual(computeAllowedActions(order2b, directorDocente, 'mine'), []);
 
   // Estado 2a) Solicitud recibida / En proceso tras aprobar en 2b):
-  // Si <= $3,000 -> ISSUE_PURCHASE_ORDER; si > $3,000 -> START_QUOTING
+  // Si < $8,000 -> ISSUE_PURCHASE_ORDER directo; si >= $8,000 -> START_QUOTING
   const order2aSmall = { ...order2b, estado: TUS_COMPRAS_STATES.EN_PROCESO };
   assert.deepEqual(computeAllowedActions(order2aSmall, adminAutorizador, 'all'), ['ISSUE_PURCHASE_ORDER']);
-  const order2aLarge = { ...order2b, monto: 12000, estado: TUS_COMPRAS_STATES.EN_PROCESO };
+  const order2aLarge = { ...order2b, monto: 8000, estado: TUS_COMPRAS_STATES.EN_PROCESO };
   assert.deepEqual(computeAllowedActions(order2aLarge, adminAutorizador, 'all'), ['START_QUOTING']);
 
   // Estado 2d) Rechazada: Estado terminal, NO puede avanzar a 3)
@@ -156,12 +158,12 @@ test('Máquina de estados: umbral de $3,000 MXN para cotizaciones y generación 
   assert.deepEqual(computeAllowedActions(order2d, adminAutorizador, 'all'), []);
 
   // Estado 3) Artículos Recibidos en Adm.: Administración avanza a 4) Compra Entregada al Solicitante
-  const order3 = { ...order1Under3000, estado: TUS_COMPRAS_STATES.RECIBIDOS_ADM };
+  const order3 = { ...orderUnder8000, estado: TUS_COMPRAS_STATES.RECIBIDOS_ADM };
   assert.deepEqual(computeAllowedActions(order3, adminAutorizador, 'all'), ['DELIVER_TO_REQUESTER']);
   assert.deepEqual(computeAllowedActions(order3, directorDocente, 'mine'), []);
 
   // Estado 4) Compra Entregada al Solicitante: El Solicitante en Mis Compras ('mine') SÍ ve los botones de cierre Recepción Conforme / Disconforme
-  const order4 = { ...order1Under3000, estado: TUS_COMPRAS_STATES.ENTREGADA };
+  const order4 = { ...orderUnder8000, estado: TUS_COMPRAS_STATES.ENTREGADA };
   assert.deepEqual(computeAllowedActions(order4, adminAutorizador, 'all'), []);
   assert.deepEqual(computeAllowedActions(order4, directorDocente, 'mine'), ['CONFIRM_CONFORME', 'CONFIRM_DISCONFORME']);
 });

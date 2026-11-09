@@ -19,7 +19,7 @@ const CIARM_TUS_COMPRAS_STAGING_WEBAPP = 'https://script.google.com/macros/s/AKf
 const CIARM_TUS_COMPRAS_PROD_WEBAPP = 'https://script.google.com/macros/s/AKfycbw01gXyUlNRqMBLGeMfkys8HNGJlnYnrMHGb76_LrnG1-atYM43vEOEQdmimPkUHyhb/exec';
 const CIARM_TUS_COMPRAS_OPEX_LIMIT = 8000.0;
 const CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD = 8000.0;
-const CIARM_TUS_COMPRAS_QUOTE_THRESHOLD = 3000.0;
+const CIARM_TUS_COMPRAS_QUOTE_THRESHOLD = 8000.0;
 const CIARM_TUS_COMPRAS_MAX_ATTACHMENT_BYTES = 10485760; // 10 MB por archivo
 const CIARM_TUS_COMPRAS_ADMIN_EMAIL = 'd.lara@ciarm.edu.mx';
 const CIARM_TUS_COMPRAS_APPROVER_EMAILS = ['e.conesa@ciarm.edu.mx'];
@@ -568,13 +568,13 @@ function ciarm_tus_compras_parse_pedidos(array $rows): array {
         }
 
         $reqNorm = ciarm_tus_compras_normalize_token($get($row, 'REQUIERE APROBACIÓN'));
-        // No existe monto límite mensual por área: la aprobación aplica a CAPEX o cuando la compra individual supera $8,000 MXN
+        // No existe monto límite mensual por área: la aprobación aplica a CAPEX o cuando la compra es >= $8,000 MXN
         $requiresApproval = ($tipo === 'CAPEX')
-            || ($tipo === 'OPEX' && $montoEfectivo > CIARM_TUS_COMPRAS_OPEX_LIMIT)
+            || ($tipo === 'OPEX' && $montoEfectivo >= CIARM_TUS_COMPRAS_OPEX_LIMIT)
             || ($reqNorm === 'si');
 
         // Regla estricta de asignación de estado:
-        // Si es CAPEX o si la compra supera $8,000 MXN,
+        // Si es CAPEX o si la compra es >= $8,000 MXN,
         // NUNCA debe quedar en "1) Solicitud enviada", sino en "2b) En aprobación".
         $estado = $rawEstado !== '' ? $rawEstado : CIARM_TUS_COMPRAS_STATE_ENVIADA;
         $needsStateSync = false;
@@ -608,9 +608,9 @@ function ciarm_tus_compras_parse_pedidos(array $rows): array {
             'monto' => $montoEfectivo,
             'montoEstimado' => $montoEstimado,
             'montoOrdenCompra' => $montoOrdenCompra,
-            'requiereCotizacion' => $montoEstimado > CIARM_TUS_COMPRAS_QUOTE_THRESHOLD,
-            'requiereTresCotizaciones' => $montoEstimado > CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD,
-            'cotizacionesRequeridas' => $montoEstimado > CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD ? 3 : ($montoEstimado > CIARM_TUS_COMPRAS_QUOTE_THRESHOLD ? 1 : 0),
+            'requiereCotizacion' => $montoEstimado >= CIARM_TUS_COMPRAS_QUOTE_THRESHOLD,
+            'requiereTresCotizaciones' => $montoEstimado >= CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD,
+            'cotizacionesRequeridas' => $montoEstimado >= CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD ? 3 : 0,
             'acumuladoMesArea' => $acumuladoMesArea,
             'requiereAprobacion' => $requiresApproval,
             'descripcion' => $get($row, 'ARTÍCULOS / DESCRIPCIÓN'),
@@ -726,11 +726,10 @@ function ciarm_tus_compras_area_monthly_opex(array $pedidos, string $area, strin
 }
 
 /**
- * Determina si un pedido requiere aprobación y cuántas cotizaciones requiere:
+ * Determina si un pedido requiere aprobación y cuántas cotizaciones requiere (2 pasos):
  * - No existe monto límite mensual por área.
- * - Toda compra que supere los $8,000.00 MXN debe pasar por 3 cotizaciones de parte de Daniel Lara.
- * - Si es Capex o compra individual > $8,000.00 MXN, el estado inicial pasa AUTOMÁTICAMENTE a '2b) En aprobación'.
- * - Si es Opex <= $8,000.00 MXN, nace en '1) Solicitud enviada'.
+ * - Compras < $8,000.00 MXN: pasan directo a generación de Orden de Compra (ISSUE_PURCHASE_ORDER), sin requerir cotización previa (0 cotizaciones).
+ * - Compras >= $8,000.00 MXN: pasan por aprobación ('2b) En aprobación') y requieren 3 cotizaciones obligatorias de parte de Daniel Lara antes de generar la Orden de Compra.
  */
 function ciarm_tus_compras_requires_approval(string $tipo, float $monto, float $currentAreaMonthlyOpex = 0.0, float $limit = CIARM_TUS_COMPRAS_OPEX_LIMIT): array {
     $tipoNorm = strtoupper(trim($tipo)) === 'CAPEX' ? 'CAPEX' : 'OPEX';
@@ -738,12 +737,12 @@ function ciarm_tus_compras_requires_approval(string $tipo, float $monto, float $
     $projectedAreaTotal = $tipoNorm === 'OPEX'
         ? round($currentAreaMonthlyOpex + $montoRounded, 2)
         : round($currentAreaMonthlyOpex, 2);
-    // Sin monto límite por área: solo evalúa el monto de la compra individual frente a $8,000 MXN
-    $exceedsOpexLimit = ($tipoNorm === 'OPEX' && $montoRounded > $limit);
+    // Sin monto límite por área: evalúa el monto de la compra individual (>= $8,000 MXN) o si es CAPEX
+    $exceedsOpexLimit = ($tipoNorm === 'OPEX' && $montoRounded >= $limit);
     $requires = ($tipoNorm === 'CAPEX') || $exceedsOpexLimit;
-    $requiresQuotation = $montoRounded > CIARM_TUS_COMPRAS_QUOTE_THRESHOLD;
-    $requiresThreeQuotes = $montoRounded > CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD;
-    $requiredQuotesCount = $requiresThreeQuotes ? 3 : ($requiresQuotation ? 1 : 0);
+    $requiresQuotation = $montoRounded >= CIARM_TUS_COMPRAS_QUOTE_THRESHOLD;
+    $requiresThreeQuotes = $montoRounded >= CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD;
+    $requiredQuotesCount = $requiresThreeQuotes ? 3 : 0;
     return [
         'tipo' => $tipoNorm,
         'monto' => $montoRounded,
@@ -762,23 +761,21 @@ function ciarm_tus_compras_requires_approval(string $tipo, float $monto, float $
 }
 
 /**
- * Máquina de estados de "Tus compras":
+ * Máquina de estados de "Tus compras" (simplificada en 2 pasos según umbral de $8,000.00 MXN):
  * - Sin monto límite mensual por área.
- * - Los pedidos que superan $8,000 MXN o son Capex pasan automáticamente a '2b) En aprobación' al crearse.
- * - Cuando el autorizador (perfil "administración" en AG y AJ) aprueba un ticket en '2b) En aprobación',
- *   pasa al estado '2a) Solicitud recibida / En proceso' (registrando la aprobación en bitácora).
+ * - Compras >= $8,000.00 MXN (o Capex) pasan automáticamente a '2b) En aprobación' al crearse.
+ * - Cuando el autorizador aprueba un ticket en '2b) En aprobación', pasa a '2a) Solicitud recibida / En proceso'.
  * - Si el autorizador lo rechaza desde '2b) En aprobación', pasa a '2d) Rechazada'.
- * - Una vez listo para gestión de Daniel Lara (en '1) Solicitud enviada' si es OPEX <= $8,000 o en '2a) Solicitud recibida / En proceso'):
- *   * Si el pedido es <= $3,000 MXN: Daniel genera directamente la Orden de Compra ('ISSUE_PURCHASE_ORDER' -> '2c) Orden de Compra generada'),
- *     informando fecha de OC, fecha estimada de entrega y ajustando el monto definitivo de la OC.
- *   * Si el pedido es > $3,000 MXN:
+ * - Una vez listo para gestión de Daniel Lara (en '1) Solicitud enviada' si es OPEX < $8,000, o en '2a) Solicitud recibida / En proceso'):
+ *   * Si la compra es < $8,000.00 MXN: pasa directo a generación de Orden de Compra ('ISSUE_PURCHASE_ORDER' -> '2c) Orden de Compra generada'),
+ *     sin requerir cotización previa, informando siempre fecha de OC, fecha estimada de entrega y monto definitivo de la OC.
+ *   * Si la compra es >= $8,000.00 MXN:
  *     1) Daniel informa que está cotizando y da fecha estimada de cierre de cotizaciones ('START_QUOTING' -> '2a-1) En cotización').
- *     2) Cuando recibe las cotizaciones, informa recepción y adjunta las cotizaciones ('RECEIVE_QUOTES' -> '2a-2) Cotizaciones recibidas'):
- *        - Si el pedido supera los $8,000 MXN, debe adjuntar obligatoriamente 3 cotizaciones.
- *        - Si el pedido es > $3,000 MXN y <= $8,000 MXN, adjunta al menos 1 cotización.
+ *     2) Al registrar la recepción de cotizaciones ('RECEIVE_QUOTES' -> '2a-2) Cotizaciones recibidas'), debe adjuntar
+ *        obligatoriamente las 3 cotizaciones (Cotización #1, Cotización #2 y Cotización #3, <= 10 MB cada una).
  *     3) Luego gestiona la Orden de Compra ('ISSUE_PURCHASE_ORDER' -> '2c) Orden de Compra generada'), informando fecha de OC,
  *        fecha estimada de entrega y ajustando el monto definitivo de la OC.
- * - De '2c) Orden de Compra generada' (o '2a)'/'2c) Aprobada / En curso' por compatibilidad) pasa a '3) Artículos Recibidos en Adm.'.
+ * - De '2c) Orden de Compra generada' pasa a '3) Artículos Recibidos en Adm.'.
  * - De '3)' pasa a '4) Compra Entregada al Solicitante'.
  * - En '4)', únicamente el Solicitante cierra el ticket como '5) Recepción Conforme' o '5) Recepción Disconforme'.
  */
@@ -791,9 +788,9 @@ function ciarm_tus_compras_validate_transition(array $order, string $event, arra
     $montoBase = (float)($order['montoEstimado'] ?? ($order['monto'] ?? 0));
     $requiresApproval = !empty($order['requiereAprobacion'])
         || strtoupper((string)($order['tipo'] ?? '')) === 'CAPEX'
-        || ($montoBase > CIARM_TUS_COMPRAS_OPEX_LIMIT);
-    $requiresQuotation = $montoBase > CIARM_TUS_COMPRAS_QUOTE_THRESHOLD;
-    $requiresThreeQuotes = $montoBase > CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD;
+        || ($montoBase >= CIARM_TUS_COMPRAS_OPEX_LIMIT);
+    $requiresQuotation = $montoBase >= CIARM_TUS_COMPRAS_QUOTE_THRESHOLD;
+    $requiresThreeQuotes = $montoBase >= CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD;
 
     switch ($event) {
         case 'RECEIVE_OPEX':
@@ -874,7 +871,7 @@ function ciarm_tus_compras_validate_transition(array $order, string $event, arra
             if ($cotUrls === []) {
                 throw new RuntimeException('QUOTE_ATTACHMENT_REQUIRED');
             }
-            if ($requiresThreeQuotes && count($cotUrls) < 3) {
+            if (count($cotUrls) < 3) {
                 throw new RuntimeException('THREE_QUOTES_REQUIRED');
             }
             return [
@@ -1007,8 +1004,8 @@ function ciarm_tus_compras_allowed_actions(array $order, array $access, string $
     $montoBase = (float)($order['montoEstimado'] ?? ($order['monto'] ?? 0));
     $requiresApproval = !empty($order['requiereAprobacion'])
         || strtoupper((string)($order['tipo'] ?? '')) === 'CAPEX'
-        || ($montoBase > CIARM_TUS_COMPRAS_OPEX_LIMIT);
-    $requiresQuotation = $montoBase > CIARM_TUS_COMPRAS_QUOTE_THRESHOLD;
+        || ($montoBase >= CIARM_TUS_COMPRAS_OPEX_LIMIT);
+    $requiresQuotation = $montoBase >= CIARM_TUS_COMPRAS_QUOTE_THRESHOLD;
 
     $actions = [];
     if ($state === CIARM_TUS_COMPRAS_STATE_ENVIADA) {
@@ -1218,7 +1215,7 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
                 $correoSolicitante,
                 "[Portal CIARM · Tus Compras] Pedido en proceso de cotización {$id} (2a-1)",
                 'Tu pedido de compra está en proceso de cotización',
-                "Administración (Daniel Lara) informó que tu pedido {$id} (mayor a \$3,000.00 MXN) se encuentra en proceso de cotización («{$estado}»). Fecha estimada de cierre de cotizaciones: {$fCierre}.",
+                "Administración (Daniel Lara) informó que tu pedido {$id} (mayor o igual a \$8,000.00 MXN) se encuentra en proceso de cotización («{$estado}» · requiere 3 cotizaciones). Fecha estimada de cierre de cotizaciones: {$fCierre}.",
                 'Ver detalle en Mis Compras',
                 '#tus-compras'
             );

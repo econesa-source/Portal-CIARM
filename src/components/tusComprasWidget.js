@@ -1,9 +1,8 @@
 /**
  * Módulo "Tus compras" - Sistema simplificado de pedidos de compra (Opex / Capex)
- * Coordinado por Administración (Daniel Lara) con aprobación ejecutiva (Ezequiel Conesa)
- * para compras Capex o compras mayores a $8,000.00 MXN (sin monto límite mensual por área).
- * Toda compra > $8,000.00 MXN debe pasar por 3 cotizaciones de parte de Daniel Lara;
- * compras > $3,000.00 y <= $8,000.00 MXN requieren cotización previa (1 archivo), y <= $3,000.00 MXN generan OC directa.
+ * Simplificado en 2 pasos (sin monto límite mensual por área):
+ * - Compras < $8,000.00 MXN: pasan directo a generación de Orden de Compra (ISSUE_PURCHASE_ORDER), sin requerir cotización previa (informando fecha de OC, entrega estimada y monto válido).
+ * - Compras >= $8,000.00 MXN: pasan por aprobación (2b) En aprobación) y, al registrar la recepción de cotizaciones (RECEIVE_QUOTES), exigen 3 cotizaciones obligatorias (Cotización #1, #2 y #3, <= 10 MB c/u).
  */
 
 import {
@@ -25,7 +24,7 @@ import {
   transitionTusCompra,
   validateTusCompraAttachmentFile,
   uploadTusCompraAttachment
-} from '../services/tusComprasService.js?v=18.7.16-tc10';
+} from '../services/tusComprasService.js?v=18.7.16-tc11';
 
 const ACTION_META = Object.freeze({
   RECEIVE_OPEX: {
@@ -36,18 +35,18 @@ const ACTION_META = Object.freeze({
     requireComment: false
   },
   START_QUOTING: {
-    label: '2a-1) Informar En Cotización (> $3,000)',
+    label: '2a-1) Informar En Cotización (≥ $8,000)',
     badgeClass: 'dark',
-    confirmTitle: '2a-1) Informar que está cotizando (> $3,000.00 MXN)',
-    description: 'Al superar los $3,000.00 MXN, informa al solicitante que iniciaste el proceso de cotización y define la fecha estimada de cierre de cotizaciones.',
+    confirmTitle: '2a-1) Informar que está cotizando (≥ $8,000.00 MXN · 3 cotizaciones)',
+    description: 'Para compras mayores o iguales a $8,000.00 MXN, informa al solicitante que iniciaste el proceso de cotización (3 cotizaciones obligatorias) y define la fecha estimada de cierre de cotizaciones.',
     requireComment: false,
     requireQuoteCloseDate: true
   },
   RECEIVE_QUOTES: {
-    label: '2a-2) Informar Recepción de Cotizaciones',
+    label: '2a-2) Informar Recepción de 3 Cotizaciones',
     badgeClass: 'dark',
-    confirmTitle: '2a-2) Informar Recepción y Adjuntar Cotizaciones',
-    description: 'Informa la recepción de las cotizaciones y adjúntalas obligatoriamente al expediente para luego gestionar la Orden de Compra.',
+    confirmTitle: '2a-2) Informar Recepción y Adjuntar 3 Cotizaciones',
+    description: 'Informa la recepción de las 3 cotizaciones y adjunta los 3 archivos obligatorios (Cotización #1, Cotización #2 y Cotización #3, máx. 10 MB c/u) antes de gestionar la Orden de Compra.',
     requireComment: false,
     requireQuoteAttachment: true
   },
@@ -303,12 +302,12 @@ function renderCreateView(container, ctx, controller) {
 
       <div class="solicitud-heading">
         <h2>Nuevo Pedido de Compra · Tus compras</h2>
-        <p>Registra tu solicitud de compra para Administración (Daniel Lara). <strong>No hay monto límite mensual por área.</strong> Para compras mayores a $3,000.00 MXN se realiza proceso de cotización, y <strong>toda compra que supere los $8,000.00 MXN debe pasar por 3 cotizaciones de parte de Daniel Lara</strong> (además de aprobación ejecutiva).</p>
+        <p>Registra tu solicitud de compra para Administración (Daniel Lara). <strong>No hay monto límite mensual por área.</strong> Compras inferiores a $8,000.00 MXN pasan directo a generación de Orden de Compra sin cotización previa; y <strong>compras mayores o iguales a $8,000.00 MXN pasan por aprobación (2b) y requieren 3 cotizaciones obligatorias de parte de Daniel Lara</strong>.</p>
       </div>
 
       <div id="tus-compras-budget-banner" style="background:#f8fafc;border:1px solid #cbd5e1;border-left:4px solid #26487F;border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:14px;">
         <div><strong>Área solicitante (DM03):</strong> ${escapeHtml(access.area || 'Docente')} · <strong>Acumulado Opex del mes (${escapeHtml(ctx.yearMonth || '')}):</strong> ${formatCurrency(currentOpex)} <span style="color:#047857;font-weight:700;">(Sin monto límite mensual por área)</span></div>
-        <div style="margin-top:4px;color:#334155;font-size:13px;">Reglas por compra: <strong>≤ $3,000 MXN</strong> OC directa · <strong>&gt; $3,000 a $8,000 MXN</strong> 1 cotización · <strong>&gt; $8,000 MXN</strong> aprobación y <strong>3 cotizaciones obligatorias</strong> de parte de Daniel Lara.</div>
+        <div style="margin-top:4px;color:#334155;font-size:13px;">Reglas en 2 pasos: <strong>&lt; $8,000.00 MXN</strong> Pasa directo a generación de Orden de Compra (sin cotización previa) · <strong>≥ $8,000.00 MXN</strong> Pasa por aprobación (2b) y requiere <strong>3 cotizaciones obligatorias</strong> de parte de Daniel Lara antes de emitir la Orden de Compra.</div>
       </div>
 
       <form id="form-tus-compras" class="solicitud-form">
@@ -338,7 +337,7 @@ function renderCreateView(container, ctx, controller) {
         </div>
 
         <div id="tc-route-preview" role="status" style="padding:10px 14px;border-radius:6px;background:#e0f2fe;color:#075985;font-size:13.5px;font-weight:600;margin-bottom:12px;">
-          Ingresa el monto estimado para verificar la ruta de cotización (≤ $3,000 OC directa · &gt; $3,000 cotización · &gt; $8,000 pasa por 3 cotizaciones de Daniel Lara).
+          Ingresa el monto estimado para verificar la ruta (&lt; $8,000.00 MXN pasa directo a Orden de Compra · ≥ $8,000.00 MXN pasa por aprobación 2b y exige 3 cotizaciones de Daniel Lara).
         </div>
 
         <div class="solicitud-field solicitud-description">
@@ -414,17 +413,15 @@ function renderCreateView(container, ctx, controller) {
       return;
     }
     const quoteNotice = evalRes.requiresThreeQuotes
-      ? `Al superar ${formatCurrency(TUS_COMPRAS_THREE_QUOTES_THRESHOLD)}, esta compra debe pasar obligatoriamente por 3 cotizaciones de parte de Daniel Lara antes de emitir la Orden de Compra.`
-      : evalRes.requiresQuotation
-      ? `Al superar ${formatCurrency(TUS_COMPRAS_QUOTE_THRESHOLD)}, Daniel Lara deberá cotizar, informar fecha estimada de cierre de cotizaciones, adjuntar la cotización recibida y posteriormente emitir la Orden de Compra ajustando el monto definitivo.`
-      : `Por ser menor o igual a ${formatCurrency(TUS_COMPRAS_QUOTE_THRESHOLD)}, al gestionarlo Daniel Lara generará directamente la Orden de Compra informando su fecha de emisión, fecha estimada de entrega y monto definitivo.`;
+      ? `Por ser mayor o igual a ${formatCurrency(TUS_COMPRAS_THREE_QUOTES_THRESHOLD)}, Daniel Lara deberá cotizar, adjuntar obligatoriamente las 3 cotizaciones recibidas (Cotización #1, #2 y #3) y posteriormente emitir la Orden de Compra.`
+      : `Por ser inferior a ${formatCurrency(TUS_COMPRAS_THREE_QUOTES_THRESHOLD)}, pasa directo a generación de Orden de Compra (sin requerir cotización previa), donde Daniel Lara informará la fecha de generación de la OC, fecha estimada de entrega y monto definitivo.`;
 
     if (evalRes.requiresApproval) {
       preview.style.background = '#fef3c7';
       preview.style.color = '#92400e';
       const reason = evalRes.tipo === 'CAPEX'
         ? 'por ser compra tipo CAPEX'
-        : `porque la compra supera los ${formatCurrency(opexLimit)}`;
+        : `por ser mayor o igual a ${formatCurrency(opexLimit)}`;
       preview.textContent = `Ruta automática: Al enviar el ticket pasará automáticamente al estado «2b) En aprobación» (${reason}). Una vez aprobado, pasará a gestión de Daniel Lara. ${quoteNotice}`;
     } else {
       preview.style.background = '#dcfce7';
@@ -549,7 +546,7 @@ async function renderListView(container, ctx, kind, controller) {
         <h1>${kind === 'all' ? 'Gestión y Aprobaciones · Tus compras' : 'Mis Compras y Validación de Recepción'}</h1>
         <p>${
           kind === 'all'
-            ? 'Administra el ciclo de pedidos Opex y Capex (sin monto límite mensual por área). Compras ≤ $3,000 MXN generan OC directa; compras > $3,000 a $8,000 MXN requieren cotización previa (1 archivo); y toda compra > $8,000 MXN debe pasar por 3 cotizaciones de parte de Daniel Lara.'
+            ? 'Administra el ciclo de pedidos Opex y Capex (sin monto límite mensual por área). Compras < $8,000 MXN pasan directo a generación de Orden de Compra sin cotización previa (informando siempre fecha de OC, entrega estimada y monto válido); compras ≥ $8,000 MXN pasan por aprobación (2b) y exigen 3 cotizaciones obligatorias de parte de Daniel Lara.'
             : 'Consulta el estado informativo de tus tickets de compra, fechas estimadas de cotización/entrega y Orden de Compra. Cuando tu compra sea entregada podrás cerrar el ticket clasificándolo como Recepción Conforme o Recepción Disconforme.'
         }</p>
       </header>
@@ -691,14 +688,10 @@ async function renderListView(container, ctx, kind, controller) {
         const reqQuotesCount = getRequiredQuotesCount(order);
         const attachHtml = renderAttachmentsLinks(order);
         const quoteBadgeLabel = reqQuotesCount === 3
-          ? '> $8,000 · 3 Cotizaciones Obligatorias'
-          : reqQuotesCount === 1
-          ? '> $3,000 · Requiere Cotización'
-          : '≤ $3,000 · OC Directa';
+          ? '≥ $8,000 · 3 Cotizaciones Obligatorias'
+          : '< $8,000 · OC Directa';
         const quoteBadgeStyle = reqQuotesCount === 3
           ? 'background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;'
-          : reqQuotesCount === 1
-          ? 'background:#fef3c7;color:#92400e;'
           : 'background:#dcfce7;color:#166534;';
         return `
           <article class="exact-card" data-order-id="${escapeHtml(order.id)}" style="padding:18px;border:1px solid #cbd5e1;border-radius:10px;background:#ffffff;">
@@ -798,14 +791,13 @@ async function renderListView(container, ctx, kind, controller) {
 
         ${
           meta.requireQuoteAttachment
-            ? requiredQuotes === 3
-              ? `
+            ? `
           <div style="margin:12px 0;padding:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;">
             <div style="font-weight:700;font-size:13.5px;color:#991b1b;margin-bottom:6px;">
-              📑 COMPRA MAYOR A $8,000.00 MXN: ES OBLIGATORIO ADJUNTAR 3 COTIZACIONES
+              📑 COMPRA MAYOR O IGUAL A $8,000.00 MXN: ES OBLIGATORIO ADJUNTAR 3 COTIZACIONES
             </div>
             <p style="margin:0 0 10px;font-size:12.5px;color:#7f1d1d;">
-              Toda compra que supere los $8,000.00 MXN debe pasar por 3 cotizaciones de parte de Daniel Lara (PDF o imagen · máximo 10 MB por archivo).
+              Toda compra mayor o igual a $8,000.00 MXN debe contar con las 3 cotizaciones adjuntas por parte de Daniel Lara (PDF o imagen · máximo 10 MB por archivo) antes de avanzar a 2a-2) Cotizaciones recibidas.
             </p>
             <div style="display:flex;flex-direction:column;gap:10px;">
               <div>
@@ -827,15 +819,6 @@ async function renderListView(container, ctx, kind, controller) {
                 <input id="tc-modal-quote-file-3" class="tc-modal-quote-file-input" data-quote-idx="3" name="quoteFile3" type="file" accept="image/*,.pdf" required style="width:100%;font-size:13px;" />
               </div>
             </div>
-          </div>
-              `
-              : `
-          <div style="margin:12px 0;padding:10px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;">
-            <label for="tc-modal-quote-file-1" style="display:block;font-weight:600;font-size:13px;margin-bottom:4px;color:#0f172a;">
-              ADJUNTAR COTIZACIÓN RECIBIDA (OBLIGATORIO · PDF o Imagen · MÁX. 10 MB) *
-            </label>
-            <input id="tc-modal-quote-file-1" class="tc-modal-quote-file-input" data-quote-idx="1" name="quoteFile1" type="file" accept="image/*,.pdf" required style="width:100%;font-size:13px;" />
-            <small style="color:#64748b;display:block;margin-top:4px;">Para compras entre $3,000.01 y $8,000.00 MXN es obligatorio adjuntar la cotización del proceso (máximo 10 MB por archivo).</small>
           </div>
               `
             : ''
@@ -957,16 +940,14 @@ async function renderListView(container, ctx, kind, controller) {
       errEl.hidden = true;
       try {
         if (meta.requireQuoteAttachment) {
-          const neededCount = requiredQuotes === 3 ? 3 : 1;
+          const neededCount = 3;
           const filesToUpload = [];
           for (let i = 1; i <= neededCount; i++) {
             const fileEl = modalEl.querySelector(`#tc-modal-quote-file-${i}`);
             const f = fileEl?.files?.[0];
             if (!f) {
               throw new Error(
-                neededCount === 3
-                  ? `Falta adjuntar la Cotización #${i}. Toda compra mayor a $8,000.00 MXN debe contar con las 3 cotizaciones adjuntas.`
-                  : 'Debes adjuntar el archivo de cotización para compras mayores a $3,000.00 MXN.'
+                `Falta adjuntar la Cotización #${i}. Toda compra mayor o igual a $8,000.00 MXN debe contar con las 3 cotizaciones adjuntas.`
               );
             }
             validateTusCompraAttachmentFile(f, `Cotización #${i}`);
@@ -975,10 +956,7 @@ async function renderListView(container, ctx, kind, controller) {
 
           const uploadedUrls = [];
           for (const item of filesToUpload) {
-            submitBtn.textContent =
-              neededCount === 3
-                ? `Subiendo Cotización #${item.idx} de 3 a Google Drive…`
-                : 'Subiendo cotización a Google Drive…';
+            submitBtn.textContent = `Subiendo Cotización #${item.idx} de 3 a Google Drive…`;
             const up = await uploadTusCompraAttachment(
               item.file,
               listData.csrfToken || ctx.csrfToken,

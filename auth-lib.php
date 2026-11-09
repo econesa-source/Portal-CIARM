@@ -27,19 +27,29 @@ function ciarm_base64url(string $value): string {
 }
 
 function ciarm_http_json(string $url, array $options = []): array {
-    $ch = curl_init($url);
-    if ($ch === false) {
-        throw new RuntimeException('curl_init_failed');
+    $ch = $GLOBALS['ciarm_shared_curl_handle'] ?? null;
+    if (!($ch instanceof CurlHandle)) {
+        $ch = curl_init();
+        if ($ch === false) {
+            throw new RuntimeException('curl_init_failed');
+        }
+        $GLOBALS['ciarm_shared_curl_handle'] = $ch;
+    } else {
+        curl_reset($ch);
     }
 
     $headers = $options['headers'] ?? ['Accept: application/json'];
+    $connectTimeout = max(2, min(15, (int)($options['connect_timeout'] ?? 5)));
     $curlOptions = [
+        CURLOPT_URL => $url,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_CONNECTTIMEOUT => 10,
-        CURLOPT_TIMEOUT => max(1, min(120, (int)($options['timeout'] ?? 25))),
+        CURLOPT_CONNECTTIMEOUT => $connectTimeout,
+        CURLOPT_TIMEOUT => max(1, min(120, (int)($options['timeout'] ?? 20))),
         CURLOPT_HTTPHEADER => $headers,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_MAXREDIRS => 3,
+        CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
+        CURLOPT_TCP_KEEPALIVE => 1,
     ];
 
     if (($options['post'] ?? false) === true) {
@@ -51,7 +61,6 @@ function ciarm_http_json(string $url, array $options = []): array {
     $raw = curl_exec($ch);
     $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $error = curl_error($ch);
-    curl_close($ch);
 
     if ($raw === false || $error !== '') {
         throw new RuntimeException('upstream_unreachable');
@@ -67,6 +76,38 @@ function ciarm_http_json(string $url, array $options = []): array {
 
 function ciarm_google_access_token(array $serviceAccount, string $scope = 'https://www.googleapis.com/auth/spreadsheets.readonly'): string {
     $now = time();
+    $clientEmail = (string)($serviceAccount['client_email'] ?? '');
+    $cacheKey = $clientEmail . '|' . $scope;
+    $supersetKey = $clientEmail . '|https://www.googleapis.com/auth/spreadsheets';
+
+    $checkKeys = ($scope === 'https://www.googleapis.com/auth/spreadsheets.readonly')
+        ? [$cacheKey, $supersetKey]
+        : [$cacheKey];
+
+    foreach ($checkKeys as $k) {
+        $mem = $GLOBALS['ciarm_google_token_mem'][$k] ?? null;
+        if (is_array($mem) && (int)($mem['expires'] ?? 0) > $now && !empty($mem['token'])) {
+            return (string)$mem['token'];
+        }
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $sess = $_SESSION['ciarm_google_token_cache'][$k] ?? null;
+            if (is_array($sess) && (int)($sess['expires'] ?? 0) > $now && !empty($sess['token'])) {
+                $GLOBALS['ciarm_google_token_mem'][$k] = $sess;
+                return (string)$sess['token'];
+            }
+        }
+        $tmpFile = rtrim(sys_get_temp_dir(), '/\\') . '/ciarm_gtok_' . sha1($k) . '.json';
+        if (@is_file($tmpFile)) {
+            $rawTmp = @file_get_contents($tmpFile);
+            if (is_string($rawTmp) && $rawTmp !== '') {
+                $parsedTmp = json_decode($rawTmp, true);
+                if (is_array($parsedTmp) && (int)($parsedTmp['expires'] ?? 0) > $now && !empty($parsedTmp['token'])) {
+                    $GLOBALS['ciarm_google_token_mem'][$k] = $parsedTmp;
+                    return (string)$parsedTmp['token'];
+                }
+            }
+        }
+    }
 
     $header = ciarm_base64url((string)json_encode([
         'alg' => 'RS256',
@@ -74,7 +115,7 @@ function ciarm_google_access_token(array $serviceAccount, string $scope = 'https
     ]));
 
     $claims = ciarm_base64url((string)json_encode([
-        'iss' => $serviceAccount['client_email'] ?? '',
+        'iss' => $clientEmail,
         'scope' => $scope,
         'aud' => 'https://oauth2.googleapis.com/token',
         'iat' => $now,
@@ -108,7 +149,16 @@ function ciarm_google_access_token(array $serviceAccount, string $scope = 'https
         throw new RuntimeException('service_account_token_failed');
     }
 
-    return (string)$response['body']['access_token'];
+    $tokenStr = (string)$response['body']['access_token'];
+    $entry = ['token' => $tokenStr, 'expires' => $now + 3000];
+    $GLOBALS['ciarm_google_token_mem'][$cacheKey] = $entry;
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        $_SESSION['ciarm_google_token_cache'][$cacheKey] = $entry;
+    }
+    $tmpFile = rtrim(sys_get_temp_dir(), '/\\') . '/ciarm_gtok_' . sha1($cacheKey) . '.json';
+    @file_put_contents($tmpFile, json_encode($entry), LOCK_EX);
+
+    return $tokenStr;
 }
 
 function ciarm_verify_google_credential(string $credential): ?array {

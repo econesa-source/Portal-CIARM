@@ -24,7 +24,7 @@ import {
   transitionTusCompra,
   validateTusCompraAttachmentFile,
   uploadTusCompraAttachment
-} from '../services/tusComprasService.js?v=18.7.16-tc11';
+} from '../services/tusComprasService.js?v=18.7.16-tc12';
 
 const ACTION_META = Object.freeze({
   RECEIVE_OPEX: {

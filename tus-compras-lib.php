@@ -307,12 +307,32 @@ function ciarm_tus_compras_access(array $sessionUser, ?array $dm03RowsOverride =
         return ciarm_tus_compras_evaluate_access_rows($dm03RowsOverride, $email);
     }
 
+    $now = time();
     $cached = $_SESSION['ciarm_tus_compras_access'] ?? null;
     if (session_status() === PHP_SESSION_ACTIVE && is_array($cached)
         && ($cached['email'] ?? '') === $email
-        && (int)($cached['expires'] ?? 0) > time()
-        && is_array($cached['access'] ?? null)) {
+        && (int)($cached['expires'] ?? 0) > $now
+        && is_array($cached['access'] ?? null)
+        && array_key_exists('canGerencial', $cached['access'])) {
         return $cached['access'];
+    }
+
+    $tmpAccessFile = rtrim(sys_get_temp_dir(), '/\\') . '/ciarm_tc_acc_v2_' . sha1($email) . '.json';
+    if (@is_file($tmpAccessFile)) {
+        $rawAcc = @file_get_contents($tmpAccessFile);
+        if (is_string($rawAcc) && $rawAcc !== '') {
+            $parsedAcc = json_decode($rawAcc, true);
+            if (is_array($parsedAcc)
+                && ($parsedAcc['email'] ?? '') === $email
+                && (int)($parsedAcc['expires'] ?? 0) > $now
+                && is_array($parsedAcc['access'] ?? null)
+                && array_key_exists('canGerencial', $parsedAcc['access'])) {
+                if (session_status() === PHP_SESSION_ACTIVE) {
+                    $_SESSION['ciarm_tus_compras_access'] = $parsedAcc;
+                }
+                return $parsedAcc['access'];
+            }
+        }
     }
 
     $raw = @file_get_contents(ciarm_private_path('service-account.json'));
@@ -323,24 +343,27 @@ function ciarm_tus_compras_access(array $sessionUser, ?array $dm03RowsOverride =
     if (!is_array($account)) {
         throw new RuntimeException('service_account_invalid');
     }
-    $token = ciarm_google_access_token($account);
+    $token = ciarm_google_access_token($account, 'https://www.googleapis.com/auth/spreadsheets');
     $url = 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode(CIARM_DM03_SPREADSHEET_ID)
         . '/values/' . rawurlencode(CIARM_DM03_RANGE)
         . '?majorDimension=ROWS&valueRenderOption=FORMATTED_VALUE';
     $response = ciarm_http_json($url, [
         'headers' => ['Accept: application/json', 'Authorization: Bearer ' . $token],
+        'timeout' => 12,
     ]);
     if ($response['status'] !== 200 || !is_array($response['body']['values'] ?? null)) {
         throw new RuntimeException('dm03_read_failed');
     }
     $access = ciarm_tus_compras_evaluate_access_rows($response['body']['values'], $email);
+    $cachePayload = [
+        'email' => $email,
+        'expires' => $now + 600,
+        'access' => $access,
+    ];
     if (session_status() === PHP_SESSION_ACTIVE) {
-        $_SESSION['ciarm_tus_compras_access'] = [
-            'email' => $email,
-            'expires' => time() + 20,
-            'access' => $access,
-        ];
+        $_SESSION['ciarm_tus_compras_access'] = $cachePayload;
     }
+    @file_put_contents($tmpAccessFile, json_encode($cachePayload), LOCK_EX);
     return $access;
 }
 
@@ -473,22 +496,44 @@ function ciarm_tus_compras_ensure_schema(?string $spreadsheetId = null, ?string 
 function ciarm_tus_compras_fetch_all(?string $spreadsheetId = null): array {
     $sheetId = $spreadsheetId ?? ciarm_tus_compras_active_sheet_id();
     $token = ciarm_tus_compras_sheets_token();
-    ciarm_tus_compras_ensure_schema($sheetId, $token);
 
     $ranges = ["'PEDIDOS'!A1:AF2000", "'BITACORA PEDIDOS'!A1:M5000", "'CONFIG COMPRAS'!A1:E20"];
     $query = implode('&', array_map(static fn($r) => 'ranges=' . rawurlencode($r), $ranges));
     $url = 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId)
         . '/values:batchGet?' . $query . '&valueRenderOption=FORMATTED_VALUE';
-    $res = ciarm_http_json($url, [
-        'headers' => ['Accept: application/json', 'Authorization: Bearer ' . $token],
-    ]);
-    if ($res['status'] !== 200 || !is_array($res['body']['valueRanges'] ?? null)) {
-        throw new RuntimeException('UPSTREAM_SHEETS_READ');
+    $res = null;
+    try {
+        $res = ciarm_http_json($url, [
+            'headers' => ['Accept: application/json', 'Authorization: Bearer ' . $token],
+            'timeout' => 15,
+        ]);
+    } catch (Throwable $ignoredRead) {
+        $res = ['status' => 0, 'body' => []];
     }
 
     $pedidosValues = $res['body']['valueRanges'][0]['values'] ?? [];
     $bitacoraValues = $res['body']['valueRanges'][1]['values'] ?? [];
     $configValues = $res['body']['valueRanges'][2]['values'] ?? [];
+
+    $needsSchemaInit = ($res['status'] !== 200)
+        || !is_array($res['body']['valueRanges'] ?? null)
+        || $pedidosValues === []
+        || count($pedidosValues[0] ?? []) < count(CIARM_TUS_COMPRAS_PEDIDOS_HEADERS)
+        || $bitacoraValues === [];
+
+    if ($needsSchemaInit) {
+        ciarm_tus_compras_ensure_schema($sheetId, $token);
+        $res = ciarm_http_json($url, [
+            'headers' => ['Accept: application/json', 'Authorization: Bearer ' . $token],
+            'timeout' => 15,
+        ]);
+        if ($res['status'] !== 200 || !is_array($res['body']['valueRanges'] ?? null)) {
+            throw new RuntimeException('UPSTREAM_SHEETS_READ');
+        }
+        $pedidosValues = $res['body']['valueRanges'][0]['values'] ?? [];
+        $bitacoraValues = $res['body']['valueRanges'][1]['values'] ?? [];
+        $configValues = $res['body']['valueRanges'][2]['values'] ?? [];
+    }
 
     foreach (array_slice($configValues, 1) as $cfgRow) {
         $cfgKey = trim((string)($cfgRow[0] ?? ''));
@@ -1565,7 +1610,8 @@ function ciarm_tus_compras_dispatch_notifications(string $event, array $order, s
                     'event' => $event,
                     'messages' => $gasMessages,
                 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                'timeout' => 20,
+                'connect_timeout' => 4,
+                'timeout' => 8,
             ]);
             if ($gasRes['status'] === 200 && ($gasRes['body']['ok'] ?? false) === true && is_array($gasRes['body']['deliveries'] ?? null)) {
                 $deliveries = $gasRes['body']['deliveries'];
@@ -1585,10 +1631,15 @@ function ciarm_tus_compras_dispatch_notifications(string $event, array $order, s
             error_log('Tus Compras GAS MailApp fallback: ' . $gasErr->getMessage());
         }
     }
-    $sendFn = $mailer ?? static function (string $to, string $subject, string $html): array {
-        $mx = ciarm_ticket_smtp_mx_send($to, $subject, $html, 'smtp.google.com', 25);
-        if (($mx['ok'] ?? false) === true) {
-            return ['ok' => true, 'via' => 'smtp-google-mx'];
+    $smtpMxFailed = false;
+    $sendFn = $mailer ?? static function (string $to, string $subject, string $html) use (&$smtpMxFailed): array {
+        $mx = ['ok' => false, 'error' => 'skipped'];
+        if (!$smtpMxFailed) {
+            $mx = ciarm_ticket_smtp_mx_send($to, $subject, $html, 'smtp.google.com', 25);
+            if (($mx['ok'] ?? false) === true) {
+                return ['ok' => true, 'via' => 'smtp-google-mx'];
+            }
+            $smtpMxFailed = true;
         }
         $encodedSubject = '=?UTF-8?B?' . base64_encode($subject) . '?=';
         $fromName = '=?UTF-8?B?' . base64_encode('Portal CIARM — Tus Compras') . '?=';

@@ -476,7 +476,7 @@ export function computeTusComprasExecutiveMetrics(orders, filters = {}, nowMs = 
 async function apiRequest(action, params = {}, method = 'GET', token = null, signal = null) {
   const isPost = method === 'POST';
   const query = isPost ? '' : `?${new URLSearchParams({ action, ...params })}`;
-  const response = await fetch(`/tus-compras-api.php${query}`, {
+  const fetchOptions = {
     method,
     credentials: 'same-origin',
     cache: 'no-store',
@@ -487,7 +487,30 @@ async function apiRequest(action, params = {}, method = 'GET', token = null, sig
           body: JSON.stringify({ action, ...params, csrfToken: token })
         }
       : { headers: { Accept: 'application/json' } })
-  });
+  };
+
+  let response;
+  const maxAttempts = !isPost || action === 'create' ? 2 : 1;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      response = await fetch(`/tus-compras-api.php${query}`, fetchOptions);
+      break;
+    } catch (fetchErr) {
+      if (signal?.aborted || fetchErr?.name === 'AbortError') {
+        throw fetchErr;
+      }
+      if (attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 600));
+        continue;
+      }
+      throw Object.assign(
+        new Error(
+          'No se pudo conectar con el servidor de Tus compras (tiempo de espera agotado). Por favor intenta nuevamente en unos segundos.'
+        ),
+        { code: 'NETWORK_TIMEOUT' }
+      );
+    }
+  }
 
   let body;
   try {

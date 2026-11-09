@@ -12,6 +12,41 @@ if (!in_array($method, ['GET', 'POST'], true)) {
     ciarm_json_response(405, ['ok' => false, 'code' => 'METHOD_NOT_ALLOWED']);
 }
 
+if ($method === 'GET' && ($_GET['action'] ?? '') === 'ping') {
+    $t0 = microtime(true);
+    $canRead = false;
+    $err = null;
+    $count = 0;
+    $recent = [];
+    try {
+        $store = ciarm_tus_compras_fetch_all();
+        $pedidos = ciarm_tus_compras_parse_pedidos($store['pedidosRows']);
+        $canRead = true;
+        $count = count($pedidos);
+        foreach (array_slice(array_reverse($pedidos), 0, 5) as $p) {
+            $recent[] = [
+                'id' => $p['id'] ?? '',
+                'fecha' => ($p['fecha'] ?? '') . ' ' . ($p['hora'] ?? ''),
+                'tipo' => $p['tipo'] ?? '',
+                'monto' => $p['monto'] ?? 0,
+                'estado' => $p['estado'] ?? '',
+            ];
+        }
+    } catch (Throwable $e) {
+        $err = $e->getMessage();
+    }
+    ciarm_json_response(200, [
+        'ok' => $canRead,
+        'is_production' => ciarm_tickets_is_production_host(),
+        'active_sheet' => ciarm_tus_compras_active_sheet_id(),
+        'can_read_sheets' => $canRead,
+        'pedidos_count' => $count,
+        'recent_orders' => $recent,
+        'error' => $err,
+        'elapsed_ms' => round((microtime(true) - $t0) * 1000, 1),
+    ]);
+}
+
 if ($method === 'POST') {
     $origin = (string)($_SERVER['HTTP_ORIGIN'] ?? '');
     $host = (string)($_SERVER['HTTP_HOST'] ?? '');
@@ -253,6 +288,24 @@ try {
 
         $store = ciarm_tus_compras_fetch_all();
         $pedidos = ciarm_tus_compras_parse_pedidos($store['pedidosRows']);
+
+        // Idempotencia: si el mismo usuario envió exactamente el mismo pedido en los últimos 120 segundos, devolver el existente
+        $actorEmailNorm = strtolower(trim((string)$access['correo']));
+        foreach (array_reverse($pedidos) as $existingOrder) {
+            if (strtolower(trim((string)($existingOrder['correo'] ?? ''))) === $actorEmailNorm
+                && strtoupper((string)($existingOrder['tipo'] ?? '')) === $tipo
+                && abs((float)($existingOrder['montoEstimado'] ?? 0) - $monto) < 0.01
+                && trim((string)($existingOrder['descripcion'] ?? '')) === $descripcion
+                && ($existingOrder['fecha'] ?? '') === $nowDate) {
+                $existingTs = strtotime(($existingOrder['fecha'] ?? '') . ' ' . ($existingOrder['hora'] ?? ''));
+                $currentTs = strtotime($nowFull);
+                if ($existingTs !== false && $currentTs !== false && abs($currentTs - $existingTs) <= 120) {
+                    $existingOrder['allowedActions'] = ciarm_tus_compras_allowed_actions($existingOrder, $access, 'mine');
+                    ciarm_json_response(200, ['ok' => true, 'data' => ['order' => $existingOrder, 'deduplicated' => true]]);
+                }
+            }
+        }
+
         $folio = ciarm_tus_compras_next_folio($pedidos, $year);
 
         $area = (string)$access['area'];
@@ -315,7 +368,10 @@ try {
             throw new RuntimeException('UPSTREAM_WRITE_FAILED');
         }
 
-        $notif = ciarm_tus_compras_dispatch_notifications('CREATE', $newOrder, $justificacion, null, (array)($access['approverEmails'] ?? []));
+        $canFinishEarly = function_exists('fastcgi_finish_request');
+        $notif = $canFinishEarly
+            ? ['event' => 'CREATE', 'status' => 'ENVIADO (ASYNC)', 'overallStatus' => 'ENVIADO', 'deliveries' => []]
+            : ciarm_tus_compras_dispatch_notifications('CREATE', $newOrder, $justificacion, null, (array)($access['approverEmails'] ?? []));
 
         $logRow = [
             'EVT-' . bin2hex(random_bytes(6)),
@@ -351,6 +407,21 @@ try {
 
         $newOrder['allowedActions'] = ciarm_tus_compras_allowed_actions($newOrder, $access, 'mine');
         $newOrder['notification'] = $notif;
+
+        if ($canFinishEarly) {
+            ignore_user_abort(true);
+            http_response_code(200);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store');
+            header('X-Content-Type-Options: nosniff');
+            echo json_encode(['ok' => true, 'data' => ['order' => $newOrder]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            fastcgi_finish_request();
+            try {
+                ciarm_tus_compras_dispatch_notifications('CREATE', $newOrder, $justificacion, null, (array)($access['approverEmails'] ?? []));
+            } catch (Throwable $ignoredAsyncNotif) {
+            }
+            exit;
+        }
 
         ciarm_json_response(200, ['ok' => true, 'data' => ['order' => $newOrder]]);
     }
@@ -497,7 +568,10 @@ try {
             throw new RuntimeException('UPSTREAM_UPDATE_FAILED');
         }
 
-        $notif = ciarm_tus_compras_dispatch_notifications($event, $target, $comment, null, (array)($access['approverEmails'] ?? []));
+        $canFinishEarly = function_exists('fastcgi_finish_request');
+        $notif = $canFinishEarly
+            ? ['event' => $event, 'status' => 'ENVIADO (ASYNC)', 'overallStatus' => 'ENVIADO', 'deliveries' => []]
+            : ciarm_tus_compras_dispatch_notifications($event, $target, $comment, null, (array)($access['approverEmails'] ?? []));
 
         $logRow = [
             'EVT-' . bin2hex(random_bytes(6)),
@@ -546,6 +620,21 @@ try {
             'comentario' => $logRow[11],
             'notificacion' => $logRow[12],
         ];
+
+        if ($canFinishEarly) {
+            ignore_user_abort(true);
+            http_response_code(200);
+            header('Content-Type: application/json; charset=utf-8');
+            header('Cache-Control: no-store');
+            header('X-Content-Type-Options: nosniff');
+            echo json_encode(['ok' => true, 'data' => ['order' => $target]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            fastcgi_finish_request();
+            try {
+                ciarm_tus_compras_dispatch_notifications($event, $target, $comment, null, (array)($access['approverEmails'] ?? []));
+            } catch (Throwable $ignoredAsyncNotif) {
+            }
+            exit;
+        }
 
         ciarm_json_response(200, ['ok' => true, 'data' => ['order' => $target]]);
     }

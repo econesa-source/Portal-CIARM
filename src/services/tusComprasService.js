@@ -6,6 +6,7 @@
 
 export const TUS_COMPRAS_OPEX_LIMIT = 8000;
 export const TUS_COMPRAS_QUOTE_THRESHOLD = 3000;
+export const TUS_COMPRAS_MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // 10 MB por archivo
 
 export const TUS_COMPRAS_STATES = Object.freeze({
   ENVIADA: '1) Solicitud enviada',
@@ -501,7 +502,30 @@ export function transitionTusCompra(payload, csrfToken, signal) {
   return apiRequest('transition', payload, 'POST', csrfToken, signal);
 }
 
-export async function uploadTusCompraAttachment(file, csrfToken, signal) {
+export function validateTusCompraAttachmentFile(file, label = 'archivo adjunto') {
+  if (!file || typeof file !== 'object') {
+    throw Object.assign(new Error(`No se seleccionó ningún ${label} válido.`), { code: 'VALIDATION' });
+  }
+  const fileName = String(file.name || label).trim() || label;
+  const size = Number(file.size) || 0;
+  if (size < 1) {
+    throw Object.assign(new Error(`El archivo «${fileName}» está vacío.`), { code: 'VALIDATION' });
+  }
+  if (size > TUS_COMPRAS_MAX_ATTACHMENT_BYTES) {
+    const sizeMb = (size / (1024 * 1024)).toFixed(2);
+    throw Object.assign(
+      new Error(
+        `El archivo «${fileName}» (${sizeMb} MB) supera el límite máximo permitido de 10 MB por archivo. Por favor selecciona un archivo de hasta 10 MB.`
+      ),
+      { code: 'PAYLOAD_SIZE' }
+    );
+  }
+  return true;
+}
+
+export async function uploadTusCompraAttachment(file, csrfToken, signal, label = 'archivo adjunto') {
+  validateTusCompraAttachmentFile(file, label);
+  const fileName = String(file?.name || label).trim() || label;
   const formData = new FormData();
   formData.append('action', 'uploadAttachment');
   formData.append('csrfToken', csrfToken);
@@ -516,12 +540,24 @@ export async function uploadTusCompraAttachment(file, csrfToken, signal) {
   try {
     body = await response.json();
   } catch {
-    throw Object.assign(new Error('Respuesta inválida al subir adjunto.'), { code: 'UPSTREAM' });
+    throw Object.assign(
+      new Error(
+        `No se logró cargar el ${label} «${fileName}» en Google Drive (respuesta inválida del servidor). La operación se detuvo para evitar que el registro quede sin su archivo.`
+      ),
+      { code: 'UPLOAD_FAILED' }
+    );
   }
-  if (!response.ok || body?.ok !== true || !body?.data?.url) {
-    throw Object.assign(new Error('No se pudo subir el archivo adjunto.'), {
-      code: body?.code || 'UPSTREAM'
-    });
+  const uploadedUrl = typeof body?.data?.url === 'string' ? body.data.url.trim() : '';
+  if (!response.ok || body?.ok !== true || !uploadedUrl || !uploadedUrl.startsWith('http')) {
+    throw Object.assign(
+      new Error(
+        body?.message ||
+          `No se logró cargar el ${label} «${fileName}» en Google Drive. La operación se detuvo y se notificó del incidente; por favor intenta nuevamente.`
+      ),
+      {
+        code: body?.code || 'UPLOAD_FAILED'
+      }
+    );
   }
   return body.data;
 }

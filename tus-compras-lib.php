@@ -19,6 +19,7 @@ const CIARM_TUS_COMPRAS_STAGING_WEBAPP = 'https://script.google.com/macros/s/AKf
 const CIARM_TUS_COMPRAS_PROD_WEBAPP = 'https://script.google.com/macros/s/AKfycbw01gXyUlNRqMBLGeMfkys8HNGJlnYnrMHGb76_LrnG1-atYM43vEOEQdmimPkUHyhb/exec';
 const CIARM_TUS_COMPRAS_OPEX_LIMIT = 8000.0;
 const CIARM_TUS_COMPRAS_QUOTE_THRESHOLD = 3000.0;
+const CIARM_TUS_COMPRAS_MAX_ATTACHMENT_BYTES = 10485760; // 10 MB por archivo
 const CIARM_TUS_COMPRAS_ADMIN_EMAIL = 'd.lara@ciarm.edu.mx';
 const CIARM_TUS_COMPRAS_APPROVER_EMAILS = ['e.conesa@ciarm.edu.mx'];
 
@@ -1402,12 +1403,102 @@ function ciarm_tus_compras_render_email(array $msg, array $order): string {
             . $esc($r[0]) . '</td><td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#0f172a;">'
             . $esc($r[1]) . '</td></tr>';
     }
+
+    $attachmentItems = [];
+    if (!empty($order['adjuntoDetalle'])) {
+        $attachmentItems[] = '<li style="margin-bottom:6px;"><a href="' . $esc($order['adjuntoDetalle']) . '" target="_blank" rel="noopener noreferrer" style="color:#0369a1;font-weight:700;text-decoration:underline;">📎 Abrir Detalle del pedido (Solicitante)</a></li>';
+    }
+    if (!empty($order['adjuntoCotizacionPreliminar'])) {
+        $attachmentItems[] = '<li style="margin-bottom:6px;"><a href="' . $esc($order['adjuntoCotizacionPreliminar']) . '" target="_blank" rel="noopener noreferrer" style="color:#b45309;font-weight:700;text-decoration:underline;">📄 Abrir Cotización preliminar de referencia (Solicitante)</a></li>';
+    }
+    if (!empty($order['adjuntoCotizacionesAdm'])) {
+        $cotUrls = array_filter(array_map('trim', explode('|', (string)$order['adjuntoCotizacionesAdm'])));
+        foreach ($cotUrls as $idx => $u) {
+            $suffix = count($cotUrls) > 1 ? ' #' . ($idx + 1) : '';
+            $attachmentItems[] = '<li style="margin-bottom:6px;"><a href="' . $esc($u) . '" target="_blank" rel="noopener noreferrer" style="color:#15803d;font-weight:700;text-decoration:underline;">📑 Abrir Cotizaciones Administración' . $esc($suffix) . '</a></li>';
+        }
+    }
+    if ($attachmentItems === [] && !empty($order['adjuntos'])) {
+        $rawAdj = trim((string)$order['adjuntos']);
+        if (str_starts_with($rawAdj, 'http')) {
+            $attachmentItems[] = '<li style="margin-bottom:6px;"><a href="' . $esc($rawAdj) . '" target="_blank" rel="noopener noreferrer" style="color:#1e3a8a;font-weight:700;text-decoration:underline;">📎 Abrir archivo adjunto</a></li>';
+        }
+    }
+    $htmlAttachments = '';
+    if ($attachmentItems !== []) {
+        $htmlAttachments = '<div style="margin:14px 0 16px;padding:12px 14px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;">'
+            . '<div style="font-weight:700;color:#1e293b;font-size:13.5px;margin-bottom:6px;">Archivos Adjuntos del Pedido:</div>'
+            . '<ul style="margin:0;padding-left:18px;font-size:13.5px;">' . implode('', $attachmentItems) . '</ul>'
+            . '</div>';
+    }
+
     return '<div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;background:#ffffff;">'
         . '<div style="background:#1e3a8a;color:#ffffff;padding:16px 20px;"><span style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#cbd5e1;">Portal CIARM · Tus Compras</span><h2 style="margin:6px 0 0;font-size:18px;">' . $esc($msg['heading']) . '</h2></div>'
         . '<div style="padding:20px;"><p style="margin:0 0 16px;color:#1e293b;line-height:1.5;">' . $esc($msg['intro']) . '</p>'
         . '<table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;">' . $htmlRows . '</table>'
+        . $htmlAttachments
         . '<div style="margin-top:20px;"><a href="' . $esc($msg['ctaUrl']) . '" style="display:inline-block;background:#26487F;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:600;font-size:14px;">' . $esc($msg['ctaLabel']) . '</a></div>'
         . '</div><div style="background:#f8fafc;padding:12px 20px;font-size:12px;color:#64748b;border-top:1px solid #e2e8f0;">Notificación automática del Módulo Tus Compras CIARM (' . $esc($order['id'] ?? '') . ').</div></div>';
+}
+
+function ciarm_tus_compras_notify_upload_failure(array $access, string $fileName, string $reason): void {
+    $webAppUrl = ciarm_tus_compras_active_webapp();
+    if ($webAppUrl === '') {
+        return;
+    }
+    $actorEmail = strtolower(trim((string)($access['correo'] ?? '')));
+    $actorName = trim((string)($access['nombre'] ?? $actorEmail));
+    $area = trim((string)($access['area'] ?? ''));
+    $esc = static fn(mixed $s): string => htmlspecialchars((string)($s ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $subject = "[Portal CIARM · Tus Compras] Error al adjuntar archivo «{$fileName}»";
+    $html = '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #fecaca;border-radius:10px;overflow:hidden;background:#ffffff;">'
+        . '<div style="background:#991b1b;color:#ffffff;padding:14px 18px;"><h2 style="margin:0;font-size:17px;">No se pudo cargar el archivo adjunto en Tus Compras</h2></div>'
+        . '<div style="padding:18px;color:#1e293b;font-size:14px;line-height:1.5;">'
+        . '<p>El sistema detectó un fallo al intentar subir un archivo adjunto en el módulo <strong>Tus compras</strong>:</p>'
+        . '<ul>'
+        . '<li><strong>Usuario:</strong> ' . $esc($actorName) . ' (' . $esc($actorEmail) . ') — ' . $esc($area) . '</li>'
+        . '<li><strong>Archivo:</strong> ' . $esc($fileName) . '</li>'
+        . '<li><strong>Motivo:</strong> ' . $esc($reason) . '</li>'
+        . '</ul>'
+        . '<p>La operación fue detenida preventivamente para evitar que el pedido o cambio de estado quedara registrado sin su archivo de respaldo. Por favor verifica que el archivo sea PDF o imagen menor a 10 MB e intenta nuevamente.</p>'
+        . '</div></div>';
+
+    $messages = [];
+    if ($actorEmail !== '' && filter_var($actorEmail, FILTER_VALIDATE_EMAIL)) {
+        $messages[] = [
+            'role' => 'usuario',
+            'to' => $actorEmail,
+            'subject' => $subject,
+            'text' => "No se pudo cargar el archivo adjunto {$fileName} en Tus Compras ({$reason}).",
+            'html' => $html,
+        ];
+    }
+    if ($actorEmail !== CIARM_TUS_COMPRAS_ADMIN_EMAIL) {
+        $messages[] = [
+            'role' => 'admin',
+            'to' => CIARM_TUS_COMPRAS_ADMIN_EMAIL,
+            'subject' => $subject,
+            'text' => "El usuario {$actorName} ({$actorEmail}) tuvo un error al subir {$fileName}: {$reason}.",
+            'html' => $html,
+        ];
+    }
+    if ($messages === []) {
+        return;
+    }
+    try {
+        @ciarm_http_json($webAppUrl, [
+            'post' => true,
+            'headers' => ['Accept: application/json', 'Content-Type: application/json'],
+            'body' => json_encode([
+                'action' => 'sendNotifications',
+                'orderId' => 'UPLOAD-ERR',
+                'event' => 'UPLOAD_FAILURE',
+                'messages' => $messages,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'timeout' => 12,
+        ]);
+    } catch (Throwable $ignored) {
+    }
 }
 
 function ciarm_tus_compras_active_webapp(?string $host = null): string {

@@ -148,23 +148,61 @@ try {
         }
         session_write_close();
         if ($action !== 'uploadAttachment' || !isset($_FILES['file']) || !is_array($_FILES['file'])) {
-            ciarm_json_response(422, ['ok' => false, 'code' => 'VALIDATION']);
+            ciarm_json_response(422, ['ok' => false, 'code' => 'VALIDATION', 'message' => 'No se recibió ningún archivo adjunto válido.']);
         }
         $file = $_FILES['file'];
-        if (($file['error'] ?? -1) !== UPLOAD_ERR_OK) {
-            ciarm_json_response(422, ['ok' => false, 'code' => 'VALIDATION']);
+        $fileName = basename((string)($file['name'] ?? 'archivo'));
+        $fileErr = (int)($file['error'] ?? -1);
+        if (in_array($fileErr, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)) {
+            ciarm_tus_compras_notify_upload_failure($access, $fileName, 'El archivo supera el tamaño máximo permitido de 10 MB.');
+            ciarm_json_response(413, [
+                'ok' => false,
+                'code' => 'PAYLOAD_SIZE',
+                'message' => "El archivo «{$fileName}» supera el límite máximo permitido de 10 MB por archivo.",
+            ]);
+        }
+        if ($fileErr !== UPLOAD_ERR_OK) {
+            ciarm_tus_compras_notify_upload_failure($access, $fileName, 'Error de transmisión al subir el archivo (código ' . $fileErr . ').');
+            ciarm_json_response(422, [
+                'ok' => false,
+                'code' => 'VALIDATION',
+                'message' => "No se pudo recibir correctamente el archivo «{$fileName}». Intenta seleccionarlo nuevamente.",
+            ]);
         }
         $size = (int)($file['size'] ?? 0);
-        if ($size < 1 || $size > 10 * 1024 * 1024) {
-            ciarm_json_response(413, ['ok' => false, 'code' => 'PAYLOAD_SIZE']);
+        if ($size < 1 || $size > CIARM_TUS_COMPRAS_MAX_ATTACHMENT_BYTES) {
+            ciarm_tus_compras_notify_upload_failure($access, $fileName, 'Tamaño fuera del rango permitido (máximo 10 MB).');
+            ciarm_json_response(413, [
+                'ok' => false,
+                'code' => 'PAYLOAD_SIZE',
+                'message' => "El archivo «{$fileName}» supera el límite máximo permitido de 10 MB por archivo.",
+            ]);
         }
         $mime = (new finfo(FILEINFO_MIME_TYPE))->file((string)$file['tmp_name']);
         $allowed = is_string($mime) && (str_starts_with($mime, 'image/') || $mime === 'application/pdf');
         if (!$allowed) {
-            ciarm_json_response(415, ['ok' => false, 'code' => 'CONTENT_TYPE']);
+            ciarm_tus_compras_notify_upload_failure($access, $fileName, 'Formato de archivo no permitido (' . (string)$mime . ').');
+            ciarm_json_response(415, [
+                'ok' => false,
+                'code' => 'CONTENT_TYPE',
+                'message' => "El formato del archivo «{$fileName}» no está permitido. Solo se aceptan PDF o imágenes (máx. 10 MB).",
+            ]);
         }
-        $uploaded = ciarm_upload_evidence_to_drive($file, $user);
-        ciarm_json_response(200, ['ok' => true, 'data' => $uploaded]);
+        try {
+            $uploaded = ciarm_upload_evidence_to_drive($file, $user);
+            $uploadedUrl = trim((string)($uploaded['url'] ?? ''));
+            if ($uploadedUrl === '' || !str_starts_with($uploadedUrl, 'http')) {
+                throw new RuntimeException('UPLOAD_EMPTY_URL');
+            }
+            ciarm_json_response(200, ['ok' => true, 'data' => $uploaded]);
+        } catch (Throwable $upErr) {
+            ciarm_tus_compras_notify_upload_failure($access, $fileName, 'No se logró almacenar el archivo en Google Drive (' . $upErr->getMessage() . ').');
+            ciarm_json_response(502, [
+                'ok' => false,
+                'code' => 'UPLOAD_FAILED',
+                'message' => "No se logró cargar el archivo «{$fileName}» en Google Drive. Se ha informado del incidente; por favor intenta nuevamente.",
+            ]);
+        }
     }
 
     $rawBody = (string)file_get_contents('php://input');

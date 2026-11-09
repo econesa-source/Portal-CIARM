@@ -165,4 +165,32 @@ assert_true($parsedPedidos[0]['estado'] === CIARM_TUS_COMPRAS_STATE_ENVIADA, 'Ti
 assert_true($parsedPedidos[1]['estado'] === CIARM_TUS_COMPRAS_STATE_EN_APROBACION, 'Ticket 2 (OPEX $20,000 > $8,000) must be 2b) En aprobación');
 assert_true($parsedPedidos[2]['estado'] === CIARM_TUS_COMPRAS_STATE_EN_APROBACION, 'Ticket 3 (CAPEX $350,000) must be 2b) En aprobación');
 
+// 5. Verificar tope de 10 MB por archivo y enlaces clicables de adjuntos en los correos electrónicos
+assert_true(CIARM_TUS_COMPRAS_MAX_ATTACHMENT_BYTES === 10485760, 'Max attachment size is 10 MB');
+$emailOrder = [
+    'id' => 'CMP-2026-00010',
+    'estado' => CIARM_TUS_COMPRAS_STATE_COTIZACIONES_RECIBIDAS,
+    'tipo' => 'OPEX',
+    'monto' => 5000.0,
+    'montoEstimado' => 5000.0,
+    'montoOrdenCompra' => 0.0,
+    'acumuladoMesArea' => 5000.0,
+    'solicitante' => 'María Gómez',
+    'area' => 'Docente',
+    'descripcion' => 'Proyector interactivo',
+    'adjuntoDetalle' => 'https://drive.google.com/file/d/det123/view',
+    'adjuntoCotizacionPreliminar' => 'https://drive.google.com/file/d/pre456/view',
+    'adjuntoCotizacionesAdm' => 'https://drive.google.com/file/d/adm789/view',
+];
+$emailHtml = ciarm_tus_compras_render_email([
+    'heading' => 'Cotizaciones recibidas',
+    'intro' => 'Prueba de enlaces en correo',
+    'ctaUrl' => 'https://portal2.ciarm.edu.mx/#admin-tus-compras',
+    'ctaLabel' => 'Ver en portal',
+    'comment' => 'Nota',
+], $emailOrder);
+assert_true(str_contains($emailHtml, 'https://drive.google.com/file/d/det123/view'), 'Email includes Detalle del pedido link');
+assert_true(str_contains($emailHtml, 'https://drive.google.com/file/d/pre456/view'), 'Email includes Cotizacion preliminar link');
+assert_true(str_contains($emailHtml, 'https://drive.google.com/file/d/adm789/view'), 'Email includes Cotizaciones Administracion link');
+
 echo "Tus Compras PHP tests: all passed\n";

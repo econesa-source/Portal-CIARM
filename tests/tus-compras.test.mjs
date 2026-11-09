@@ -5,9 +5,11 @@ import {
   TUS_COMPRAS_STATES,
   TUS_COMPRAS_OPEX_LIMIT,
   TUS_COMPRAS_QUOTE_THRESHOLD,
+  TUS_COMPRAS_MAX_ATTACHMENT_BYTES,
   canSeeTusCompras,
   getEffectiveOrderAmount,
   requiresQuotationProcess,
+  validateTusCompraAttachmentFile,
   evaluateOrderApprovalRequirement,
   resolveEffectiveOrderState,
   normalizeOrdersStates,
@@ -19,6 +21,14 @@ import { allowedRoute } from '../src/components/dashboardAccess.js';
 test('Tope mensual Opex de $8,000 MXN por área solicitante, umbral de cotización de $3,000 MXN y monto único válido de Orden de Compra', () => {
   assert.equal(TUS_COMPRAS_OPEX_LIMIT, 8000);
   assert.equal(TUS_COMPRAS_QUOTE_THRESHOLD, 3000);
+  assert.equal(TUS_COMPRAS_MAX_ATTACHMENT_BYTES, 10 * 1024 * 1024);
+
+  // Validación estricta de tamaño de archivo adjunto (máx. 10 MB por archivo)
+  assert.equal(validateTusCompraAttachmentFile({ name: 'detalle.pdf', size: 10 * 1024 * 1024 }), true);
+  assert.throws(
+    () => validateTusCompraAttachmentFile({ name: 'pesado.pdf', size: 10 * 1024 * 1024 + 1 }, 'Detalle del pedido'),
+    /supera el límite máximo permitido de 10 MB/
+  );
 
   // Opex dentro del límite mensual acumulado del área (ej. 3,000 previos + 4,500 nuevos = 7,500 <= 8,000)
   const opexOk = evaluateOrderApprovalRequirement('OPEX', 4500, 3000);

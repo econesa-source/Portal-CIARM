@@ -10,6 +10,7 @@ import {
   TUS_COMPRAS_STATES,
   TUS_COMPRAS_OPEX_LIMIT,
   TUS_COMPRAS_QUOTE_THRESHOLD,
+  TUS_COMPRAS_MAX_ATTACHMENT_BYTES,
   getEffectiveOrderAmount,
   evaluateOrderApprovalRequirement,
   resolveEffectiveOrderState,
@@ -20,8 +21,9 @@ import {
   listTusCompras,
   createTusCompra,
   transitionTusCompra,
+  validateTusCompraAttachmentFile,
   uploadTusCompraAttachment
-} from '../services/tusComprasService.js?v=18.7.16-tc8';
+} from '../services/tusComprasService.js?v=18.7.16-tc9';
 
 const ACTION_META = Object.freeze({
   RECEIVE_OPEX: {
@@ -350,14 +352,14 @@ function renderCreateView(container, ctx, controller) {
 
         <div class="solicitud-identity">
           <div class="solicitud-field solicitud-files">
-            <label for="tc-adjunto-detalle">1) ARCHIVO DE DETALLE DEL PEDIDO (OPCIONAL · NO OBLIGATORIO)</label>
+            <label for="tc-adjunto-detalle">1) ARCHIVO DE DETALLE DEL PEDIDO (OPCIONAL · MÁX. 10 MB)</label>
             <input type="file" id="tc-adjunto-detalle" accept="image/*,.pdf" />
-            <small style="display:block;margin-top:4px;color:#64748b;font-size:12px;">Especificaciones, listado o imagen de referencia de los artículos (PDF o imagen máx. 10 MB · Opcional).</small>
+            <small style="display:block;margin-top:4px;color:#64748b;font-size:12px;">Especificaciones, listado o imagen de referencia de los artículos (PDF o imagen · Tamaño máximo: 10 MB · No obligatorio).</small>
           </div>
           <div class="solicitud-field solicitud-files">
-            <label for="tc-adjunto-cotizacion">2) COTIZACIÓN PRELIMINAR DE REFERENCIA (OPCIONAL · NO OBLIGATORIO)</label>
+            <label for="tc-adjunto-cotizacion">2) COTIZACIÓN PRELIMINAR DE REFERENCIA (OPCIONAL · MÁX. 10 MB)</label>
             <input type="file" id="tc-adjunto-cotizacion" accept="image/*,.pdf" />
-            <small style="display:block;margin-top:4px;color:#64748b;font-size:12px;">Si cuentas con una cotización preliminar de referencia puedes adjuntarla aquí (PDF o imagen máx. 10 MB · Opcional).</small>
+            <small style="display:block;margin-top:4px;color:#64748b;font-size:12px;">Si cuentas con una cotización preliminar de referencia puedes adjuntarla aquí (PDF o imagen · Tamaño máximo: 10 MB · No obligatorio).</small>
           </div>
         </div>
 
@@ -380,6 +382,26 @@ function renderCreateView(container, ctx, controller) {
   const fileDetalleInput = container.querySelector('#tc-adjunto-detalle');
   const fileCotPrelimInput = container.querySelector('#tc-adjunto-cotizacion');
   const statusBox = container.querySelector('#tc-form-status');
+
+  const checkFileOnSelect = (inputEl, labelText) => {
+    inputEl?.addEventListener('change', () => {
+      const f = inputEl.files?.[0];
+      if (!f) return;
+      try {
+        validateTusCompraAttachmentFile(f, labelText);
+        if (statusBox.classList.contains('is-error')) {
+          statusBox.className = 'solicitud-status';
+          statusBox.textContent = '';
+        }
+      } catch (err) {
+        inputEl.value = '';
+        statusBox.className = 'solicitud-status is-visible is-error';
+        statusBox.textContent = err.message;
+      }
+    });
+  };
+  checkFileOnSelect(fileDetalleInput, 'archivo de Detalle del pedido');
+  checkFileOnSelect(fileCotPrelimInput, 'archivo de Cotización preliminar de referencia');
 
   function updatePreview() {
     const montoVal = Number(inputMonto.value || 0);
@@ -424,16 +446,38 @@ function renderCreateView(container, ctx, controller) {
       let adjuntoDetalleUrl = '';
       let adjuntoCotPrelimUrl = '';
       const fileDetalle = fileDetalleInput?.files?.[0];
-      if (fileDetalle) {
-        statusBox.textContent = 'Subiendo archivo de Detalle del pedido…';
-        const upDet = await uploadTusCompraAttachment(fileDetalle, ctx.csrfToken, controller.signal);
-        adjuntoDetalleUrl = upDet.url || '';
-      }
       const fileCotPrelim = fileCotPrelimInput?.files?.[0];
+      if (fileDetalle) {
+        validateTusCompraAttachmentFile(fileDetalle, 'archivo de Detalle del pedido');
+      }
       if (fileCotPrelim) {
-        statusBox.textContent = 'Subiendo archivo de Cotización preliminar de referencia…';
-        const upCot = await uploadTusCompraAttachment(fileCotPrelim, ctx.csrfToken, controller.signal);
+        validateTusCompraAttachmentFile(fileCotPrelim, 'archivo de Cotización preliminar de referencia');
+      }
+      if (fileDetalle) {
+        statusBox.textContent = `Subiendo Detalle del pedido («${fileDetalle.name}») a Google Drive…`;
+        const upDet = await uploadTusCompraAttachment(
+          fileDetalle,
+          ctx.csrfToken,
+          controller.signal,
+          'archivo de Detalle del pedido'
+        );
+        adjuntoDetalleUrl = upDet.url || '';
+        if (!adjuntoDetalleUrl) {
+          throw new Error(`No se logró verificar la carga del archivo «${fileDetalle.name}». Por favor intenta nuevamente.`);
+        }
+      }
+      if (fileCotPrelim) {
+        statusBox.textContent = `Subiendo Cotización preliminar de referencia («${fileCotPrelim.name}») a Google Drive…`;
+        const upCot = await uploadTusCompraAttachment(
+          fileCotPrelim,
+          ctx.csrfToken,
+          controller.signal,
+          'archivo de Cotización preliminar de referencia'
+        );
         adjuntoCotPrelimUrl = upCot.url || '';
+        if (!adjuntoCotPrelimUrl) {
+          throw new Error(`No se logró verificar la carga del archivo «${fileCotPrelim.name}». Por favor intenta nuevamente.`);
+        }
       }
       statusBox.textContent = 'Guardando pedido y notificando a Administración…';
       const result = await createTusCompra(
@@ -745,10 +789,10 @@ async function renderListView(container, ctx, kind, controller) {
             ? `
           <div style="margin:12px 0;padding:10px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;">
             <label for="tc-modal-quote-file" style="display:block;font-weight:600;font-size:13px;margin-bottom:4px;color:#0f172a;">
-              ADJUNTAR COTIZACIONES RECIBIDAS (OBLIGATORIO · PDF o Imagen) *
+              ADJUNTAR COTIZACIONES RECIBIDAS (OBLIGATORIO · PDF o Imagen · MÁX. 10 MB) *
             </label>
             <input id="tc-modal-quote-file" name="quoteFile" type="file" accept="image/*,.pdf" required style="width:100%;font-size:13px;" />
-            <small style="color:#64748b;display:block;margin-top:4px;">Para compras superiores a $3,000.00 MXN es obligatorio adjuntar la(s) cotización(es) del proceso.</small>
+            <small style="color:#64748b;display:block;margin-top:4px;">Para compras superiores a $3,000.00 MXN es obligatorio adjuntar la(s) cotización(es) del proceso (máximo 10 MB por archivo).</small>
           </div>
         `
             : ''
@@ -802,6 +846,20 @@ async function renderListView(container, ctx, kind, controller) {
     const form = modalEl.querySelector('#tc-transition-form');
     const submitBtn = modalEl.querySelector('#tc-modal-submit');
     const errEl = modalEl.querySelector('#tc-modal-error');
+    const quoteFileInput = modalEl.querySelector('#tc-modal-quote-file');
+
+    quoteFileInput?.addEventListener('change', () => {
+      const f = quoteFileInput.files?.[0];
+      if (!f) return;
+      try {
+        validateTusCompraAttachmentFile(f, 'archivo de Cotizaciones recibidas');
+        errEl.hidden = true;
+      } catch (err) {
+        quoteFileInput.value = '';
+        errEl.hidden = false;
+        errEl.textContent = err.message;
+      }
+    });
 
     form?.addEventListener('submit', async ev => {
       ev.preventDefault();
@@ -858,9 +916,18 @@ async function renderListView(container, ctx, kind, controller) {
           if (!file) {
             throw new Error('Debes adjuntar el archivo de cotizaciones para compras mayores a $3,000.00 MXN.');
           }
-          submitBtn.textContent = 'Subiendo cotizaciones…';
-          const up = await uploadTusCompraAttachment(file, listData.csrfToken || ctx.csrfToken, signal);
+          validateTusCompraAttachmentFile(file, 'archivo de Cotizaciones recibidas');
+          submitBtn.textContent = 'Subiendo cotizaciones a Google Drive…';
+          const up = await uploadTusCompraAttachment(
+            file,
+            listData.csrfToken || ctx.csrfToken,
+            signal,
+            'archivo de Cotizaciones recibidas'
+          );
           payload.adjuntoCotizacionesAdm = up?.url || '';
+          if (!payload.adjuntoCotizacionesAdm) {
+            throw new Error(`No se logró verificar la carga del archivo «${file.name}» en Google Drive.`);
+          }
           submitBtn.textContent = 'Procesando…';
         }
 

@@ -293,7 +293,7 @@ test('Indicadores gerenciales ejecutivos: cumplimiento a tiempo de Daniel Lara (
       tipo: 'OPEX',
       monto: 5000,
       requiereAprobacion: false,
-      estado: TUS_COMPRAS_STATES.ORDEN_COMPRA_GENERADA,
+      estado: TUS_COMPRAS_STATES.OC_GENERADA,
       fechaOrdenCompra: '2026-11-02 14:00:00',
       fechaEntregaEstimada: '2099-12-31'
     }

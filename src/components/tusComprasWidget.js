@@ -24,7 +24,7 @@ import {
   transitionTusCompra,
   validateTusCompraAttachmentFile,
   uploadTusCompraAttachment
-} from '../services/tusComprasService.js?v=18.7.16-tc13';
+} from '../services/tusComprasService.js?v=18.7.16-tc14';
 
 const ACTION_META = Object.freeze({
   RECEIVE_OPEX: {
@@ -1110,8 +1110,8 @@ async function renderExecutiveDashboardView(container, ctx, controller) {
 
       <header class="ticket-executive-heading" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
         <div>
-          <h1 style="margin:0;color:#0f172a;">Vista Gerencial · Tus compras</h1>
-          <p style="margin:4px 0 0;color:#475569;">Evolución gráfica de tickets de compra, tiempos de entrega y cierre (OPEX vs CAPEX) y desempeño operativo de gestión de compra (Daniel Lara).</p>
+          <h1 style="margin:0;color:#0f172a;">Vista Gerencial Ejecutiva · Tus compras</h1>
+          <p style="margin:4px 0 0;color:#475569;">Seguimiento ejecutivo enfocado en la gestión a tiempo de Daniel Lara, el pipeline con los nuevos estados de cotización/OC y la satisfacción del solicitante.</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button type="button" id="tc-exec-refresh" style="background:var(--primary-color, #26487F);border:1px solid var(--primary-color, #26487F);color:#ffffff;font-weight:600;padding:8px 14px;border-radius:6px;cursor:pointer;">Actualizar indicadores</button>
@@ -1211,178 +1211,125 @@ async function renderExecutiveDashboardView(container, ctx, controller) {
     const m = computeTusComprasExecutiveMetrics(allItems, filters);
     const opex = m.opex;
     const capex = m.capex;
+    const dp = m.danielPerformance || {};
 
-    const opexDanielHeadline =
-      opex.avgDanielTotalCompletedHours !== null
-        ? formatDurationHours(opex.avgDanielTotalCompletedHours)
+    const danielOverallHeadline =
+      dp.avgOverallHours !== null && dp.avgOverallHours !== undefined
+        ? formatDurationHours(dp.avgOverallHours)
         : opex.avgDanielActiveAgingHours !== null
         ? `${formatDurationHours(opex.avgDanielActiveAgingHours)} (en curso)`
-        : 'Sin casos';
+        : 'Sin entregas aún';
 
-    const capexDanielHeadline =
-      capex.avgDanielTotalCompletedHours !== null
-        ? formatDurationHours(capex.avgDanielTotalCompletedHours)
-        : capex.avgDanielActiveAgingHours !== null
-        ? `${formatDurationHours(capex.avgDanielActiveAgingHours)} (en curso)`
-        : 'Sin casos';
+    const onTimeHeadline =
+      dp.onTimeRatePct !== null && dp.onTimeRatePct !== undefined
+        ? `${dp.onTimeRatePct}% a tiempo`
+        : dp.inCourtCount > 0
+        ? `${dp.inCourtCount} en gestión`
+        : 'Al día (100%)';
+
+    const satisfactionHeadline =
+      m.quality.conformeRatePct !== null ? `${m.quality.conformeRatePct}% Conforme` : 'Sin cierres aún';
 
     const maxTimeRef = Math.max(
       1,
-      opex.avgEndToEndDeliveryHours || 0,
-      opex.avgEndToEndClosureHours || 0,
+      opex.avgDanielPoIssuanceHours || 0,
+      opex.avgDanielFulfillmentFromPoHours || 0,
       opex.avgDanielTotalCompletedHours || 0,
-      opex.avgDanielActiveAgingHours || 0,
-      capex.avgEndToEndDeliveryHours || 0,
-      capex.avgEndToEndClosureHours || 0,
-      capex.avgDanielTotalCompletedHours || 0,
-      capex.avgDanielActiveAgingHours || 0
+      capex.avgDanielPoIssuanceHours || 0,
+      capex.avgDanielFulfillmentFromPoHours || 0,
+      capex.avgDanielTotalCompletedHours || 0
     );
 
-    const barWidth = val => (val !== null && Number.isFinite(val) ? Math.min(100, Math.max(6, Math.round((val / maxTimeRef) * 100))) : 0);
+    const barWidth = val => (val !== null && Number.isFinite(val) ? Math.min(100, Math.max(8, Math.round((val / maxTimeRef) * 100))) : 0);
 
-    const orderedStates = [
-      TUS_COMPRAS_STATES.ENVIADA,
-      TUS_COMPRAS_STATES.EN_APROBACION,
-      TUS_COMPRAS_STATES.EN_PROCESO,
-      TUS_COMPRAS_STATES.EN_COTIZACION,
-      TUS_COMPRAS_STATES.COTIZACIONES_RECIBIDAS,
-      TUS_COMPRAS_STATES.OC_GENERADA,
-      TUS_COMPRAS_STATES.RECIBIDOS_ADM,
-      TUS_COMPRAS_STATES.ENTREGADA,
-      TUS_COMPRAS_STATES.CONFORME,
-      TUS_COMPRAS_STATES.DISCONFORME,
-      TUS_COMPRAS_STATES.RECHAZADA
+    const pipelineStages = [
+      { state: TUS_COMPRAS_STATES.ENVIADA, owner: 'Daniel Lara · Emitir OC directa (< $8,000)', isDaniel: true },
+      { state: TUS_COMPRAS_STATES.EN_APROBACION, owner: 'Autorizador · Aprobación (≥ $8,000 o CAPEX)', isDaniel: false },
+      { state: TUS_COMPRAS_STATES.EN_PROCESO, owner: 'Daniel Lara · Iniciar cotización', isDaniel: true },
+      { state: TUS_COMPRAS_STATES.EN_COTIZACION, owner: 'Daniel Lara · Cotizando (3 proveedores)', isDaniel: true },
+      { state: TUS_COMPRAS_STATES.COTIZACIONES_RECIBIDAS, owner: 'Daniel Lara · 3 cotizaciones listas → Emitir OC', isDaniel: true },
+      { state: TUS_COMPRAS_STATES.OC_GENERADA, owner: 'Daniel Lara · OC emitida (esperando entrega)', isDaniel: true },
+      { state: TUS_COMPRAS_STATES.RECIBIDOS_ADM, owner: 'Daniel Lara · Recibido en Adm. → Entregar', isDaniel: true },
+      { state: TUS_COMPRAS_STATES.ENTREGADA, owner: 'Solicitante · Pendiente confirmar recepción', isDaniel: false },
+      { state: TUS_COMPRAS_STATES.CONFORME, owner: 'Cerrado · Cliente satisfecho', isDaniel: false },
+      { state: TUS_COMPRAS_STATES.DISCONFORME, owner: 'Cerrado · Incidencia reportada', isDaniel: false },
+      { state: TUS_COMPRAS_STATES.RECHAZADA, owner: 'No autorizado', isDaniel: false }
     ];
-    const maxStateCount = Math.max(1, ...orderedStates.map(st => m.stateCounts[st]?.total || 0));
+    const maxStateCount = Math.max(1, ...pipelineStages.map(s => m.stateCounts[s.state]?.total || 0));
+
+    const scheduleBadge = status => {
+      if (status === 'OVERDUE') {
+        return `<span style="padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;background:#fee2e2;color:#991b1b;">🔴 Plazo vencido</span>`;
+      }
+      if (status === 'ON_TIME') {
+        return `<span style="padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;background:#dcfce7;color:#166534;">🟢 En plazo</span>`;
+      }
+      return `<span style="padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;background:#fef3c7;color:#92400e;">🟡 Por definir fecha</span>`;
+    };
 
     bodyEl.innerHTML = `
-      <!-- Tarjetas KPI Superiores -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-bottom:18px;">
-        <div style="background:#ffffff;border:1px solid #cbd5e1;border-top:4px solid #26487F;border-radius:10px;padding:14px;">
-          <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;">Volumen Total de Pedidos</div>
-          <div style="font-size:24px;font-weight:800;color:#0f172a;margin:4px 0;">${m.totalOrders} pedidos</div>
-          <div style="font-size:12.5px;color:#334155;">Monto: <strong>${formatCurrency(m.totalMonto)}</strong> (${opex.count} OPEX · ${capex.count} CAPEX)</div>
+      <!-- 4 Tarjetas Ejecutivas Principales -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-bottom:18px;">
+        <div style="background:#ffffff;border:1px solid #cbd5e1;border-top:4px solid #d97706;border-radius:10px;padding:15px;">
+          <div style="font-size:11.5px;font-weight:700;color:#b45309;text-transform:uppercase;letter-spacing:0.03em;">🎯 Gestión a Tiempo · Daniel Lara</div>
+          <div style="font-size:24px;font-weight:800;color:#0f172a;margin:5px 0;">${onTimeHeadline}</div>
+          <div style="font-size:12.5px;color:#334155;">
+            En cancha de Daniel hoy: <strong>${dp.inCourtCount || 0}</strong>
+            ${dp.activeOverdueCount > 0 ? ` · <strong style="color:#dc2626;">${dp.activeOverdueCount} vencido(s)</strong>` : ' · <span style="color:#15803d;font-weight:600;">0 vencidos</span>'}
+          </div>
         </div>
 
-        <div style="background:#ffffff;border:1px solid #cbd5e1;border-top:4px solid #0284c7;border-radius:10px;padding:14px;">
-          <div style="font-size:12px;font-weight:700;color:#0369a1;text-transform:uppercase;">Entrega y Cierre · OPEX</div>
-          <div style="font-size:20px;font-weight:800;color:#0f172a;margin:4px 0;">Entrega: ${formatDurationHours(opex.avgEndToEndDeliveryHours)}</div>
-          <div style="font-size:12.5px;color:#334155;">Cierre total (Estado 5): <strong>${formatDurationHours(opex.avgEndToEndClosureHours)}</strong></div>
+        <div style="background:#ffffff;border:1px solid #cbd5e1;border-top:4px solid #0284c7;border-radius:10px;padding:15px;">
+          <div style="font-size:11.5px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.03em;">⏱️ Tiempo de Respuesta · Daniel Lara</div>
+          <div style="font-size:22px;font-weight:800;color:#0f172a;margin:5px 0;">${danielOverallHeadline}</div>
+          <div style="font-size:12.5px;color:#334155;">
+            OPEX: <strong>${formatDurationHours(opex.avgDanielTotalCompletedHours)}</strong> · CAPEX: <strong>${formatDurationHours(capex.avgDanielTotalCompletedHours)}</strong>
+          </div>
         </div>
 
-        <div style="background:#ffffff;border:1px solid #cbd5e1;border-top:4px solid #7c3aed;border-radius:10px;padding:14px;">
-          <div style="font-size:12px;font-weight:700;color:#6d28d9;text-transform:uppercase;">Entrega y Cierre · CAPEX</div>
-          <div style="font-size:20px;font-weight:800;color:#0f172a;margin:4px 0;">Entrega: ${formatDurationHours(capex.avgEndToEndDeliveryHours)}</div>
-          <div style="font-size:12.5px;color:#334155;">Cierre total (Estado 5): <strong>${formatDurationHours(capex.avgEndToEndClosureHours)}</strong></div>
+        <div style="background:#ffffff;border:1px solid #cbd5e1;border-top:4px solid #059669;border-radius:10px;padding:15px;">
+          <div style="font-size:11.5px;font-weight:700;color:#047857;text-transform:uppercase;letter-spacing:0.03em;">⭐ Satisfacción Cliente (Estado 5)</div>
+          <div style="font-size:24px;font-weight:800;color:#0f172a;margin:5px 0;">${satisfactionHeadline}</div>
+          <div style="font-size:12.5px;color:#334155;">
+            Conformes: <strong style="color:#15803d;">${m.quality.totalConforme}</strong> · Disconformes: <strong style="color:#dc2626;">${m.quality.totalDisconforme}</strong> · Por evaluar: <strong>${m.quality.pendingEvaluationCount || 0}</strong>
+          </div>
         </div>
 
-        <div style="background:#ffffff;border:1px solid #cbd5e1;border-top:4px solid #d97706;border-radius:10px;padding:14px;">
-          <div style="font-size:12px;font-weight:700;color:#b45309;text-transform:uppercase;">Gestión Daniel Lara · OPEX</div>
-          <div style="font-size:20px;font-weight:800;color:#0f172a;margin:4px 0;">${opexDanielHeadline}</div>
-          <div style="font-size:12.5px;color:#334155;">En cancha de Daniel hoy: <strong>${opex.inDanielCourtCount}</strong> · En aprob.: <strong>${opex.inApprovalCount}</strong></div>
-        </div>
-
-        <div style="background:#ffffff;border:1px solid #cbd5e1;border-top:4px solid #9333ea;border-radius:10px;padding:14px;">
-          <div style="font-size:12px;font-weight:700;color:#7e22ce;text-transform:uppercase;">Gestión Daniel Lara · CAPEX</div>
-          <div style="font-size:20px;font-weight:800;color:#0f172a;margin:4px 0;">${capexDanielHeadline}</div>
-          <div style="font-size:12.5px;color:#334155;">En cancha de Daniel hoy: <strong>${capex.inDanielCourtCount}</strong> · En aprob.: <strong>${capex.inApprovalCount}</strong></div>
-        </div>
-
-        <div style="background:#ffffff;border:1px solid #cbd5e1;border-top:4px solid #059669;border-radius:10px;padding:14px;">
-          <div style="font-size:12px;font-weight:700;color:#047857;text-transform:uppercase;">Calidad de Recepción (Estado 5)</div>
-          <div style="font-size:22px;font-weight:800;color:#0f172a;margin:4px 0;">${m.quality.conformeRatePct !== null ? `${m.quality.conformeRatePct}% Conforme` : 'Sin cierres'}</div>
-          <div style="font-size:12.5px;color:#334155;">Conformes: <strong>${m.quality.totalConforme}</strong> · Disconformes: <strong style="color:#dc2626;">${m.quality.totalDisconforme}</strong></div>
+        <div style="background:#ffffff;border:1px solid #cbd5e1;border-top:4px solid #26487F;border-radius:10px;padding:15px;">
+          <div style="font-size:11.5px;font-weight:700;color:#26487F;text-transform:uppercase;letter-spacing:0.03em;">📦 Volumen y Monto Válido (OC)</div>
+          <div style="font-size:22px;font-weight:800;color:#0f172a;margin:5px 0;">${formatCurrency(m.totalMonto)}</div>
+          <div style="font-size:12.5px;color:#334155;">
+            <strong>${m.totalOrders} pedidos</strong> (${opex.count} OPEX · ${capex.count} CAPEX)
+          </div>
         </div>
       </div>
 
-      <!-- Fila Principal de Gráficos -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px;margin-bottom:18px;">
-        <!-- Panel 1: Tiempos de Gestión de Daniel Lara y Tiempos de Entrega/Cierre por Tipo (OPEX vs CAPEX) -->
+      <!-- Dos Paneles Ejecutivos Principales -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px;margin-bottom:18px;">
+        <!-- Panel 1: Pipeline con los Nuevos Estados -->
         <section style="background:#ffffff;border:1px solid #cbd5e1;border-radius:10px;padding:18px;">
-          <h2 style="margin:0 0 6px;font-size:16px;color:#1e3a8a;">⏱️ Tiempos de Gestión de Daniel Lara vs. Entrega y Cierre (OPEX vs CAPEX)</h2>
-          <p style="margin:0 0 14px;font-size:12.5px;color:#475569;">Mide por separado cuánto demora Daniel Lara desde que el pedido está listo para compra (creado en 1 para OPEX directo, o aprobado en 2a para CAPEX/excesos) hasta su entrega en Estado 4, frente al tiempo total hasta el cierre.</p>
-
-          <div style="display:flex;flex-direction:column;gap:12px;">
-            ${[
-              {
-                title: '1. Tiempo Neto de Gestión de Daniel Lara (Entregados: Disponible → 4 Entrega)',
-                opexVal: opex.avgDanielTotalCompletedHours,
-                capexVal: capex.avgDanielTotalCompletedHours
-              },
-              {
-                title: '2. Antigüedad Promedio Actual en Cancha de Daniel (Abiertos en 1, 2a o 3)',
-                opexVal: opex.avgDanielActiveAgingHours,
-                capexVal: capex.avgDanielActiveAgingHours
-              },
-              {
-                title: '3. Sub-etapa Daniel: Compra y Llegada a Adm. (2a En Proceso → 3 Recibidos Adm.)',
-                opexVal: opex.avgDanielProcurementHours,
-                capexVal: capex.avgDanielProcurementHours
-              },
-              {
-                title: '4. Sub-etapa Daniel: Entrega física al Solicitante (3 Recibidos Adm. → 4 Entregada)',
-                opexVal: opex.avgDanielInternalDeliveryHours,
-                capexVal: capex.avgDanielInternalDeliveryHours
-              },
-              {
-                title: '5. Tiempo de Autorización Ejecutiva (2b En aprobación → Aprobada 2a)',
-                opexVal: opex.avgApprovalHours,
-                capexVal: capex.avgApprovalHours
-              },
-              {
-                title: '6. Tiempo Total hasta Entrega al Solicitante (Creación → 4 Compra Entregada)',
-                opexVal: opex.avgEndToEndDeliveryHours,
-                capexVal: capex.avgEndToEndDeliveryHours
-              },
-              {
-                title: '7. Tiempo Total hasta Cierre del Ticket (Creación → 5 Conforme / Disconforme)',
-                opexVal: opex.avgEndToEndClosureHours,
-                capexVal: capex.avgEndToEndClosureHours
-              }
-            ]
-              .map(
-                row => `
-              <div style="border-bottom:1px solid #f1f5f9;padding-bottom:10px;">
-                <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:6px;">${escapeHtml(row.title)}</div>
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-                  <span style="width:58px;font-size:11.5px;font-weight:700;color:#0369a1;">OPEX</span>
-                  <div style="flex:1;background:#f1f5f9;height:10px;border-radius:999px;overflow:hidden;">
-                    <div style="width:${barWidth(row.opexVal)}%;height:100%;background:#0284c7;border-radius:999px;"></div>
-                  </div>
-                  <span style="min-width:115px;text-align:right;font-size:12px;font-weight:600;color:#0f172a;">${formatDurationHours(row.opexVal)}</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <span style="width:58px;font-size:11.5px;font-weight:700;color:#7e22ce;">CAPEX</span>
-                  <div style="flex:1;background:#f1f5f9;height:10px;border-radius:999px;overflow:hidden;">
-                    <div style="width:${barWidth(row.capexVal)}%;height:100%;background:#9333ea;border-radius:999px;"></div>
-                  </div>
-                  <span style="min-width:115px;text-align:right;font-size:12px;font-weight:600;color:#0f172a;">${formatDurationHours(row.capexVal)}</span>
-                </div>
-              </div>
-            `
-              )
-              .join('')}
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+            <h2 style="margin:0;font-size:16px;color:#1e3a8a;">📊 Flujo de Pedidos por Estado Actual</h2>
+            <span style="font-size:11.5px;background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:999px;font-weight:700;">Etapas de Daniel Lara destacadas</span>
           </div>
-        </section>
+          <p style="margin:0 0 14px;font-size:12.5px;color:#475569;">Incluye las nuevas etapas de cotización (≥ $8,000 con 3 cotizaciones) y generación de Orden de Compra.</p>
 
-        <!-- Panel 2: Evolución Gráfica de Estados del Pipeline (OPEX vs CAPEX) -->
-        <section style="background:#ffffff;border:1px solid #cbd5e1;border-radius:10px;padding:18px;">
-          <h2 style="margin:0 0 6px;font-size:16px;color:#1e3a8a;">📊 Evolución de la Gestión por Estado (Pipeline OPEX vs CAPEX)</h2>
-          <p style="margin:0 0 14px;font-size:12.5px;color:#475569;">Distribución actual de los tickets a lo largo de las 5 etapas del flujo y monto acumulado por estado.</p>
-
-          <div style="display:flex;flex-direction:column;gap:11px;">
-            ${orderedStates
-              .map(st => {
-                const info = m.stateCounts[st] || { total: 0, OPEX: 0, CAPEX: 0, monto: 0 };
+          <div style="display:flex;flex-direction:column;gap:9px;">
+            ${pipelineStages
+              .map(stage => {
+                const info = m.stateCounts[stage.state] || { total: 0, OPEX: 0, CAPEX: 0, monto: 0 };
                 const opexW = Math.round((info.OPEX / maxStateCount) * 100);
                 const capexW = Math.round((info.CAPEX / maxStateCount) * 100);
                 return `
-                  <div style="border-bottom:1px solid #f1f5f9;padding-bottom:8px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:4px;">
-                      <span style="font-weight:700;color:#1e293b;">${escapeHtml(st)}</span>
-                      <span style="font-size:12px;color:#334155;"><strong>${info.total}</strong> (${info.OPEX} OPEX · ${info.CAPEX} CAPEX) · ${formatCurrency(info.monto)}</span>
+                  <div style="padding:7px 10px;border-radius:8px;border:1px solid ${stage.isDaniel ? '#fde68a' : '#f1f5f9'};background:${stage.isDaniel ? '#fffbeb' : '#ffffff'};">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12.5px;margin-bottom:4px;">
+                      <div>
+                        <span style="font-weight:700;color:#0f172a;">${escapeHtml(stage.state)}</span>
+                        <span style="font-size:11px;color:#64748b;margin-left:6px;">(${escapeHtml(stage.owner)})</span>
+                      </div>
+                      <span style="font-size:12px;color:#1e293b;white-space:nowrap;"><strong>${info.total}</strong> · ${formatCurrency(info.monto)}</span>
                     </div>
-                    <div style="display:flex;height:12px;background:#f1f5f9;border-radius:999px;overflow:hidden;">
+                    <div style="display:flex;height:8px;background:#e2e8f0;border-radius:999px;overflow:hidden;">
                       <div style="width:${opexW}%;background:#0284c7;" title="OPEX: ${info.OPEX}"></div>
                       <div style="width:${capexW}%;background:#9333ea;" title="CAPEX: ${info.CAPEX}"></div>
                     </div>
@@ -1391,86 +1338,147 @@ async function renderExecutiveDashboardView(container, ctx, controller) {
               })
               .join('')}
           </div>
-          <div style="margin-top:12px;display:flex;gap:16px;font-size:12px;color:#475569;">
+          <div style="margin-top:10px;display:flex;gap:16px;font-size:12px;color:#475569;">
             <span><strong style="color:#0284c7;">■</strong> OPEX</span>
             <span><strong style="color:#9333ea;">■</strong> CAPEX</span>
+            <span><strong style="color:#d97706;">■</strong> Fondo ámbar = Responsabilidad directa de Daniel Lara</span>
+          </div>
+        </section>
+
+        <!-- Panel 2: Gestión a Tiempo de Daniel Lara y Satisfacción del Solicitante -->
+        <section style="background:#ffffff;border:1px solid #cbd5e1;border-radius:10px;padding:18px;display:flex;flex-direction:column;justify-content:space-between;">
+          <div>
+            <h2 style="margin:0 0 6px;font-size:16px;color:#1e3a8a;">⏱️ Gestión de Daniel Lara y Satisfacción del Cliente</h2>
+            <p style="margin:0 0 14px;font-size:12.5px;color:#475569;">Tiempos efectivos de Daniel Lara (descontando el tiempo de autorización en 2b) y evaluación de conformidad de los solicitantes.</p>
+
+            <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:18px;">
+              ${[
+                {
+                  title: '1. Emisión de Orden de Compra (Disponible → 2c OC generada, incluye 3 cotizaciones si ≥ $8,000)',
+                  opexVal: opex.avgDanielPoIssuanceHours,
+                  capexVal: capex.avgDanielPoIssuanceHours
+                },
+                {
+                  title: '2. Recepción y Entrega al Solicitante (2c OC generada → 3 Recibido Adm. → 4 Entregada)',
+                  opexVal: opex.avgDanielFulfillmentFromPoHours,
+                  capexVal: capex.avgDanielFulfillmentFromPoHours
+                },
+                {
+                  title: '3. Tiempo Total Neto de Gestión de Daniel Lara (Disponible → 4 Compra Entregada)',
+                  opexVal: opex.avgDanielTotalCompletedHours,
+                  capexVal: capex.avgDanielTotalCompletedHours
+                }
+              ]
+                .map(
+                  row => `
+                <div style="border-bottom:1px solid #f1f5f9;padding-bottom:12px;">
+                  <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:6px;">${escapeHtml(row.title)}</div>
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+                    <span style="width:52px;font-size:11.5px;font-weight:700;color:#0369a1;">OPEX</span>
+                    <div style="flex:1;background:#f1f5f9;height:10px;border-radius:999px;overflow:hidden;">
+                      <div style="width:${barWidth(row.opexVal)}%;height:100%;background:#0284c7;border-radius:999px;"></div>
+                    </div>
+                    <span style="min-width:110px;text-align:right;font-size:12px;font-weight:700;color:#0f172a;">${formatDurationHours(row.opexVal)}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="width:52px;font-size:11.5px;font-weight:700;color:#7e22ce;">CAPEX</span>
+                    <div style="flex:1;background:#f1f5f9;height:10px;border-radius:999px;overflow:hidden;">
+                      <div style="width:${barWidth(row.capexVal)}%;height:100%;background:#9333ea;border-radius:999px;"></div>
+                    </div>
+                    <span style="min-width:110px;text-align:right;font-size:12px;font-weight:700;color:#0f172a;">${formatDurationHours(row.capexVal)}</span>
+                  </div>
+                </div>
+              `
+                )
+                .join('')}
+            </div>
+          </div>
+
+          <!-- Bloque Ejecutivo de Cumplimiento de Compromisos y Satisfacción Cliente -->
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;">
+            <div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:10px;">📌 Resumen de Cumplimiento de Plazos y Calidad de Servicio</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
+              <div style="background:#ffffff;border:1px solid #cbd5e1;border-radius:8px;padding:10px;">
+                <div style="font-size:11.5px;color:#64748b;font-weight:600;">Entregas vs. Fecha OC (2c → 4)</div>
+                <div style="font-size:16px;font-weight:800;color:#0f172a;margin-top:3px;">
+                  ${dp.deliveredOnTimeCount || 0} a tiempo · <span style="color:${(dp.deliveredLateCount || 0) > 0 ? '#dc2626' : '#64748b'};">${dp.deliveredLateCount || 0} fuera de plazo</span>
+                </div>
+              </div>
+              <div style="background:#ffffff;border:1px solid #cbd5e1;border-radius:8px;padding:10px;">
+                <div style="font-size:11.5px;color:#64748b;font-weight:600;">Cotizaciones a Tiempo (2a-1 → 2a-2)</div>
+                <div style="font-size:16px;font-weight:800;color:#0f172a;margin-top:3px;">
+                  ${dp.quotesOnTimeCount || 0} a tiempo · <span style="color:${(dp.quotesLateCount || 0) > 0 ? '#dc2626' : '#64748b'};">${dp.quotesLateCount || 0} fuera de plazo</span>
+                </div>
+              </div>
+              <div style="background:#ffffff;border:1px solid #cbd5e1;border-radius:8px;padding:10px;">
+                <div style="font-size:11.5px;color:#64748b;font-weight:600;">Satisfacción Cliente (Estado 5)</div>
+                <div style="font-size:16px;font-weight:800;color:#15803d;margin-top:3px;">
+                  ${m.quality.conformeRatePct !== null ? `${m.quality.conformeRatePct}% Conforme` : 'Sin evaluaciones'}
+                </div>
+                <div style="font-size:11.5px;color:#475569;">${m.quality.totalConforme} conformes / ${m.quality.totalDisconforme} disconformes</div>
+              </div>
+            </div>
           </div>
         </section>
       </div>
 
-        <!-- Segunda Fila: Ejecución Presupuestaria Mensual OPEX por Área + Backlog de Daniel Lara -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px;margin-bottom:18px;">
-        <section style="background:#ffffff;border:1px solid #cbd5e1;border-radius:10px;padding:18px;">
-          <h2 style="margin:0 0 6px;font-size:16px;color:#1e3a8a;">💰 Consumo Mensual OPEX por Área Solicitante (Sin límite mensual por área)</h2>
-          <p style="margin:0 0 14px;font-size:12.5px;color:#475569;">Distribución del gasto mensual OPEX por área solicitante considerando el monto único válido ajustado en la Orden de Compra.</p>
-          ${
-            m.areaBudgets.length
-              ? (() => {
-                  const maxAreaSpend = Math.max(1, ...m.areaBudgets.map(x => Number(x.currentMonthMonto) || 0));
-                  return m.areaBudgets
-                    .map(ab => {
-                      const barPct = Math.min(100, Math.max(6, Math.round(((Number(ab.currentMonthMonto) || 0) / maxAreaSpend) * 100)));
-                      return `
-                        <div style="margin-bottom:12px;">
-                          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
-                            <strong>${escapeHtml(ab.area)} (${ab.count} pedidos OPEX)</strong>
-                            <span style="font-weight:700;color:#0369a1;">${formatCurrency(ab.currentMonthMonto)} (Sin límite por área)</span>
-                          </div>
-                          <div style="height:10px;background:#f1f5f9;border-radius:999px;overflow:hidden;">
-                            <div style="width:${barPct}%;height:100%;background:#0284c7;"></div>
-                          </div>
-                        </div>
-                      `;
-                    })
-                    .join('');
-                })()
-              : '<p style="font-size:13px;color:#64748b;">No hay consumos OPEX registrados para este filtro.</p>'
-          }
-        </section>
-
-        <section style="background:#ffffff;border:1px solid #cbd5e1;border-radius:10px;padding:18px;">
-          <h2 style="margin:0 0 6px;font-size:16px;color:#1e3a8a;">📌 Pedidos Activos en Gestión de Daniel Lara (Por Antigüedad)</h2>
-          <p style="margin:0 0 12px;font-size:12.5px;color:#475569;">Tickets que ya están listos para gestión operativa de Daniel Lara (estados 1, 2a o 3), ordenados por mayor tiempo de demora acumulada.</p>
-          ${
-            m.danielBacklog.length
-              ? `
-              <div class="ticket-table-wrap">
-                <table class="ticket-table" style="font-size:13px;">
-                  <thead>
+      <!-- Tabla Ejecutiva: Pedidos Activos en Cancha de Daniel Lara y Semáforo de Compromiso -->
+      <section style="background:#ffffff;border:1px solid #cbd5e1;border-radius:10px;padding:18px;margin-bottom:18px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+          <h2 style="margin:0;font-size:16px;color:#1e3a8a;">📌 Control de Gestión a Tiempo de Daniel Lara (Pedidos Activos)</h2>
+          <span style="font-size:12.5px;color:#334155;">Activos en cancha de Daniel: <strong>${m.danielBacklog.length}</strong> · En aprobación (2b): <strong>${dp.inApprovalCount || 0}</strong></span>
+        </div>
+        <p style="margin:0 0 12px;font-size:12.5px;color:#475569;">Muestra todos los pedidos actualmente bajo responsabilidad de Daniel Lara (1, 2a, 2a-1, 2a-2, 2c y 3), su compromiso de fecha vigente y el semáforo de cumplimiento.</p>
+        ${
+          m.danielBacklog.length
+            ? `
+            <div class="ticket-table-wrap">
+              <table class="ticket-table" style="font-size:13px;">
+                <thead>
+                  <tr>
+                    <th>Folio / Solicitante</th>
+                    <th>Tipo / Monto</th>
+                    <th>Estado Actual</th>
+                    <th>Compromiso / Próximo Paso</th>
+                    <th>Semáforo / Tiempo en Gestión</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${m.danielBacklog
+                    .map(
+                      item => `
                     <tr>
-                      <th>Folio</th>
-                      <th>Tipo / Monto</th>
-                      <th>Estado</th>
-                      <th>Tiempo en gestión Daniel</th>
-                      <th>Acción</th>
+                      <td>
+                        <strong>${escapeHtml(item.order.id)}</strong>
+                        <div style="font-size:11.5px;color:#64748b;">${escapeHtml(item.order.solicitante)} (${escapeHtml(item.order.area)})</div>
+                      </td>
+                      <td>
+                        <strong>${escapeHtml(item.tipo)}</strong>
+                        <div>${formatCurrency(item.order.monto)}</div>
+                      </td>
+                      <td><span style="padding:3px 8px;border-radius:999px;font-size:11.5px;font-weight:700;${stateBadgeStyle(item.state)}">${escapeHtml(item.state)}</span></td>
+                      <td style="font-size:12.5px;color:#1e293b;font-weight:600;">${escapeHtml(item.commitmentLabel || '')}</td>
+                      <td>
+                        ${scheduleBadge(item.scheduleStatus)}
+                        <div style="font-size:11.5px;color:#475569;margin-top:3px;">Tiempo acumulado: <strong>${formatDurationHours(item.elapsedHours)}</strong></div>
+                      </td>
+                      <td>
+                        <button type="button" class="ticket-action-pill" data-exec-detail="${escapeHtml(item.order.id)}" style="background:var(--primary-color, #26487F);border-color:var(--primary-color, #26487F);color:#ffffff;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;">
+                          Ver detalle
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    ${m.danielBacklog
-                      .map(
-                        item => `
-                      <tr>
-                        <td><strong>${escapeHtml(item.order.id)}</strong><div style="font-size:11.5px;color:#64748b;">${escapeHtml(item.order.area)}</div></td>
-                        <td><strong>${escapeHtml(item.tipo)}</strong><div>${formatCurrency(item.order.monto)}</div></td>
-                        <td><span style="padding:3px 8px;border-radius:999px;font-size:11.5px;font-weight:700;${stateBadgeStyle(item.state)}">${escapeHtml(item.state)}</span></td>
-                        <td style="font-weight:700;color:${item.elapsedHours > 72 ? '#dc2626' : item.elapsedHours > 24 ? '#b45309' : '#0f172a'};">${formatDurationHours(item.elapsedHours)}</td>
-                        <td>
-                          <button type="button" class="ticket-action-pill" data-exec-detail="${escapeHtml(item.order.id)}" style="background:var(--primary-color, #26487F);border-color:var(--primary-color, #26487F);color:#ffffff;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;">
-                            Ver detalle
-                          </button>
-                        </td>
-                      </tr>
-                    `
-                      )
-                      .join('')}
-                  </tbody>
-                </table>
-              </div>
-            `
-              : '<p style="font-size:13px;color:#64748b;">Actualmente no hay pedidos detenidos en la bandeja operativa de Daniel Lara (todos los pedidos están en 2b En aprobación o ya fueron entregados).</p>'
-          }
-        </section>
-      </div>
+                  `
+                    )
+                    .join('')}
+                </tbody>
+              </table>
+            </div>
+          `
+            : '<p style="font-size:13px;color:#047857;font-weight:600;margin:0;">✅ Daniel Lara está al día: no hay pedidos pendientes en su bandeja operativa en este momento.</p>'
+        }
+      </section>
     `;
   }
 

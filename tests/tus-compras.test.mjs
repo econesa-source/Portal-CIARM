@@ -258,6 +258,55 @@ test('Indicadores gerenciales: tiempos de entrega, cierre y gestión de Daniel L
   assert.equal(Math.round(metrics.opex.avgDanielTotalCompletedHours), 36);
   assert.equal(Math.round(metrics.capex.avgDanielTotalCompletedHours), 72);
   assert.equal(Math.round(metrics.capex.avgApprovalHours), 24);
+  assert.ok(metrics.danielPerformance);
+  assert.equal(metrics.quality.satisfactionRatePct, 100);
+});
+
+test('Indicadores gerenciales ejecutivos: cumplimiento a tiempo de Daniel Lara (cotizaciones y entrega OC) y nuevos estados', () => {
+  const orders = [
+    {
+      id: 'CMP-2026-00010',
+      fecha: '2026-11-01',
+      hora: '09:00:00',
+      area: 'Administración',
+      solicitante: 'Ezequiel Conesa',
+      tipo: 'OPEX',
+      monto: 12000,
+      requiereAprobacion: true,
+      estado: TUS_COMPRAS_STATES.CONFORME,
+      fechaAprobacion: '2026-11-01 12:00:00',
+      fechaInicioCotizacion: '2026-11-01 14:00:00',
+      fechaCierreCotizacion: '2026-11-03',
+      fechaRecepcionCotizacion: '2026-11-02 18:00:00', // A tiempo (<= 2026-11-03)
+      fechaOrdenCompra: '2026-11-03 10:00:00',
+      fechaEntregaEstimada: '2026-11-06',
+      fechaRecepcionAdm: '2026-11-04 16:00:00',
+      fechaEntrega: '2026-11-05 14:00:00', // A tiempo (<= 2026-11-06)
+      ultimaActualizacion: '2026-11-05 17:00:00'
+    },
+    {
+      id: 'CMP-2026-00011',
+      fecha: '2026-11-02',
+      hora: '10:00:00',
+      area: 'Docente',
+      solicitante: 'Dir Docente',
+      tipo: 'OPEX',
+      monto: 5000,
+      requiereAprobacion: false,
+      estado: TUS_COMPRAS_STATES.ORDEN_COMPRA_GENERADA,
+      fechaOrdenCompra: '2026-11-02 14:00:00',
+      fechaEntregaEstimada: '2099-12-31'
+    }
+  ];
+
+  const metrics = computeTusComprasExecutiveMetrics(orders, { tipo: 'ALL' });
+  assert.equal(metrics.danielPerformance.quotesOnTimeCount, 1);
+  assert.equal(metrics.danielPerformance.quotesLateCount, 0);
+  assert.equal(metrics.danielPerformance.deliveredOnTimeCount, 1);
+  assert.equal(metrics.danielPerformance.deliveredLateCount, 0);
+  assert.equal(metrics.danielPerformance.onTimeRatePct, 100);
+  assert.equal(metrics.danielPerformance.inCourtCount, 1);
+  assert.equal(metrics.danielBacklog[0].scheduleStatus, 'ON_TIME');
 });
 
 test('Configuración de doble Base de Datos (Preprod portal2 y Prod portal) y reglas en PHP/GAS', () => {

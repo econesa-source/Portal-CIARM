@@ -263,6 +263,9 @@ export function computeTusComprasExecutiveMetrics(orders, filters = {}, nowMs = 
       endToEndClosureHours: [],
       approvalHours: [],
       danielReceptionHours: [],
+      danielQuotingHours: [],
+      danielPoIssuanceHours: [],
+      danielFulfillmentFromPoHours: [],
       danielProcurementHours: [],
       danielInternalDeliveryHours: [],
       danielTotalCompletedHours: [],
@@ -284,6 +287,9 @@ export function computeTusComprasExecutiveMetrics(orders, filters = {}, nowMs = 
       endToEndClosureHours: [],
       approvalHours: [],
       danielReceptionHours: [],
+      danielQuotingHours: [],
+      danielPoIssuanceHours: [],
+      danielFulfillmentFromPoHours: [],
       danielProcurementHours: [],
       danielInternalDeliveryHours: [],
       danielTotalCompletedHours: [],
@@ -300,6 +306,14 @@ export function computeTusComprasExecutiveMetrics(orders, filters = {}, nowMs = 
   const areaOpexMap = new Map();
   const danielBacklog = [];
   const currentMonth = new Date(nowMs - 5 * 3600000).toISOString().slice(0, 7);
+
+  let deliveredOnTimeCount = 0;
+  let deliveredLateCount = 0;
+  let quotesOnTimeCount = 0;
+  let quotesLateCount = 0;
+  let activeOnTrackCount = 0;
+  let activeOverdueCount = 0;
+  let pendingEvaluationCount = 0;
 
   for (const order of filtered) {
     const tipo = String(order.tipo || 'OPEX').toUpperCase() === 'CAPEX' ? 'CAPEX' : 'OPEX';
@@ -339,6 +353,9 @@ export function computeTusComprasExecutiveMetrics(orders, filters = {}, nowMs = 
     const tApproved = parseTusComprasTimestamp(order.fechaAprobacion) || findEventMs('APPROVE_CAPEX');
     const tRejected = findEventMs('REJECT_CAPEX') || (state === TUS_COMPRAS_STATES.RECHAZADA ? parseTusComprasTimestamp(order.fechaAprobacion || order.ultimaActualizacion) : null);
     const tInProcess2a = findEventMs('RECEIVE_OPEX') || tApproved;
+    const tStartQuote2a1 = findEventMs('START_QUOTING');
+    const tReceiveQuotes2a2 = parseTusComprasTimestamp(order.fechaRecepcionCotizacion) || findEventMs('RECEIVE_QUOTES');
+    const tIssuePO2c = findEventMs('ISSUE_PURCHASE_ORDER') || parseTusComprasTimestamp(order.fechaOrdenCompra, '12:00:00');
     const tReceivedAdm3 = parseTusComprasTimestamp(order.fechaRecepcionAdm) || findEventMs('RECEIVE_ITEMS_ADM');
     const tDelivered4 = parseTusComprasTimestamp(order.fechaEntrega) || findEventMs('DELIVER_TO_REQUESTER');
     const tClosed5 =
@@ -367,6 +384,15 @@ export function computeTusComprasExecutiveMetrics(orders, filters = {}, nowMs = 
       b.danielReceptionHours.push((tInProcess2a - tCreated) / 3600000);
     }
 
+    const quoteStartRef = tStartQuote2a1 ?? tInProcess2a ?? tReadyForDaniel;
+    if (quoteStartRef !== null && tReceiveQuotes2a2 !== null && tReceiveQuotes2a2 >= quoteStartRef) {
+      b.danielQuotingHours.push((tReceiveQuotes2a2 - quoteStartRef) / 3600000);
+    }
+
+    if (tReadyForDaniel !== null && tIssuePO2c !== null && tIssuePO2c >= tReadyForDaniel) {
+      b.danielPoIssuanceHours.push((tIssuePO2c - tReadyForDaniel) / 3600000);
+    }
+
     const startProc = tInProcess2a ?? tReadyForDaniel;
     if (startProc !== null && tReceivedAdm3 !== null && tReceivedAdm3 >= startProc) {
       b.danielProcurementHours.push((tReceivedAdm3 - startProc) / 3600000);
@@ -374,6 +400,11 @@ export function computeTusComprasExecutiveMetrics(orders, filters = {}, nowMs = 
 
     if (tReceivedAdm3 !== null && tDelivered4 !== null && tDelivered4 >= tReceivedAdm3) {
       b.danielInternalDeliveryHours.push((tDelivered4 - tReceivedAdm3) / 3600000);
+    }
+
+    const fulfillmentStart = tIssuePO2c ?? tReceivedAdm3 ?? startProc;
+    if (fulfillmentStart !== null && tDelivered4 !== null && tDelivered4 >= fulfillmentStart) {
+      b.danielFulfillmentFromPoHours.push((tDelivered4 - fulfillmentStart) / 3600000);
     }
 
     if (tReadyForDaniel !== null && tDelivered4 !== null && tDelivered4 >= tReadyForDaniel) {
@@ -390,6 +421,23 @@ export function computeTusComprasExecutiveMetrics(orders, filters = {}, nowMs = 
 
     if (tDelivered4 !== null && tClosed5 !== null && tClosed5 >= tDelivered4) {
       b.requesterValidationHours.push((tClosed5 - tDelivered4) / 3600000);
+    }
+
+    // Evaluación de cumplimiento de fechas comprometidas por Daniel Lara
+    const quoteDeadlineMs = order.fechaCierreCotizacion
+      ? parseTusComprasTimestamp(order.fechaCierreCotizacion, '23:59:59')
+      : null;
+    if (quoteDeadlineMs !== null && tReceiveQuotes2a2 !== null) {
+      if (tReceiveQuotes2a2 <= quoteDeadlineMs) quotesOnTimeCount += 1;
+      else quotesLateCount += 1;
+    }
+
+    const deliveryDeadlineMs = order.fechaEntregaEstimada
+      ? parseTusComprasTimestamp(order.fechaEntregaEstimada, '23:59:59')
+      : null;
+    if (deliveryDeadlineMs !== null && tDelivered4 !== null) {
+      if (tDelivered4 <= deliveryDeadlineMs) deliveredOnTimeCount += 1;
+      else deliveredLateCount += 1;
     }
 
     const isDanielStage = [
@@ -411,15 +459,54 @@ export function computeTusComprasExecutiveMetrics(orders, filters = {}, nowMs = 
       const refStart = tReadyForDaniel ?? tCreated;
       const elapsedHours = refStart !== null ? Math.max(0, (nowMs - refStart) / 3600000) : 0;
       b.danielActiveAgingHours.push(elapsedHours);
+
+      let commitmentLabel = 'Emitir OC / Iniciar gestión';
+      let scheduleStatus = 'PENDING_DATE';
+      if (state === TUS_COMPRAS_STATES.EN_COTIZACION && order.fechaCierreCotizacion) {
+        commitmentLabel = `Cierre cot.: ${order.fechaCierreCotizacion}`;
+        if (quoteDeadlineMs !== null && nowMs > quoteDeadlineMs) {
+          scheduleStatus = 'OVERDUE';
+          activeOverdueCount += 1;
+        } else {
+          scheduleStatus = 'ON_TIME';
+          activeOnTrackCount += 1;
+        }
+      } else if (state === TUS_COMPRAS_STATES.COTIZACIONES_RECIBIDAS) {
+        commitmentLabel = '3 cotizaciones listas → Emitir OC';
+        scheduleStatus = 'ON_TIME';
+        activeOnTrackCount += 1;
+      } else if (
+        [TUS_COMPRAS_STATES.OC_GENERADA, TUS_COMPRAS_STATES.APROBADA, TUS_COMPRAS_STATES.RECIBIDOS_ADM].includes(state) &&
+        order.fechaEntregaEstimada
+      ) {
+        commitmentLabel = `Entrega est. OC: ${order.fechaEntregaEstimada}`;
+        if (deliveryDeadlineMs !== null && nowMs > deliveryDeadlineMs) {
+          scheduleStatus = 'OVERDUE';
+          activeOverdueCount += 1;
+        } else {
+          scheduleStatus = 'ON_TIME';
+          activeOnTrackCount += 1;
+        }
+      } else if (state === TUS_COMPRAS_STATES.ENVIADA) {
+        commitmentLabel = 'Directo a Orden de Compra (< $8,000)';
+      } else if (state === TUS_COMPRAS_STATES.EN_PROCESO) {
+        commitmentLabel = Number(order.montoEstimado || order.monto) >= TUS_COMPRAS_THREE_QUOTES_THRESHOLD
+          ? 'Iniciar cotización (3 proveedores)'
+          : 'Emitir Orden de Compra';
+      }
+
       danielBacklog.push({
         order,
         tipo,
         state,
-        elapsedHours
+        elapsedHours,
+        commitmentLabel,
+        scheduleStatus
       });
     } else if (state === TUS_COMPRAS_STATES.ENTREGADA) {
       b.deliveredCount += 1;
       b.openCount += 1;
+      pendingEvaluationCount += 1;
     } else if (state === TUS_COMPRAS_STATES.CONFORME) {
       b.deliveredCount += 1;
       b.closedCount += 1;
@@ -441,6 +528,9 @@ export function computeTusComprasExecutiveMetrics(orders, filters = {}, nowMs = 
     avgEndToEndClosureHours: avg(b.endToEndClosureHours),
     avgApprovalHours: avg(b.approvalHours),
     avgDanielReceptionHours: avg(b.danielReceptionHours),
+    avgDanielQuotingHours: avg(b.danielQuotingHours),
+    avgDanielPoIssuanceHours: avg(b.danielPoIssuanceHours),
+    avgDanielFulfillmentFromPoHours: avg(b.danielFulfillmentFromPoHours),
     avgDanielProcurementHours: avg(b.danielProcurementHours),
     avgDanielInternalDeliveryHours: avg(b.danielInternalDeliveryHours),
     avgDanielTotalCompletedHours: avg(b.danielTotalCompletedHours),
@@ -455,6 +545,14 @@ export function computeTusComprasExecutiveMetrics(orders, filters = {}, nowMs = 
   const totalClosed = opexSummary.closedCount + capexSummary.closedCount;
   const totalConforme = opexSummary.conformeCount + capexSummary.conformeCount;
   const totalDisconforme = opexSummary.disconformeCount + capexSummary.disconformeCount;
+  const allDanielCompleted = [...buckets.OPEX.danielTotalCompletedHours, ...buckets.CAPEX.danielTotalCompletedHours];
+  const avgDanielOverallHours = avg(allDanielCompleted);
+
+  const totalOnTimeSuccess = deliveredOnTimeCount + quotesOnTimeCount;
+  const totalOnTimeEvaluated =
+    deliveredOnTimeCount + deliveredLateCount + quotesOnTimeCount + quotesLateCount + activeOverdueCount;
+  const onTimeRatePct =
+    totalOnTimeEvaluated > 0 ? Math.round((totalOnTimeSuccess / totalOnTimeEvaluated) * 100) : null;
 
   return {
     totalOrders: filtered.length,
@@ -464,10 +562,23 @@ export function computeTusComprasExecutiveMetrics(orders, filters = {}, nowMs = 
     stateCounts,
     areaBudgets: [...areaOpexMap.values()].sort((a, b) => b.currentMonthMonto - a.currentMonthMonto),
     danielBacklog,
+    danielPerformance: {
+      avgOverallHours: avgDanielOverallHours,
+      inCourtCount: opexSummary.inDanielCourtCount + capexSummary.inDanielCourtCount,
+      inApprovalCount: opexSummary.inApprovalCount + capexSummary.inApprovalCount,
+      deliveredOnTimeCount,
+      deliveredLateCount,
+      quotesOnTimeCount,
+      quotesLateCount,
+      activeOnTrackCount,
+      activeOverdueCount,
+      onTimeRatePct
+    },
     quality: {
       totalClosed,
       totalConforme,
       totalDisconforme,
+      pendingEvaluationCount,
       conformeRatePct: totalClosed > 0 ? Math.round((totalConforme / totalClosed) * 100) : null
     }
   };

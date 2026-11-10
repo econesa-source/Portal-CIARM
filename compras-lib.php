@@ -9,10 +9,12 @@ function ciarm_compras_config(): array {
     $stored = $raw === false ? [] : json_decode($raw, true);
     $config = is_array($stored) ? $stored : [];
     $currentHost = strtolower(explode(':', trim((string)($_SERVER['HTTP_HOST'] ?? '')), 2)[0]);
-    if (in_array($currentHost, ['portal.ciarm.edu.mx', 'portal2.ciarm.edu.mx'], true)) {
-        if ($currentHost === 'portal.ciarm.edu.mx' && is_array($config['production'] ?? null)) {
-            $config = array_replace($config, $config['production']);
-        }
+    if ($currentHost === 'portal.ciarm.edu.mx') {
+        $config['enabled'] = '0';
+        $config['writes_enabled'] = '0';
+        return $config;
+    }
+    if ($currentHost === 'portal2.ciarm.edu.mx') {
         if (!empty($config['origin']) && preg_match('~^https://portal2?\.ciarm\.edu\.mx$~i', (string)$config['origin'])) {
             $config['origin'] = 'https://' . $currentHost;
         }

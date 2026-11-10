@@ -21,3 +21,12 @@ test('Compras integration preserves Tickets and IB route behavior',()=>{
  assert.equal(allowedRoute('#compras',response(['COMPRAS_TARJETA','COMPRAS_CREAR'])),true);
  assert.equal(allowedRoute('#compras',response(['COMPRAS_CREAR'])),false);
 });
+test('Compras card (SCGRC Compras) remains hidden in production (portal.ciarm.edu.mx)',()=>{
+ const dom=new JSDOM('<main><div class="dashboard-grid-exact">'+Array(6).fill('<div class="exact-card"></div>').join('')+'</div></main>',{url:'https://portal.ciarm.edu.mx/#inicio'});
+ globalThis.window=dom.window;globalThis.document=dom.window.document;
+ window.__CIARM_COMPRAS_UI_ENABLED__=true;
+ const root=document.querySelector('main');
+ applyDashboardAccess(root,response(['COMPRAS_TARJETA','COMPRAS_CREAR']));
+ assert.equal(Boolean(root.querySelector('a[href="#compras"]')),false);
+ dom.window.close();
+});

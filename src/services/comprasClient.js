@@ -3,7 +3,9 @@ import {validateComprasRequest,COMPRAS_OPERATIONS} from './comprasContract.js?v=
 let csrfToken='';
 function fail(code){return Object.assign(new Error(code),{code});}
 export function comprasUiEnabled(){
-  return typeof window!=='undefined' && window.__CIARM_COMPRAS_UI_ENABLED__===true;
+  if (typeof window==='undefined') return false;
+  if (String(window.location?.hostname||'').toLowerCase()==='portal.ciarm.edu.mx') return false;
+  return window.__CIARM_COMPRAS_UI_ENABLED__===true;
 }
 export function clearComprasClient(){csrfToken='';}
 export async function requestCompras(action,payload={},signal){

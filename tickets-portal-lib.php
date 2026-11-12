@@ -299,6 +299,66 @@ function ciarm_ticket_build_notification_plan_php(string $ev, array $t, ?array $
         default:
             return null;
     }
+
+    // Notificación espejo para Angélica Figueroa (a.figueroa@ciarm.edu.mx) en todos los cambios de estado y altas
+    $observerEmails=['a.figueroa@ciarm.edu.mx'];
+    $adminMsg=null;
+    foreach($messages as $m){
+        if(($m['role']??'')==='admin'){$adminMsg=$m;break;}
+    }
+    $fallbackObs=match($ev){
+        'ASSIGN'=>[
+            "[Portal CIARM] Solicitud asignada {$id} ({$est})",
+            'Solicitud asignada a responsable',
+            "La solicitud {$id} de {$sol} ({$area}) fue asignada a {$resp} con prioridad {$prio} y fecha compromiso ".($comp!==''?$comp:'por definir').'.',
+            'Ver cumplimiento',
+            '#seguimiento-servicio'
+        ],
+        'START'=>[
+            "[Portal CIARM] Solicitud en proceso {$id}",
+            'Solicitud en atención (EN PROCESO)',
+            "El responsable {$resp} ha iniciado la atención de la solicitud {$id} de {$sol} ({$area}), cambiando su estado a EN PROCESO.",
+            'Ver cumplimiento',
+            '#seguimiento-servicio'
+        ],
+        'CONTAIN'=>[
+            "[Portal CIARM] Contención registrada en solicitud {$id}",
+            'Avance de contención en solicitud',
+            "El responsable {$resp} registró una acción de contención para la solicitud {$id} de {$sol} ({$est}).",
+            'Ver cumplimiento',
+            '#seguimiento-servicio'
+        ],
+        'WAIT_APPROVE'=>[
+            "[Portal CIARM] Solicitud en espera {$id} (EN ESPERA)",
+            'Espera autorizada en solicitud',
+            "La solicitud {$id} de {$sol} ({$area}) cambió al estado EN ESPERA por dependencia: ".($dependency!==''?$dependency:'Externa').'. Próximo seguimiento: '.($followAt!==''?$followAt:'por definir').'.',
+            'Ver cumplimiento',
+            '#seguimiento-servicio'
+        ],
+        'RESUME'=>[
+            "[Portal CIARM] Atención reanudada en solicitud {$id} (EN PROCESO)",
+            'Atención reanudada en solicitud',
+            "Administración ha reanudado la solicitud {$id} de {$sol} ({$area}), regresando al estado EN PROCESO.",
+            'Ver cumplimiento',
+            '#seguimiento-servicio'
+        ],
+        default=>null,
+    };
+    $existingRecipients=[];
+    foreach($messages as $m){
+        $existingRecipients[strtolower(trim((string)($m['to']??'')))]=true;
+    }
+    foreach($observerEmails as $obsEmail){
+        if(isset($existingRecipients[$obsEmail]))continue;
+        if($adminMsg!==null){
+            $ctaPath=(string)parse_url((string)($adminMsg['ctaUrl']??''),PHP_URL_FRAGMENT);
+            $ctaHash=$ctaPath!==''?('#'.$ctaPath):'#seguimiento-servicio';
+            $enqueue('observer',$obsEmail,(string)$adminMsg['subject'],(string)$adminMsg['heading'],(string)$adminMsg['intro'],(string)$adminMsg['ctaLabel'],$ctaHash);
+        }elseif($fallbackObs!==null){
+            $enqueue('observer',$obsEmail,$fallbackObs[0],$fallbackObs[1],$fallbackObs[2],$fallbackObs[3],$fallbackObs[4]);
+        }
+    }
+
     return ['messages'=>$messages,'skipped'=>$skipped];
 }
 
@@ -413,7 +473,6 @@ function ciarm_ticket_ensure_notifications(string $action, array $input, array $
     if(($result['ok']??false)!==true||!is_array($result['data']??null))return $result;
     if(!in_array($action,['finalizeCreate','assign','serviceTransition'],true))return $result;
     $gasAudit=$result['data']['notification']??null;
-    if(is_array($gasAudit)&&($gasAudit['status']??'')==='ENVIADO')return $result;
     $ev=match($action){'finalizeCreate'=>'CREATE','assign'=>'ASSIGN','serviceTransition'=>(string)($input['event']??''),default=>''};
     if($ev==='')return $result;
     $ticket=is_array($result['data']['ticket']??null)?$result['data']['ticket']:[];
@@ -434,12 +493,27 @@ function ciarm_ticket_ensure_notifications(string $action, array $input, array $
     $plan=ciarm_ticket_build_notification_plan_php($ev,$ticket,$meta,$policy,$input);
     if($plan===null)return $result;
     $alreadySent=[];
+    $alreadySentByEmail=[];
     if(is_array($gasAudit['deliveries']??null)){
         foreach($gasAudit['deliveries'] as $d){
             if(($d['status']??'')==='ENVIADO'){
-                $alreadySent[($d['role']??'').':'.strtolower(trim((string)($d['to']??'')))]=$d;
+                $em=strtolower(trim((string)($d['to']??'')));
+                $alreadySent[($d['role']??'').':'.$em]=$d;
+                if($em!=='')$alreadySentByEmail[$em]=$d;
             }
         }
+    }
+    if(is_array($gasAudit)&&($gasAudit['status']??'')==='ENVIADO'){
+        $allCovered=true;
+        foreach($plan['messages'] as $pm){
+            $pmKey=($pm['role']??'').':'.strtolower(trim((string)($pm['to']??'')));
+            $pmEmail=strtolower(trim((string)($pm['to']??'')));
+            if(!isset($alreadySent[$pmKey])&&!isset($alreadySentByEmail[$pmEmail])){
+                $allCovered=false;
+                break;
+            }
+        }
+        if($allCovered)return $result;
     }
     $deliveries=[];
     $sendFn=$mailer??static function(string $to, string $subject, string $html): array|bool {

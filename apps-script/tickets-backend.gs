@@ -1228,6 +1228,33 @@ function ticketBuildNotificationPlan(book,info){
   default:
    return null;
  }
+ var observerEmails=['a.figueroa@ciarm.edu.mx'];
+ var adminMsg=null;
+ for(var mi=0;mi<messages.length;mi++){if(messages[mi].role==='admin'){adminMsg=messages[mi];break;}}
+ var fallbackObs=null;
+ if(ev==='ASSIGN'){
+  fallbackObs=['[Portal CIARM] Solicitud asignada '+t.id+' ('+t.estado+')','Solicitud asignada a responsable','La solicitud '+t.id+' de '+t.solicitante+' ('+t.area+') fue asignada a '+t.responsable+' con prioridad '+t.prioridad+' y fecha compromiso '+(t.fechaCompromiso||'por definir')+'.','Ver cumplimiento','#seguimiento-servicio'];
+ }else if(ev==='START'){
+  fallbackObs=['[Portal CIARM] Solicitud en proceso '+t.id,'Solicitud en atención (EN PROCESO)','El responsable '+t.responsable+' ha iniciado la atención de la solicitud '+t.id+' de '+t.solicitante+' ('+t.area+'), cambiando su estado a EN PROCESO.','Ver cumplimiento','#seguimiento-servicio'];
+ }else if(ev==='CONTAIN'){
+  fallbackObs=['[Portal CIARM] Contención registrada en solicitud '+t.id,'Avance de contención en solicitud','El responsable '+t.responsable+' registró una acción de contención para la solicitud '+t.id+' de '+t.solicitante+' ('+t.estado+').','Ver cumplimiento','#seguimiento-servicio'];
+ }else if(ev==='WAIT_APPROVE'){
+  fallbackObs=['[Portal CIARM] Solicitud en espera '+t.id+' (EN ESPERA)','Espera autorizada en solicitud','La solicitud '+t.id+' de '+t.solicitante+' ('+t.area+') cambió al estado EN ESPERA por dependencia: '+(dependency||'Externa')+'. Próximo seguimiento: '+(followAt||'por definir')+'.','Ver cumplimiento','#seguimiento-servicio'];
+ }else if(ev==='RESUME'){
+  fallbackObs=['[Portal CIARM] Atención reanudada en solicitud '+t.id+' (EN PROCESO)','Atención reanudada en solicitud','Administración ha reanudado la solicitud '+t.id+' de '+t.solicitante+' ('+t.area+'), regresando al estado EN PROCESO.','Ver cumplimiento','#seguimiento-servicio'];
+ }
+ var existingRecipients={};
+ messages.forEach(function(m){existingRecipients[String(m.to||'').trim().toLowerCase()]=true;});
+ observerEmails.forEach(function(obsEmail){
+  if(existingRecipients[obsEmail])return;
+  if(adminMsg){
+   var hashIdx=String(adminMsg.ctaUrl||'').indexOf('#');
+   var ctaHash=hashIdx>=0?String(adminMsg.ctaUrl).slice(hashIdx):'#seguimiento-servicio';
+   enqueue('observer',obsEmail,adminMsg.subject,adminMsg.heading,adminMsg.intro,adminMsg.ctaLabel,ctaHash);
+  }else if(fallbackObs){
+   enqueue('observer',obsEmail,fallbackObs[0],fallbackObs[1],fallbackObs[2],fallbackObs[3],fallbackObs[4]);
+  }
+ });
  return {messages:messages,skipped:skipped};
 }
 function ticketRenderEmail(msg,t){

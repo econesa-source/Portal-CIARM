@@ -210,11 +210,11 @@ assert_true(str_contains($emailHtml, 'https://drive.google.com/file/d/adm789/vie
 
 // 6. Perfil Angélica Figueroa (a.figueroa@ciarm.edu.mx): notificaciones espejo a Daniel Lara, Vista Gerencial y solo lectura/detalle
 $dm03WithAngelica = $dm03Rows;
-$rAngelica = array_fill(0, 40, '');
-$rAngelica[1] = 'Angélica';
-$rAngelica[2] = 'Figueroa';
-$rAngelica[3] = 'a.figueroa@ciarm.edu.mx';
-$rAngelica[4] = 'Activo';
+$rAngelica = $rowDaniel;
+$rAngelica[0] = 'Angélica';
+$rAngelica[1] = 'Figueroa';
+$rAngelica[2] = 'a.figueroa@ciarm.edu.mx';
+$rAngelica[3] = 'Administración';
 $rAngelica[32] = 'Administración';
 $rAngelica[35] = 'Administración';
 $dm03WithAngelica[] = $rAngelica;

@@ -279,7 +279,7 @@ test('Indicadores gerenciales: tiempos de entrega, cierre y gestión de Daniel L
   assert.equal(Math.round(metrics.capex.avgDanielTotalCompletedHours), 72);
   assert.equal(Math.round(metrics.capex.avgApprovalHours), 24);
   assert.ok(metrics.danielPerformance);
-  assert.equal(metrics.quality.satisfactionRatePct, 100);
+  assert.equal(metrics.quality.conformeRatePct, 100);
 });
 
 test('Indicadores gerenciales ejecutivos: cumplimiento a tiempo de Daniel Lara (cotizaciones y entrega OC) y nuevos estados', () => {

@@ -208,4 +208,54 @@ assert_true(str_contains($emailHtml, 'https://drive.google.com/file/d/det123/vie
 assert_true(str_contains($emailHtml, 'https://drive.google.com/file/d/pre456/view'), 'Email includes Cotizacion preliminar link');
 assert_true(str_contains($emailHtml, 'https://drive.google.com/file/d/adm789/view'), 'Email includes Cotizaciones Administracion link');
 
+// 6. Perfil Angélica Figueroa (a.figueroa@ciarm.edu.mx): notificaciones espejo a Daniel Lara, Vista Gerencial y solo lectura/detalle
+$dm03WithAngelica = $dm03Rows;
+$rAngelica = array_fill(0, 40, '');
+$rAngelica[1] = 'Angélica';
+$rAngelica[2] = 'Figueroa';
+$rAngelica[3] = 'a.figueroa@ciarm.edu.mx';
+$rAngelica[4] = 'Activo';
+$rAngelica[32] = 'Administración';
+$rAngelica[35] = 'Administración';
+$dm03WithAngelica[] = $rAngelica;
+
+$accAngelica = ciarm_tus_compras_evaluate_access_rows($dm03WithAngelica, 'a.figueroa@ciarm.edu.mx');
+assert_true($accAngelica['visible'] === true, 'Angelica Figueroa sees Tus compras card');
+assert_true($accAngelica['canViewAll'] === true, 'Angelica Figueroa can view all orders');
+assert_true($accAngelica['canGerencial'] === true, 'Angelica Figueroa has access to Vista Gerencial');
+assert_true($accAngelica['isObserver'] === true, 'Angelica Figueroa is marked as observer');
+assert_true($accAngelica['canCreate'] === false, 'Angelica Figueroa cannot create orders');
+assert_true($accAngelica['canAdmin'] === false, 'Angelica Figueroa cannot perform admin actions');
+assert_true($accAngelica['canApprove'] === false, 'Angelica Figueroa cannot approve orders');
+assert_true(!in_array('a.figueroa@ciarm.edu.mx', $accAngelica['approverEmails'], true), 'Angelica is not in approverEmails');
+
+assert_true(ciarm_tus_compras_allowed_actions($order2b, $accAngelica, 'all') === [], 'Angelica has no action buttons in 2b');
+assert_true(ciarm_tus_compras_allowed_actions($order2a, $accAngelica, 'all') === [], 'Angelica has no action buttons in 2a');
+
+$angelicaBlocked = false;
+try {
+    ciarm_tus_compras_validate_transition($order2b, 'APPROVE_CAPEX', $accAngelica);
+} catch (RuntimeException $e) {
+    $angelicaBlocked = ($e->getMessage() === 'FORBIDDEN_ROLE');
+}
+assert_true($angelicaBlocked, 'Angelica Figueroa is blocked from approving orders');
+
+foreach (['CREATE', 'START_QUOTING', 'RECEIVE_QUOTES', 'APPROVE_CAPEX', 'ISSUE_PURCHASE_ORDER', 'RECEIVE_ITEMS_ADM', 'DELIVER_TO_REQUESTER', 'CONFIRM_CONFORME'] as $evName) {
+    $plan = ciarm_tus_compras_build_notification_plan($evName, $emailOrder + [
+        'correo' => 'm.gomez@ciarm.edu.mx',
+        'fechaCierreCotizacion' => '2026-11-15',
+        'fechaOrdenCompra' => '2026-11-16',
+        'fechaEntregaEstimada' => '2026-11-18',
+    ]);
+    $danielMsg = null;
+    $angelicaMsg = null;
+    foreach ($plan as $m) {
+        if ($m['to'] === 'd.lara@ciarm.edu.mx') $danielMsg = $m;
+        if ($m['to'] === 'a.figueroa@ciarm.edu.mx') $angelicaMsg = $m;
+    }
+    assert_true($danielMsg !== null && $angelicaMsg !== null, "Event {$evName} notifies both Daniel Lara and Angelica Figueroa");
+    assert_true($angelicaMsg['subject'] === $danielMsg['subject'], "Event {$evName} sends identical subject to Angelica");
+    assert_true($angelicaMsg['intro'] === $danielMsg['intro'], "Event {$evName} sends identical body to Angelica");
+}
+
 echo "Tus Compras PHP tests: all passed\n";

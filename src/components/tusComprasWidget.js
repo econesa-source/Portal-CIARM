@@ -24,7 +24,7 @@ import {
   transitionTusCompra,
   validateTusCompraAttachmentFile,
   uploadTusCompraAttachment
-} from '../services/tusComprasService.js?v=18.7.16-tc14';
+} from '../services/tusComprasService.js?v=18.7.16-tc15';
 
 const ACTION_META = Object.freeze({
   RECEIVE_OPEX: {
@@ -241,6 +241,7 @@ export async function render(container, userSession) {
   const access = ctx.access || {};
   const canCreate = Boolean(access.canCreate);
   const canGerencial = Boolean(access.canGerencial);
+  const canViewAll = Boolean(access.canViewAll || access.canAdmin || access.canApprove || access.isAdministracion);
   const isAdministracion = Boolean(access.isAdministracion || (access.isDocenteDirector !== true && (access.canAdmin || access.canApprove)));
 
   if (route === '#tus-compras-nuevo') {
@@ -259,7 +260,7 @@ export async function render(container, userSession) {
           <div class="solicitud-topbar">
             <a href="#admin-tus-compras" class="card-top-nav-link">← Volver a Gestión y Aprobaciones</a>
           </div>
-          <p role="alert" style="color:#991b1b;font-weight:600;">La Vista Gerencial de Tus compras está reservada para perfiles de Administración con rol directivo/autorizador.</p>
+          <p role="alert" style="color:#991b1b;font-weight:600;">La Vista Gerencial de Tus compras está reservada para perfiles autorizados.</p>
         </div>
       `;
       return;
@@ -268,22 +269,30 @@ export async function render(container, userSession) {
     return;
   }
 
-  const isAdminView = route === '#admin-tus-compras' && isAdministracion;
-  await renderListView(container, ctx, isAdminView ? 'all' : 'mine', controller);
+  const isAllView = (route === '#admin-tus-compras' && (isAdministracion || canViewAll))
+    || (route === '#tus-compras' && !canCreate && canViewAll);
+  await renderListView(container, ctx, isAllView ? 'all' : 'mine', controller);
 }
 
 function renderTopNavigation(activeRoute, access) {
   const canCreate = Boolean(access?.canCreate);
-  // El menú de Gestión y Aprobaciones solo corresponde a usuarios con perfil "administración" en área (AG) y nivel (AJ)
+  // El menú de Gestión y Aprobaciones corresponde a usuarios con perfil "administración" en área (AG) y nivel (AJ)
   const showAdminMenu = Boolean(access?.isAdministracion === true);
-  // Vista Gerencial: todos los usuarios con área y nivel "administración" (incluyendo a Daniel Lara)
+  // Observadora / consulta global (Angélica Figueroa): ve todos los pedidos sin crear ni aprobar
+  const isObserver = Boolean(access?.isObserver === true || (access?.canViewAll === true && !access?.canAdmin && !access?.canApprove));
+  // Vista Gerencial: usuarios con área/nivel "administración" y perfiles autorizados de seguimiento gerencial
   const showGerencialMenu = Boolean(access?.canGerencial === true);
+  const ordersActive = activeRoute === '#tus-compras' || activeRoute === '#admin-tus-compras';
   return `
     <div class="solicitud-topbar" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
       <a href="#inicio" class="card-top-nav-link">← Volver al Inicio</a>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         ${canCreate ? `<a href="#tus-compras-nuevo" class="solicitud-secondary-link" style="${activeRoute === '#tus-compras-nuevo' ? 'background:#26487F;color:#fff;border-color:#26487F;' : ''}">+ Crear Pedido</a>` : ''}
-        <a href="#tus-compras" class="solicitud-secondary-link" style="${activeRoute === '#tus-compras' ? 'background:#26487F;color:#fff;border-color:#26487F;' : ''}">Mis Compras</a>
+        ${
+          isObserver
+            ? `<a href="#tus-compras" class="solicitud-secondary-link" style="${ordersActive ? 'background:#26487F;color:#fff;border-color:#26487F;' : ''}">Todos los Pedidos</a>`
+            : `<a href="#tus-compras" class="solicitud-secondary-link" style="${activeRoute === '#tus-compras' ? 'background:#26487F;color:#fff;border-color:#26487F;' : ''}">Mis Compras</a>`
+        }
         ${showAdminMenu ? `<a href="#admin-tus-compras" class="solicitud-secondary-link" style="${activeRoute === '#admin-tus-compras' ? 'background:#26487F;color:#fff;border-color:#26487F;' : ''}">Gestión y Aprobaciones</a>` : ''}
         ${showGerencialMenu ? `<a href="#vision-gerencial-compras" class="solicitud-secondary-link" style="${activeRoute === '#vision-gerencial-compras' ? 'background:#26487F;color:#fff;border-color:#26487F;font-weight:700;' : 'border-color:#26487F;color:#26487F;font-weight:700;'}">📊 Vista Gerencial</a>` : ''}
       </div>
@@ -512,7 +521,8 @@ async function renderListView(container, ctx, kind, controller) {
   const signal = controller.signal;
   const active = () => !signal.aborted && container.isConnected;
   const access = ctx.access || {};
-  const activeRoute = kind === 'all' ? '#admin-tus-compras' : '#tus-compras';
+  const isObserver = Boolean(access.isObserver === true || (access.canViewAll === true && !access.canAdmin && !access.canApprove));
+  const activeRoute = kind === 'all' ? (isObserver ? '#tus-compras' : '#admin-tus-compras') : '#tus-compras';
 
   let listData;
   try {
@@ -543,10 +553,18 @@ async function renderListView(container, ctx, kind, controller) {
       ${renderTopNavigation(activeRoute, access)}
 
       <header class="ticket-admin-header" style="margin-bottom:14px;">
-        <h1>${kind === 'all' ? 'Gestión y Aprobaciones · Tus compras' : 'Mis Compras y Validación de Recepción'}</h1>
+        <h1>${
+          kind === 'all'
+            ? isObserver
+              ? 'Consulta y Seguimiento de Pedidos · Tus compras'
+              : 'Gestión y Aprobaciones · Tus compras'
+            : 'Mis Compras y Validación de Recepción'
+        }</h1>
         <p>${
           kind === 'all'
-            ? 'Administra el ciclo de pedidos Opex y Capex (sin monto límite mensual por área). Compras < $8,000 MXN pasan directo a generación de Orden de Compra sin cotización previa (informando siempre fecha de OC, entrega estimada y monto válido); compras ≥ $8,000 MXN pasan por aprobación (2b) y exigen 3 cotizaciones obligatorias de parte de Daniel Lara.'
+            ? isObserver
+              ? 'Vista de seguimiento gerencial en solo lectura: puedes consultar todos los pedidos Opex y Capex, revisar su estado actual, archivos adjuntos y bitácora completa desde «Ver detalle» (sin generación ni aprobación de pedidos).'
+              : 'Administra el ciclo de pedidos Opex y Capex (sin monto límite mensual por área). Compras < $8,000 MXN pasan directo a generación de Orden de Compra sin cotización previa (informando siempre fecha de OC, entrega estimada y monto válido); compras ≥ $8,000 MXN pasan por aprobación (2b) y exigen 3 cotizaciones obligatorias de parte de Daniel Lara.'
             : 'Consulta el estado informativo de tus tickets de compra, fechas estimadas de cotización/entrega y Orden de Compra. Cuando tu compra sea entregada podrás cerrar el ticket clasificándolo como Recepción Conforme o Recepción Disconforme.'
         }</p>
       </header>

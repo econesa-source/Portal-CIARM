@@ -124,7 +124,7 @@ try {
             if (!in_array($kind, ['mine', 'all'], true)) {
                 ciarm_json_response(422, ['ok' => false, 'code' => 'VALIDATION']);
             }
-            if ($kind === 'all' && empty($access['canAdmin']) && empty($access['canApprove'])) {
+            if ($kind === 'all' && empty($access['canAdmin']) && empty($access['canApprove']) && empty($access['canViewAll'])) {
                 ciarm_json_response(403, ['ok' => false, 'code' => 'FORBIDDEN']);
             }
 
@@ -183,10 +183,10 @@ try {
                 ciarm_json_response(404, ['ok' => false, 'code' => 'NOT_FOUND']);
             }
             $actorEmail = strtolower(trim((string)$access['correo']));
-            if (strtolower(trim((string)$found['correo'])) !== $actorEmail && empty($access['canAdmin']) && empty($access['canApprove'])) {
+            if (strtolower(trim((string)$found['correo'])) !== $actorEmail && empty($access['canAdmin']) && empty($access['canApprove']) && empty($access['canViewAll'])) {
                 ciarm_json_response(403, ['ok' => false, 'code' => 'FORBIDDEN']);
             }
-            $detailKind = (!empty($access['canAdmin']) || !empty($access['canApprove'])) ? 'all' : 'mine';
+            $detailKind = (!empty($access['canAdmin']) || !empty($access['canApprove']) || !empty($access['canViewAll'])) ? 'all' : 'mine';
             $found['allowedActions'] = ciarm_tus_compras_allowed_actions($found, $access, $detailKind);
             $found['history'] = ciarm_tus_compras_parse_bitacora($store['bitacoraRows'], $id);
 
@@ -624,7 +624,7 @@ try {
             'body' => json_encode(['values' => [$logRow]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         ]);
 
-        $transitionViewKind = (!empty($access['canAdmin']) || !empty($access['canApprove'])) ? 'all' : 'mine';
+        $transitionViewKind = (!empty($access['canAdmin']) || !empty($access['canApprove']) || !empty($access['canViewAll'])) ? 'all' : 'mine';
         $target['allowedActions'] = ciarm_tus_compras_allowed_actions($target, $access, $transitionViewKind);
         $target['notification'] = $notif;
         $target['history'] = ciarm_tus_compras_parse_bitacora($store['bitacoraRows'], $id);

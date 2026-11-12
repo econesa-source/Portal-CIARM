@@ -29,6 +29,7 @@ export function applyDashboardAccess(container, response) {
         element.querySelector('a[href="#tus-compras-nuevo"]')?.remove();
       }
       const isAdministracion = tc?.isAdministracion === true || (tc?.isDocenteDirector !== true && (tc?.canAdmin === true || tc?.canApprove === true));
+      const isObserver = tc?.isObserver === true || (tc?.canViewAll === true && tc?.canAdmin !== true && tc?.canApprove !== true);
       if (isAdministracion && !element.querySelector('a[href="#admin-tus-compras"]')) {
         const hdr = element.querySelector('.tus-compras-card-header');
         if (hdr) {
@@ -37,6 +38,17 @@ export function applyDashboardAccess(container, response) {
           admLink.className = 'exact-btn dark';
           admLink.textContent = 'Administrar';
           hdr.append(admLink);
+        }
+      } else if (isObserver) {
+        const misLink = element.querySelector('a[href="#tus-compras"]');
+        if (misLink) misLink.textContent = '📋 Ver Pedidos';
+        const btnGroup = element.querySelector('.exact-card-btn-group');
+        if (btnGroup && !element.querySelector('a[href="#vision-gerencial-compras"]')) {
+          const gerLink = document.createElement('a');
+          gerLink.href = '#vision-gerencial-compras';
+          gerLink.className = 'exact-btn dark';
+          gerLink.textContent = '📊 Vista Gerencial';
+          btnGroup.append(gerLink);
         }
       }
       return;
@@ -98,7 +110,7 @@ export function allowedRoute(hash, response) {
     const tc = response?.tusCompras;
     if (tc?.visible === true || permissions.has('TUS_COMPRAS_TARJETA')) {
       if (hash === '#tus-compras-nuevo') return tc ? tc.canCreate === true : true;
-      if (hash === '#admin-tus-compras') return tc ? (tc.canAdmin === true || tc.canApprove === true) : true;
+      if (hash === '#admin-tus-compras') return tc ? (tc.canAdmin === true || tc.canApprove === true || tc.canViewAll === true) : true;
       if (hash === '#vision-gerencial-compras') return tc ? tc.canGerencial === true : true;
       return true;
     }

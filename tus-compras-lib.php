@@ -22,6 +22,7 @@ const CIARM_TUS_COMPRAS_THREE_QUOTES_THRESHOLD = 8000.0;
 const CIARM_TUS_COMPRAS_QUOTE_THRESHOLD = 8000.0;
 const CIARM_TUS_COMPRAS_MAX_ATTACHMENT_BYTES = 10485760; // 10 MB por archivo
 const CIARM_TUS_COMPRAS_ADMIN_EMAIL = 'd.lara@ciarm.edu.mx';
+const CIARM_TUS_COMPRAS_OBSERVER_EMAILS = ['a.figueroa@ciarm.edu.mx'];
 const CIARM_TUS_COMPRAS_APPROVER_EMAILS = ['e.conesa@ciarm.edu.mx'];
 
 const CIARM_TUS_COMPRAS_STATE_ENVIADA = '1) Solicitud enviada';
@@ -183,7 +184,9 @@ function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): arr
         'canCreate' => false,
         'canAdmin' => false,
         'canApprove' => false,
+        'canViewAll' => false,
         'canGerencial' => false,
+        'isObserver' => false,
         'isDocenteDirector' => false,
         'isAdministracion' => false,
         'correo' => $email,
@@ -194,6 +197,7 @@ function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): arr
         'colAJ' => '',
         'opexLimit' => CIARM_TUS_COMPRAS_OPEX_LIMIT,
         'adminEmail' => CIARM_TUS_COMPRAS_ADMIN_EMAIL,
+        'observerEmails' => CIARM_TUS_COMPRAS_OBSERVER_EMAILS,
         'approverEmails' => CIARM_TUS_COMPRAS_APPROVER_EMAILS,
     ];
     if ($email === '' || count($rows) < 2) {
@@ -213,6 +217,7 @@ function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): arr
         return $default;
     }
 
+    $observerEmailsNorm = array_map('strtolower', CIARM_TUS_COMPRAS_OBSERVER_EMAILS);
     $matchedRow = null;
     $dm03AdminEmails = [];
     foreach (array_slice($rows, 1) as $row) {
@@ -220,7 +225,7 @@ function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): arr
         $rowStatus = strtolower(trim((string)($row[$idxStatus] ?? '')));
         if ($rowStatus === 'activo' && $rowEmail !== '' && filter_var($rowEmail, FILTER_VALIDATE_EMAIL)) {
             $rowProf = ciarm_tus_compras_matches_dm03_profile($row);
-            if ($rowProf['isAdministracion']) {
+            if ($rowProf['isAdministracion'] && !in_array($rowEmail, $observerEmailsNorm, true)) {
                 $dm03AdminEmails[$rowEmail] = true;
             }
         }
@@ -262,16 +267,31 @@ function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): arr
     $isDanielLara = ($email === strtolower(CIARM_TUS_COMPRAS_ADMIN_EMAIL))
         || ($normNombre === 'daniel lara')
         || ($normNombre === 'daniel lira');
+    $isObserver = in_array($email, $observerEmailsNorm, true)
+        || ($normNombre === 'angelica figueroa');
 
-    // Pueden crear pedidos de compra:
-    // 1) Usuarios con AG="docente" y AJ="director"
-    // 2) Usuarios con AG="administración" y AJ="administración", salvo Daniel Lara.
-    $canCreate = $isDocenteDirector || ($isAdministracion && !$isDanielLara);
-    $canAdmin = $isAdministracion && !$isDocenteDirector;
-    $canApprove = $isAdministracion && !$isDocenteDirector;
-    // Vista Gerencial: disponible para todos los usuarios con AG="administración" y AJ="administración" (incluyendo a Daniel Lara)
-    $canGerencial = $isAdministracion && !$isDocenteDirector;
-    $visible = $isDocenteDirector || $isAdministracion;
+    if ($isObserver) {
+        // Perfil de seguimiento gerencial y notificaciones espejo (Angélica Figueroa):
+        // ve todos los pedidos, su detalle y el Dashboard Gerencial, pero NO crea ni aprueba pedidos.
+        $canCreate = false;
+        $canAdmin = false;
+        $canApprove = false;
+        $canViewAll = true;
+        $canGerencial = true;
+        $isAdministracion = false;
+        $visible = true;
+    } else {
+        // Pueden crear pedidos de compra:
+        // 1) Usuarios con AG="docente" y AJ="director"
+        // 2) Usuarios con AG="administración" y AJ="administración", salvo Daniel Lara.
+        $canCreate = $isDocenteDirector || ($isAdministracion && !$isDanielLara);
+        $canAdmin = $isAdministracion && !$isDocenteDirector;
+        $canApprove = $isAdministracion && !$isDocenteDirector;
+        $canViewAll = $isAdministracion && !$isDocenteDirector;
+        // Vista Gerencial: disponible para todos los usuarios con AG="administración" y AJ="administración" (incluyendo a Daniel Lara)
+        $canGerencial = $isAdministracion && !$isDocenteDirector;
+        $visible = $isDocenteDirector || $isAdministracion;
+    }
 
     $approverList = array_values(array_unique(array_merge(
         CIARM_TUS_COMPRAS_APPROVER_EMAILS,
@@ -283,7 +303,9 @@ function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): arr
         'canCreate' => $canCreate,
         'canAdmin' => $canAdmin,
         'canApprove' => $canApprove,
+        'canViewAll' => $canViewAll,
         'canGerencial' => $canGerencial,
+        'isObserver' => $isObserver,
         'isDocenteDirector' => $isDocenteDirector,
         'isAdministracion' => $isAdministracion,
         'correo' => $email,
@@ -294,6 +316,7 @@ function ciarm_tus_compras_evaluate_access_rows(array $rows, string $email): arr
         'colAJ' => $profile['colAJ'],
         'opexLimit' => CIARM_TUS_COMPRAS_OPEX_LIMIT,
         'adminEmail' => CIARM_TUS_COMPRAS_ADMIN_EMAIL,
+        'observerEmails' => CIARM_TUS_COMPRAS_OBSERVER_EMAILS,
         'approverEmails' => $approverList,
     ];
 }
@@ -313,7 +336,8 @@ function ciarm_tus_compras_access(array $sessionUser, ?array $dm03RowsOverride =
         && ($cached['email'] ?? '') === $email
         && (int)($cached['expires'] ?? 0) > $now
         && is_array($cached['access'] ?? null)
-        && array_key_exists('canGerencial', $cached['access'])) {
+        && array_key_exists('canGerencial', $cached['access'])
+        && array_key_exists('canViewAll', $cached['access'])) {
         return $cached['access'];
     }
 
@@ -326,7 +350,8 @@ function ciarm_tus_compras_access(array $sessionUser, ?array $dm03RowsOverride =
                 && ($parsedAcc['email'] ?? '') === $email
                 && (int)($parsedAcc['expires'] ?? 0) > $now
                 && is_array($parsedAcc['access'] ?? null)
-                && array_key_exists('canGerencial', $parsedAcc['access'])) {
+                && array_key_exists('canGerencial', $parsedAcc['access'])
+                && array_key_exists('canViewAll', $parsedAcc['access'])) {
                 if (session_status() === PHP_SESSION_ACTIVE) {
                     $_SESSION['ciarm_tus_compras_access'] = $parsedAcc;
                 }
@@ -1420,6 +1445,28 @@ function ciarm_tus_compras_build_notification_plan(string $event, array $order, 
         }
     }
 
+    // Notificaciones espejo para Angélica Figueroa (mismas notificaciones que recibe Daniel Lara)
+    $danielEmailNorm = strtolower(CIARM_TUS_COMPRAS_ADMIN_EMAIL);
+    $adminMessagesForObservers = array_values(array_filter(
+        $messages,
+        static fn(array $m): bool => strtolower((string)($m['to'] ?? '')) === $danielEmailNorm
+    ));
+    foreach ($adminMessagesForObservers as $adminMsg) {
+        $ctaPath = (string)parse_url((string)($adminMsg['ctaUrl'] ?? ''), PHP_URL_FRAGMENT);
+        $ctaHash = $ctaPath !== '' ? ('#' . $ctaPath) : '#admin-tus-compras';
+        foreach (CIARM_TUS_COMPRAS_OBSERVER_EMAILS as $obsEmail) {
+            $enqueue(
+                'observer',
+                $obsEmail,
+                (string)$adminMsg['subject'],
+                (string)$adminMsg['heading'],
+                (string)$adminMsg['intro'],
+                (string)$adminMsg['ctaLabel'],
+                $ctaHash
+            );
+        }
+    }
+
     return $messages;
 }
 
@@ -1546,6 +1593,18 @@ function ciarm_tus_compras_notify_upload_failure(array $access, string $fileName
             'text' => "El usuario {$actorName} ({$actorEmail}) tuvo un error al subir {$fileName}: {$reason}.",
             'html' => $html,
         ];
+    }
+    foreach (CIARM_TUS_COMPRAS_OBSERVER_EMAILS as $obsEmail) {
+        $obsNorm = strtolower(trim($obsEmail));
+        if ($obsNorm !== '' && $obsNorm !== $actorEmail && $obsNorm !== strtolower(CIARM_TUS_COMPRAS_ADMIN_EMAIL)) {
+            $messages[] = [
+                'role' => 'observer',
+                'to' => $obsNorm,
+                'subject' => $subject,
+                'text' => "El usuario {$actorName} ({$actorEmail}) tuvo un error al subir {$fileName}: {$reason}.",
+                'html' => $html,
+            ];
+        }
     }
     if ($messages === []) {
         return;

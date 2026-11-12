@@ -208,6 +208,26 @@ test('Visibilidad y rutas de Tus compras gobernadas por perfil DM03 (AG=docente,
   };
   assert.equal(allowedRoute('#admin-tus-compras', ezequielAdmin), true);
   assert.equal(allowedRoute('#vision-gerencial-compras', ezequielAdmin), true);
+
+  const angelicaObserver = {
+    verified: true,
+    enforced: true,
+    codes: ['INT_TARJETA'],
+    tusCompras: {
+      visible: true,
+      canCreate: false,
+      canAdmin: false,
+      canApprove: false,
+      canViewAll: true,
+      canGerencial: true,
+      isObserver: true
+    }
+  };
+  assert.equal(canSeeTusCompras(angelicaObserver), true);
+  assert.equal(allowedRoute('#tus-compras', angelicaObserver), true);
+  assert.equal(allowedRoute('#admin-tus-compras', angelicaObserver), true);
+  assert.equal(allowedRoute('#vision-gerencial-compras', angelicaObserver), true);
+  assert.equal(allowedRoute('#tus-compras-nuevo', angelicaObserver), false);
 });
 
 test('Indicadores gerenciales: tiempos de entrega, cierre y gestión de Daniel Lara separados por OPEX y CAPEX', () => {
